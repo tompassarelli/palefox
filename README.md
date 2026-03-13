@@ -56,13 +56,7 @@ Note: Please see [security considerations](#security-considerations) before inst
 ### Hover Reveal (off by default)
 When the sidebar is hidden (zen mode), hovering the left edge of the screen reveals the drawer temporarily. Moving the mouse away hides it again.
 
-To enable:
-1. Open `about:config` in Firefox
-2. Create a new boolean preference: `userChrome.fennec.hoverReveal`
-3. Set it to `true`
-4. Restart Firefox
-
-To disable, set the preference back to `false` and restart.
+To enable: uncomment the `hover-reveal` region in `userChrome.css` (remove the `/*` and `*/` comment markers around the block). Restart Firefox.
 
 > **Note:** The close is instant rather than animated due to a Firefox limitation where CSS transitions are not triggered by `:has()` selector changes.
 

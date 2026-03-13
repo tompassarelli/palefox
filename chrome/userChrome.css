@@ -84,8 +84,7 @@ gap: space between components, like padding/margin
 
 [hover-reveal] (off by default)
 - when sidebar is hidden (zen mode), hovering the left edge reveals the drawer
-- enable in about:config: set userChrome.fennec.hoverReveal to true
-- requires Firefox restart after toggling
+- enable: uncomment the hover-reveal region in the CSS
 - limitation: close is instant (Firefox doesn't trigger CSS transitions
   via :has() selector changes, only direct :hover transitions work)
 
@@ -178,12 +177,13 @@ body:has(#sidebar-box[hidden]) #identity-icon-box {
 
 /* #endregion dynamic sidebar toggle */
 
-/* #region hover-reveal
-   Toggle in about:config: userChrome.fennec.hoverReveal (boolean)
+/* #region hover-reveal (off by default)
+   To enable: remove the comment markers around the CSS below.
+   When enabled, hovering the left edge in zen mode reveals the drawer.
+   Note: close is instant (Firefox doesn't trigger CSS transitions via :has()).
 */
-@media (-moz-bool-pref: "userChrome.fennec.hoverReveal") {
+/*
 
-/* collapsed: suppress children so they don't steal hover */
 #sidebar-box[hidden] > * {
   pointer-events: none !important;
 }
@@ -192,7 +192,6 @@ body:has(#navigator-toolbox:hover) #sidebar-box[hidden] > * {
   pointer-events: auto !important;
 }
 
-/* collapsed: invisible hover strip */
 #sidebar-box[hidden] {
   display: flex !important;
   width: 10px !important;
@@ -206,7 +205,6 @@ body:has(#navigator-toolbox:hover) #sidebar-box[hidden] > * {
   z-index: 10 !important;
 }
 
-/* expanded: full sidebar on hover */
 #sidebar-box[hidden]:hover,
 body:has(#navigator-toolbox:hover) #sidebar-box[hidden] {
   width: 300px !important;
@@ -221,7 +219,6 @@ body:has(#navigator-toolbox:hover) #sidebar-box[hidden] {
   background-color: var(--fen-color) !important;
 }
 
-/* expanded: splitter gap */
 body:has(#sidebar-box[hidden]:hover) #sidebar-splitter[hidden],
 body:has(#navigator-toolbox:hover) #sidebar-splitter[hidden] {
   display: flex !important;
@@ -236,7 +233,6 @@ body:has(#navigator-toolbox:hover) #sidebar-splitter[hidden] {
   );
 }
 
-/* expanded: header */
 body:has(#sidebar-box[hidden]:hover) #navigator-toolbox,
 body:has(#sidebar-box[hidden]) #navigator-toolbox:hover {
   width: calc(var(--fen-max-width) + var(--fen-sidebar-splitter-width)) !important;
@@ -245,7 +241,6 @@ body:has(#sidebar-box[hidden]) #navigator-toolbox:hover {
   z-index: 2 !important;
 }
 
-/* expanded: urlbar */
 body:has(#sidebar-box[hidden]:hover) toolbaritem#urlbar-container,
 body:has(#sidebar-box[hidden]):has(#navigator-toolbox:hover) toolbaritem#urlbar-container {
   width: 215px !important;
@@ -253,7 +248,7 @@ body:has(#sidebar-box[hidden]):has(#navigator-toolbox:hover) toolbaritem#urlbar-
   pointer-events: auto !important;
 }
 
-} /* end @media hover-reveal */
+*/
 /* #endregion hover-reveal */
 
 /* #region header */
