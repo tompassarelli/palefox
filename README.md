@@ -60,7 +60,6 @@ When the sidebar is hidden (zen mode), hovering the left edge of the screen reve
 
 To enable: uncomment the `hover-reveal` region in `userChrome.css` (remove the `/*` and `*/` comment markers around the block). Restart Firefox.
 
-> **Note:** The close is instant rather than animated due to a Firefox limitation where CSS transitions are not triggered by `:has()` selector changes.
 
 ## Usage Guide
 
