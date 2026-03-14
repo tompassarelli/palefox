@@ -187,7 +187,7 @@ body:has(#sidebar-box[hidden]) #identity-icon-box {
 
 body:has(#sidebar-box[hidden]) #urlbar {
   opacity: 0 !important;
-  transition: opacity 0.1s ease !important;
+  transition: opacity 0.2s ease !important;
 }
 
 /* #endregion dynamic sidebar toggle */
@@ -420,7 +420,7 @@ panel#appMenu-popup {
 }
 
 #urlbar {
-  transition: opacity 0.2s ease 0.1s !important;
+  transition: opacity 0.3s ease 0.2s !important;
 }
 /* moz setting: "Show sidebar" active */
 body:not(:has(#sidebar-main[hidden])) #urlbar-container {
