@@ -31,7 +31,7 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 
 Choose **one** of the two methods below:
 
-#### Option A: Automated
+#### Option A: Automated (experimental)
 
 The script backs up your existing `chrome` folder (if any), copies Fennec's files into your Firefox profile, and configures the required Firefox settings automatically.
 
