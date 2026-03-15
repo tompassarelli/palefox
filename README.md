@@ -71,6 +71,7 @@ irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | ie
 3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
 
 ### 3. Restart Firefox
+   - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
 
 ## Optional Features
 
