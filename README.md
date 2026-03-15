@@ -22,9 +22,60 @@ Fennec is a minimal Firefox setup built with userChrome.css, designed around ver
 
 > Please see [security considerations](#security-considerations) before installing
 
-### Nix / Home Manager
+### 1. Install the Sideberry Extension
 
-If you use Nix, Fennec can be installed declaratively — CSS, prefs, and Sideberry all managed through your flake. See [nix/module.nix](nix/module.nix) for details.
+Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) from Firefox Add-ons.
+
+### 2. Install CSS
+
+Choose **one** of the two methods below:
+
+#### Option A: Automated (recommended)
+
+The script does the following:
+- Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
+- Copies Fennec's `chrome/` files into your Firefox profile
+- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
+
+> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
+```
+
+**Windows** (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | iex
+```
+
+#### Option B: Manual
+
+**Enable required Firefox settings:**
+
+> Note: only `toolkit.legacyUserProfileCustomizations.stylesheets` requires `about:config`. The rest are defaults historically and can also be changed in Settings.
+
+1. Go to `about:config` in the address bar
+2. Set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
+3. Set `sidebar.verticalTabs` to `false` (or turn on **Horizontal tabs** in Settings)
+4. Set `sidebar.revamp` to `false` (or turn off **Show Sidebar** in Settings)
+
+**Locate your Firefox profile directory:**
+1. Go to `about:support` in the address bar
+2. Under "Application Basics", click **Open Profile Folder**
+   - Flatpak users: the profile directory is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>`
+
+**Copy the CSS files:**
+1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
+2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
+3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
+
+### 3. Restart Firefox
+   - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
+
+### Alternative: Nix / Home Manager
+
+Fennec can also be installed declaratively via a Home Manager module — this handles CSS, prefs, and Sideberry in one step.
 
 1. Add fennec to your flake inputs:
 ```nix
@@ -48,59 +99,6 @@ programs.fennec = {
 4. Rebuild with `nixos-rebuild switch` or `home-manager switch`
 
 > Note: Sideberry is installed automatically via [NUR](https://github.com/nix-community/NUR). Ensure NUR is in your flake inputs and overlays. Set `sideberry = false` if you manage extensions separately.
-
-### Everyone else
-
-#### 1. Install the Sideberry Extension
-
-Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) from Firefox Add-ons.
-
-#### 2. Install CSS
-
-Choose **one** of the two methods below:
-
-##### Option A: Automated (recommended)
-
-The script does the following:
-- Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
-- Copies Fennec's `chrome/` files into your Firefox profile
-- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
-
-> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
-
-**macOS / Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
-```
-
-**Windows** (PowerShell):
-```powershell
-irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | iex
-```
-
-##### Option B: Manual
-
-**Enable required Firefox settings:**
-
-> Note: only `toolkit.legacyUserProfileCustomizations.stylesheets` requires `about:config`. The rest are defaults historically and can also be changed in Settings.
-
-1. Go to `about:config` in the address bar
-2. Set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
-3. Set `sidebar.verticalTabs` to `false` (or turn on **Horizontal tabs** in Settings)
-4. Set `sidebar.revamp` to `false` (or turn off **Show Sidebar** in Settings)
-
-**Locate your Firefox profile directory:**
-1. Go to `about:support` in the address bar
-2. Under "Application Basics", click **Open Profile Folder**
-   - Flatpak users: the profile directory is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>`
-
-**Copy the CSS files:**
-1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
-2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
-3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
-
-#### 3. Restart Firefox
-   - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
 
 ## Optional Features
 
