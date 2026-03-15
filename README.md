@@ -33,7 +33,12 @@ Choose **one** of the two methods below:
 
 #### Option A: Automated (experimental)
 
-The script backs up your existing `chrome` folder (if any), copies Fennec's files into your Firefox profile, and configures the required Firefox settings automatically.
+The script does the following:
+- Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
+- Copies Fennec's `chrome/` files into your Firefox profile
+- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
+
+> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
 
 **macOS / Linux:**
 ```bash
