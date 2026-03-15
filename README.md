@@ -88,15 +88,9 @@ To enable:
 
 - **[Vimium](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)** - Keyboard-driven navigation that complements the minimal, distraction-free interface
 
-## Resources
+## Help 
 
-💬 **[Discussions](https://github.com/tompassarelli/fennec-ui/discussions)** - ask questions, share setups, and connect with other users
-
-📝 **[Releases](https://github.com/tompassarelli/fennec/releases)** - version history and changelog
-
-🛤️ **[Roadmap](https://github.com/tompassarelli/fennec-ui/wiki/Roadmap)** - planned features and development timeline
-
-👾 **[Known Issues & Troubleshooting](https://github.com/tompassarelli/fennec-ui/wiki/Troubleshooting)** - noted some common issues and workarounds
+If something isn't working, check [open issues](https://github.com/tompassarelli/fennec/issues) or file a new one.
 
 ## Security Considerations
 
