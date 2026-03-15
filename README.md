@@ -46,9 +46,10 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 2. Under "Application Basics", click **Open Profile Folder**
    - Flatpak users: the profile directory is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>`
 
-**Copy the CSS file:**
+**Copy the CSS files:**
 1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
 2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
+3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
 
 ### 4. Apply Sideberry Styles
 
@@ -65,13 +66,16 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 
 ## Optional Features
 
-### Hover Reveal (off by default)
+### Autohide (off by default)
 
 ![Sidebar autohide example](fennec-sidebar-autohide.gif)
 
-To enable: uncomment the `hover-reveal` region in `userChrome.css` (remove the `/*` and `*/` comment markers around the block). Restart Firefox.
+Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collapses when the mouse leaves and reappears when hovering the left edge of the window.
 
-Sidebar must be enabled. When enabled it will now autohide and show depending upon mouse position inside the hover area at edge of the window.
+To enable:
+1. Ensure `autohide.css` is in the same `chrome` directory as `userChrome.css` (see [installation step 3](#3-install-userchromecss))
+2. Uncomment `@import url("autohide.css");` in `userChrome.css`
+3. Restart Firefox
 
 ## Usage Guide
 
