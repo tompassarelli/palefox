@@ -1,6 +1,6 @@
 # Fennec
 
-A customized Mozilla Firefox experience designed around minimalism and optimized vertical tab support. Achieved through userChrome.css modifications and cohesive extension integrations.
+Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. One CSS file, no fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
 
 | Sidebar Open | Zen Mode |
 |:---:|:---:|
@@ -30,7 +30,7 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 
 Choose **one** of the two methods below:
 
-#### Option A: Automated (experimental)
+#### Option A: Automated (recommended)
 
 The script does the following:
 - Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
