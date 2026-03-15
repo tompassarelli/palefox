@@ -1,0 +1,118 @@
+name: Test install scripts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - install.sh
+      - install.ps1
+      - .github/workflows/test-install.yml
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake native profile
+        run: mkdir -p ~/.mozilla/firefox/fake.default-release
+
+      - name: Run install script
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Verify installation
+        run: |
+          profile="$HOME/.mozilla/firefox/fake.default-release"
+
+          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
+          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: pref not in user.js"; exit 1; }
+
+          echo "--- chrome/ contents ---"
+          ls -la "$profile/chrome/"
+          echo "--- user.js ---"
+          cat "$profile/user.js"
+
+  test-linux-flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake Flatpak profile
+        run: mkdir -p ~/.var/app/org.mozilla.firefox/.mozilla/firefox/fake.default-release
+
+      - name: Run install script
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Verify Flatpak path used
+        run: |
+          profile="$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox/fake.default-release"
+
+          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing at Flatpak path"; exit 1; }
+          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: pref not in user.js"; exit 1; }
+
+          # Confirm native path was NOT used
+          if [ -d "$HOME/.mozilla/firefox" ]; then
+            echo "FAIL: native ~/.mozilla/firefox/ should not exist"
+            exit 1
+          fi
+
+          echo "--- chrome/ contents ---"
+          ls -la "$profile/chrome/"
+          echo "--- user.js ---"
+          cat "$profile/user.js"
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake macOS profile
+        run: mkdir -p ~/Library/Application\ Support/Firefox/Profiles/fake.default-release
+
+      - name: Run install script
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Verify installation
+        run: |
+          profile="$HOME/Library/Application Support/Firefox/Profiles/fake.default-release"
+
+          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
+          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: pref not in user.js"; exit 1; }
+
+          echo "--- chrome/ contents ---"
+          ls -la "$profile/chrome/"
+          echo "--- user.js ---"
+          cat "$profile/user.js"
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake Windows profile
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path "$env:APPDATA\Mozilla\Firefox\Profiles\fake.default-release" -Force
+
+      - name: Run install script
+        shell: pwsh
+        run: |
+          $env:FENNEC_LOCAL = "."
+          .\install.ps1
+
+      - name: Verify installation
+        shell: pwsh
+        run: |
+          $prof = "$env:APPDATA\Mozilla\Firefox\Profiles\fake.default-release"
+
+          if (-not (Test-Path "$prof\chrome")) { Write-Error "FAIL: chrome/ missing"; exit 1 }
+          if (-not (Test-Path "$prof\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
+          $userJs = Get-Content "$prof\user.js" -Raw
+          if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: pref not in user.js"; exit 1 }
+
+          Write-Host "--- chrome/ contents ---"
+          Get-ChildItem "$prof\chrome"
+          Write-Host "--- user.js ---"
+          Get-Content "$prof\user.js"

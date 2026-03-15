@@ -27,15 +27,23 @@ A customized Mozilla Firefox experience designed around minimalism and optimized
 
 Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) from Firefox Add-ons.
 
-### 2. Configure Firefox Settings
+### 2. Install CSS
 
-1. Open Firefox Settings (`about:preferences`)
-2. Search for **"horizontal tabs"** and set **Horizontal Tabs** to **enabled**
-3. Search for **"show sidebar"** and set **Show Sidebar** to **off**
-   - With this off, you'll use keyboard shortcuts to toggle Sideberry, history, bookmarks, etc.
-4. Ensure the sidebar is configured to appear on the **left side** (this is the default)
+#### Automated
 
-### 3. Install userChrome.css
+The script backs up your existing `chrome` folder (if any) and copies Fennec's files into your Firefox profile. It also enables `toolkit.legacyUserProfileCustomizations.stylesheets` automatically.
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
+```
+
+**Windows** (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | iex
+```
+
+#### Manual
 
 **Enable custom stylesheets in Firefox:**
 1. Go to `about:config` in the address bar
@@ -50,6 +58,14 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
 2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
 3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
+
+### 3. Configure Firefox Settings
+
+1. Open Firefox Settings (`about:preferences`)
+2. Search for **"horizontal tabs"** and set **Horizontal Tabs** to **enabled**
+3. Search for **"show sidebar"** and set **Show Sidebar** to **off**
+   - With this off, you'll use keyboard shortcuts to toggle Sideberry, history, bookmarks, etc.
+4. Ensure the sidebar is configured to appear on the **left side** (this is the default)
 
 ### 4. Restart Firefox
 
