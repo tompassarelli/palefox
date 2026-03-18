@@ -2,9 +2,9 @@
 
 Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. One CSS file, no fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
 
-| Sidebar Open | Zen Mode |
-|:---:|:---:|
-| ![Fennec with sidebar](fennec.webp) | ![Fennec without sidebar](fennec-no-sidebar.webp) |
+|              Sidebar Open               |                       Zen Mode                        |
+| :-------------------------------------: | :---------------------------------------------------: |
+| ![Fennec with sidebar](img/fennec.webp) | ![Fennec without sidebar](img/fennec-no-sidebar.webp) |
 
 ## Features
 
