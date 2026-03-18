@@ -10,12 +10,14 @@ Hide the padlock if not hovered and only if site is secure. `.mixedContentBlocke
 #identity-box:not(.notSecure) {
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 #urlbar:not(:hover) #identity-box:not(.notSecure) {
   opacity: 0;
-  transform: translateX(-20px); 
+  transform: translateX(-20px);
   pointer-events: none;
   width: 0px;
 }

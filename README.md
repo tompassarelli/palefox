@@ -2,9 +2,9 @@
 
 Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. One CSS file, no fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
 
-| Sidebar Open | Zen Mode |
-|:---:|:---:|
-| ![Fennec with sidebar](fennec.webp) | ![Fennec without sidebar](fennec-no-sidebar.webp) |
+|              Sidebar Open               |                       Zen Mode                        |
+| :-------------------------------------: | :---------------------------------------------------: |
+| ![Fennec with sidebar](img/fennec.webp) | ![Fennec without sidebar](img/fennec-no-sidebar.webp) |
 
 ## Features
 
@@ -33,6 +33,7 @@ Choose **one** of the two methods below:
 #### Option A: Automated (recommended)
 
 The script does the following:
+
 - Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
 - Copies Fennec's `chrome/` files into your Firefox profile
 - Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
@@ -40,11 +41,13 @@ The script does the following:
 > **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
 
 **macOS / Linux:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
 ```
 
 **Windows** (PowerShell):
+
 ```powershell
 irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | iex
 ```
@@ -61,33 +64,39 @@ irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | ie
 4. Set `sidebar.revamp` to `false` (or turn off **Show Sidebar** in Settings)
 
 **Locate your Firefox profile directory:**
+
 1. Go to `about:support` in the address bar
 2. Under "Application Basics", click **Open Profile Folder**
    - Flatpak users: the profile directory is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>`
 
 **Copy the CSS files:**
+
 1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
 2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
 3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
 
 ### 3. Restart Firefox
-   - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
+
+- Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
 
 ### Alternative: Nix / Home Manager
 
 Fennec can also be installed declaratively via a Home Manager module — this handles CSS, prefs, and Sideberry in one step.
 
 1. Add fennec to your flake inputs:
+
 ```nix
 inputs.fennec.url = "github:tompassarelli/fennec";
 ```
 
 2. Import the module in your Home Manager config:
+
 ```nix
 imports = [ inputs.fennec.homeManagerModules.default ];
 ```
 
 3. Enable it:
+
 ```nix
 programs.fennec = {
   enable = true;
@@ -107,6 +116,7 @@ programs.fennec = {
 Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collapses when the mouse leaves and reappears when hovering the left edge of the window.
 
 To enable:
+
 1. Ensure `autohide.css` is in the same `chrome` directory as `userChrome.css` (see [installation step 2](#2-install-css))
 2. Uncomment `@import url("autohide.css");` in `userChrome.css`
 3. Restart Firefox
@@ -115,7 +125,7 @@ To enable:
 
 - **[Vimium](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)** - Keyboard-driven navigation that complements the minimal, distraction-free interface
 
-## Help 
+## Help
 
 If something isn't working, check [open issues](https://github.com/tompassarelli/fennec/issues) or file a new one.
 
