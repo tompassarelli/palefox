@@ -132,7 +132,7 @@ fi
 # Positive detection — these markers only exist in the old inline format
 LEGACY_MIGRATED=false
 if [ -f "$chrome_dir/userChrome.css" ]; then
-    if grep -q '#region dev-docs' "$chrome_dir/userChrome.css" && grep -q '--fen-' "$chrome_dir/userChrome.css"; then
+    if grep -q '#region dev-docs' "$chrome_dir/userChrome.css" && grep -q -- '--fen-' "$chrome_dir/userChrome.css"; then
         cp "$chrome_dir/userChrome.css" "$chrome_dir/userChrome.css.legacy"
         rm "$chrome_dir/userChrome.css"
         LEGACY_MIGRATED=true
