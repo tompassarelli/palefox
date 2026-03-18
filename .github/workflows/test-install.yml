@@ -6,7 +6,13 @@ on:
     paths:
       - install.sh
       - install.ps1
+      - chrome/**
       - .github/workflows/test-install.yml
+  pull_request:
+    paths:
+      - install.sh
+      - install.ps1
+      - chrome/**
 
 jobs:
   test-linux:
@@ -24,14 +30,18 @@ jobs:
         run: |
           profile="$HOME/.mozilla/firefox/fake.default-release"
 
-          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
+          test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
+          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
+          test -f "$profile/chrome/fennec/autohide.css" || { echo "FAIL: fennec/autohide.css missing"; exit 1; }
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
+          test -f "$profile/chrome/user/user.css" || { echo "FAIL: user/user.css missing"; exit 1; }
+          grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: fennec.css import missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
-          ls -la "$profile/chrome/"
+          ls -laR "$profile/chrome/"
           echo "--- user.js ---"
           cat "$profile/user.js"
 
@@ -50,7 +60,8 @@ jobs:
         run: |
           profile="$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox/fake.default-release"
 
-          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing at Flatpak path"; exit 1; }
+          test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing at Flatpak path"; exit 1; }
+          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
@@ -63,7 +74,7 @@ jobs:
           fi
 
           echo "--- chrome/ contents ---"
-          ls -la "$profile/chrome/"
+          ls -laR "$profile/chrome/"
           echo "--- user.js ---"
           cat "$profile/user.js"
 
@@ -82,14 +93,15 @@ jobs:
         run: |
           profile="$HOME/Library/Application Support/Firefox/Profiles/fake.default-release"
 
-          test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
+          test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
+          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
-          ls -la "$profile/chrome/"
+          ls -laR "$profile/chrome/"
           echo "--- user.js ---"
           cat "$profile/user.js"
 
@@ -113,14 +125,86 @@ jobs:
         run: |
           $prof = "$env:APPDATA\Mozilla\Firefox\Profiles\fake.default-release"
 
-          if (-not (Test-Path "$prof\chrome")) { Write-Error "FAIL: chrome/ missing"; exit 1 }
+          if (-not (Test-Path "$prof\chrome\fennec")) { Write-Error "FAIL: chrome\fennec\ missing"; exit 1 }
+          if (-not (Test-Path "$prof\chrome\fennec\fennec.css")) { Write-Error "FAIL: fennec\fennec.css missing"; exit 1 }
+          if (-not (Test-Path "$prof\chrome\fennec\autohide.css")) { Write-Error "FAIL: fennec\autohide.css missing"; exit 1 }
           if (-not (Test-Path "$prof\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
+          if (-not (Test-Path "$prof\chrome\user\user.css")) { Write-Error "FAIL: user\user.css missing"; exit 1 }
+          $userChrome = Get-Content "$prof\chrome\userChrome.css" -Raw
+          if ($userChrome -notmatch '@import url\("fennec/fennec.css"\)') { Write-Error "FAIL: fennec.css import missing"; exit 1 }
           $userJs = Get-Content "$prof\user.js" -Raw
           if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: stylesheets pref missing"; exit 1 }
           if ($userJs -notmatch "sidebar.verticalTabs") { Write-Error "FAIL: sidebar.verticalTabs pref missing"; exit 1 }
           if ($userJs -notmatch "sidebar.revamp") { Write-Error "FAIL: sidebar.revamp pref missing"; exit 1 }
 
           Write-Host "--- chrome/ contents ---"
-          Get-ChildItem "$prof\chrome"
+          Get-ChildItem "$prof\chrome" -Recurse
           Write-Host "--- user.js ---"
           Get-Content "$prof\user.js"
+
+  test-preservation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake profile
+        run: mkdir -p ~/.mozilla/firefox/fake.default-release
+
+      - name: First install
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Simulate user customizations
+        run: |
+          profile="$HOME/.mozilla/firefox/fake.default-release"
+          echo "/* MY CUSTOM CSS */" >> "$profile/chrome/user/user.css"
+          echo "/* MY ENTRY POINT EDIT */" >> "$profile/chrome/userChrome.css"
+
+      - name: Second install (should preserve user files)
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Verify preservation
+        run: |
+          profile="$HOME/.mozilla/firefox/fake.default-release"
+
+          grep -q "MY CUSTOM CSS" "$profile/chrome/user/user.css" || { echo "FAIL: user.css was overwritten"; exit 1; }
+          grep -q "MY ENTRY POINT EDIT" "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css was overwritten"; exit 1; }
+          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing after second install"; exit 1; }
+
+          echo "Preservation test passed."
+
+  test-legacy-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake profile with old monolithic userChrome.css
+        run: |
+          profile="$HOME/.mozilla/firefox/fake.default-release"
+          mkdir -p "$profile/chrome"
+          # Simulate old monolithic userChrome.css with legacy markers
+          cat > "$profile/chrome/userChrome.css" << 'LEGACY'
+          /* #region dev-docs */
+          /* old fennec monolithic CSS */
+          /* #region css vars and theme handling */
+          :root { --fen-color: red; }
+          /* MY OLD TWEAK */
+          LEGACY
+
+      - name: Run install script
+        run: FENNEC_LOCAL=. ./install.sh
+
+      - name: Verify legacy migration
+        run: |
+          profile="$HOME/.mozilla/firefox/fake.default-release"
+
+          # Legacy file should be backed up
+          test -f "$profile/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing"; exit 1; }
+          grep -q "MY OLD TWEAK" "$profile/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing user content"; exit 1; }
+
+          # New modular userChrome.css should be in place
+          grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: new modular userChrome.css not installed"; exit 1; }
+
+          # Core files should exist
+          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing"; exit 1; }
+
+          echo "Legacy migration test passed."

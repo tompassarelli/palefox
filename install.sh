@@ -4,6 +4,15 @@ set -euo pipefail
 REPO="tompassarelli/fennec"
 LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
 
+FORCE=false
+NO_BACKUP=false
+for arg in "$@"; do
+    case $arg in
+        --force) FORCE=true ;;
+        --no-backup) NO_BACKUP=true ;;
+    esac
+done
+
 tmp_dir=""
 cleanup() { if [ -n "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi; }
 trap cleanup EXIT
@@ -110,7 +119,7 @@ else
 fi
 
 # Backup existing chrome folder
-if [ -d "$chrome_dir" ]; then
+if [ -d "$chrome_dir" ] && [ "$NO_BACKUP" = false ]; then
     backup_dir="$profile/chrome.bak.$(date +%Y-%m-%d-%H%M%S)"
     echo "Backing up existing chrome folder to $(basename "$backup_dir")"
     if ! cp -r "$chrome_dir" "$backup_dir"; then
@@ -119,10 +128,46 @@ if [ -d "$chrome_dir" ]; then
     fi
 fi
 
-# Copy downloaded chrome folder
-echo "Installing chrome folder..."
-mkdir -p "$chrome_dir"
-cp -r "$extracted"/* "$chrome_dir/"
+# Legacy migration gate: detect old monolithic userChrome.css
+# Positive detection — these markers only exist in the old inline format
+LEGACY_MIGRATED=false
+if [ -f "$chrome_dir/userChrome.css" ]; then
+    if grep -q '#region dev-docs' "$chrome_dir/userChrome.css" && grep -q '--fen-' "$chrome_dir/userChrome.css"; then
+        cp "$chrome_dir/userChrome.css" "$chrome_dir/userChrome.css.legacy"
+        rm "$chrome_dir/userChrome.css"
+        LEGACY_MIGRATED=true
+    fi
+fi
+
+# Install files
+echo "Installing fennec..."
+mkdir -p "$chrome_dir/fennec" "$chrome_dir/user"
+
+# Core files — always overwrite
+for file in fennec/fennec.css fennec/autohide.css; do
+    if [ -f "$extracted/$file" ]; then
+        cp "$extracted/$file" "$chrome_dir/$file"
+    fi
+done
+
+# User files — preserve if present, create if missing
+for file in userChrome.css user/user.css; do
+    if [ -f "$extracted/$file" ]; then
+        if [ ! -f "$chrome_dir/$file" ] || [ "$FORCE" = true ]; then
+            cp "$extracted/$file" "$chrome_dir/$file"
+        else
+            echo "Preserved: $file"
+        fi
+    fi
+done
+
+# Print legacy migration notice
+if [ "$LEGACY_MIGRATED" = true ]; then
+    echo ""
+    echo "Note: Your previous userChrome.css used the legacy monolithic layout."
+    echo "It has been backed up to: chrome/userChrome.css.legacy"
+    echo "Move any personal tweaks from that file into chrome/user/user.css"
+fi
 
 # Configure Firefox preferences in user.js
 user_js="$profile/user.js"

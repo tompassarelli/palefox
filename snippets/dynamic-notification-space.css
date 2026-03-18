@@ -1,0 +1,13 @@
+/* dynamic-notification-space.css
+ *
+ * Increase the sidebar's ::before spacer height when notifications
+ * are active, so they don't overlap tab content.
+ * The hardcoded 300px is a rough estimate — could be improved with
+ * container queries or JS to calculate exact notification height.
+ */
+
+body:has(#notifications-toolbar) {
+  #sidebar-box::before {
+    height: 300px;
+  }
+}

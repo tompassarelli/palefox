@@ -1,0 +1,10 @@
+/* hide-extension-page-label.css
+ *
+ * Hides the "Sideberry" (or other extension name) label that
+ * appears in the identity box on extension pages. Not strictly
+ * needed — cosmetic only.
+ */
+
+#identity-box.extensionPage #identity-icon-label {
+  display: none;
+}

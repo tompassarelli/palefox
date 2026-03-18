@@ -5,15 +5,26 @@ flakeSelf:
 let
   cfg = config.programs.fennec;
 
-  baseCss = builtins.readFile "${flakeSelf}/chrome/userChrome.css";
+  chromeDir = ".mozilla/firefox/${cfg.profile}/chrome";
 
-  userChromeCss =
-    if cfg.autohide
-    then builtins.replaceStrings
-      [ ''/* @import url("autohide.css"); */'' ]
-      [ ''@import url("autohide.css");'' ]
-      baseCss
-    else baseCss;
+  userChromeContent = lib.concatStringsSep "\n" (
+    [ ''/* fennec — entry point (managed by Home Manager)''
+      '' *''
+      '' * To customize: set programs.fennec.extraConfig in your nix config,''
+      '' * or edit user/user.css directly.''
+      '' */''
+      ""
+      ''@import url("fennec/fennec.css");''
+    ]
+    ++ lib.optional cfg.autohide ''@import url("fennec/autohide.css");''
+    ++ map (imp: ''@import url("${imp}");'') cfg.userChromeImports
+    ++ [ ''@import url("user/user.css");'' ]
+  );
+
+  userCssContent = ''
+    /* user overrides — managed by Home Manager (programs.fennec.extraConfig) */
+    ${cfg.extraConfig}
+  '';
 in
 {
   options.programs.fennec = {
@@ -36,6 +47,18 @@ in
       default = true;
       description = "Install the Sideberry extension via NUR. Requires NUR in your flake inputs.";
     };
+
+    extraConfig = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = "Extra CSS appended to user/user.css.";
+    };
+
+    userChromeImports = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Additional @import URLs for userChrome.css.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -47,7 +70,6 @@ in
           "sidebar.verticalTabs" = false;
           "sidebar.revamp" = false;
         };
-        userChrome = userChromeCss;
         extensions = lib.mkIf cfg.sideberry {
           packages = [
             pkgs.nur.repos.rycee.firefox-addons.sidebery
@@ -56,8 +78,20 @@ in
       };
     };
 
-    home.file.".mozilla/firefox/${cfg.profile}/chrome/autohide.css" = lib.mkIf cfg.autohide {
-      text = builtins.readFile "${flakeSelf}/chrome/autohide.css";
+    home.file."${chromeDir}/fennec/fennec.css" = {
+      source = "${flakeSelf}/chrome/fennec/fennec.css";
+    };
+
+    home.file."${chromeDir}/fennec/autohide.css" = lib.mkIf cfg.autohide {
+      source = "${flakeSelf}/chrome/fennec/autohide.css";
+    };
+
+    home.file."${chromeDir}/userChrome.css" = {
+      text = userChromeContent;
+    };
+
+    home.file."${chromeDir}/user/user.css" = {
+      text = userCssContent;
     };
   };
 }

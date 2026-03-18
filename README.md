@@ -1,6 +1,6 @@
 # Fennec
 
-Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. One CSS file, no fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
+Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. No fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
 
 | Sidebar Open | Zen Mode |
 |:---:|:---:|
@@ -33,11 +33,21 @@ Choose **one** of the two methods below:
 #### Option A: Automated (recommended)
 
 The script does the following:
-- Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
-- Copies Fennec's `chrome/` files into your Firefox profile
+- Copies core files (`fennec/fennec.css`, `fennec/autohide.css`) into your Firefox profile — always updated
+- Creates `userChrome.css` (entry point) and `user/user.css` (your customizations) if they don't exist — preserved on update
 - Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
+- Use `--force` to overwrite all files (e.g. clean reinstall)
+- Use `--no-backup` to skip the backup
 
-> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
+The entry point wires everything together:
+```css
+@import url("fennec/fennec.css");
+/* @import url("fennec/autohide.css"); */
+@import url("user/user.css");
+```
+Fennec updates `chrome/fennec/`. Your tweaks live in `chrome/user/`. `userChrome.css` just wires them together — advanced users can edit it to add extra imports.
+
+> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it).
 
 **macOS / Linux:**
 ```bash
@@ -67,8 +77,10 @@ irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | ie
 
 **Copy the CSS files:**
 1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
-2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
-3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
+2. Copy `userChrome.css`, the `fennec/` folder, and the `user/` folder from this repo's `chrome/` directory into your profile's `chrome/` directory
+3. Put your personal customizations in `user/user.css` — it won't be overwritten when fennec is updated
+
+> **Upgrading from an older version?** If you previously had a monolithic `userChrome.css` with all CSS inline, the install script will detect this, back up your old file to `userChrome.css.legacy`, and install the new modular entry point. Move any personal tweaks from the legacy file into `user/user.css`.
 
 ### 3. Restart Firefox
    - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
@@ -93,6 +105,9 @@ programs.fennec = {
   enable = true;
   profile = "your-profile-name";  # optional, defaults to "default-release"
   autohide = false;               # optional
+  extraConfig = ''                # optional, appended to user/user.css
+    :root { --fen-gap-x: 15px; }
+  '';
 };
 ```
 
@@ -107,8 +122,8 @@ programs.fennec = {
 Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collapses when the mouse leaves and reappears when hovering the left edge of the window.
 
 To enable:
-1. Ensure `autohide.css` is in the same `chrome` directory as `userChrome.css` (see [installation step 2](#2-install-css))
-2. Uncomment `@import url("autohide.css");` in `userChrome.css`
+1. Ensure `fennec/autohide.css` is in your `chrome/fennec/` directory (see [installation step 2](#2-install-css))
+2. Uncomment `@import url("fennec/autohide.css");` in `userChrome.css`
 3. Restart Firefox
 
 ### Recommended Extensions

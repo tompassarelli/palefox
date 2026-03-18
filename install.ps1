@@ -4,6 +4,9 @@ $ErrorActionPreference = "Stop"
 $repo = "tompassarelli/fennec"
 $latestUrl = "https://api.github.com/repos/$repo/releases/latest"
 
+$force = $args -contains "--force" -or $args -contains "-Force"
+$noBackup = $args -contains "--no-backup"
+
 $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "fennec-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 
 try {
@@ -93,7 +96,7 @@ try {
     }
 
     # Backup existing chrome folder
-    if (Test-Path $chromeDir) {
+    if ((Test-Path $chromeDir) -and -not $noBackup) {
         $timestamp = Get-Date -Format "yyyy-MM-dd-HHmmss"
         $backupDir = Join-Path $profile.FullName "chrome.bak.$timestamp"
         Write-Host "Backing up existing chrome folder to chrome.bak.$timestamp"
@@ -105,12 +108,62 @@ try {
         }
     }
 
-    # Copy downloaded files into chrome folder
-    Write-Host "Installing chrome folder..."
+    # Legacy migration gate: detect old monolithic userChrome.css
+    # Positive detection — these markers only exist in the old inline format
+    $legacyMigrated = $false
+    $userChromeFile = Join-Path $chromeDir "userChrome.css"
+    if (Test-Path $userChromeFile) {
+        $content = Get-Content $userChromeFile -Raw
+        if ($content -match '#region dev-docs' -and $content -match '--fen-') {
+            Copy-Item -Path $userChromeFile -Destination (Join-Path $chromeDir "userChrome.css.legacy")
+            Remove-Item -Path $userChromeFile
+            $legacyMigrated = $true
+        }
+    }
+
+    # Install files
+    Write-Host "Installing fennec..."
+    $fennecDir = Join-Path $chromeDir "fennec"
+    $userDir = Join-Path $chromeDir "user"
     if (-not (Test-Path $chromeDir)) {
         New-Item -ItemType Directory -Path $chromeDir | Out-Null
     }
-    Copy-Item -Path (Join-Path $chromeSource "*") -Destination $chromeDir -Recurse -Force
+    if (-not (Test-Path $fennecDir)) {
+        New-Item -ItemType Directory -Path $fennecDir | Out-Null
+    }
+    if (-not (Test-Path $userDir)) {
+        New-Item -ItemType Directory -Path $userDir | Out-Null
+    }
+
+    # Core files — always overwrite
+    foreach ($file in @("fennec\fennec.css", "fennec\autohide.css")) {
+        $source = Join-Path $chromeSource $file
+        $dest = Join-Path $chromeDir $file
+        if (Test-Path $source) {
+            Copy-Item -Path $source -Destination $dest -Force
+        }
+    }
+
+    # User files — preserve if present, create if missing
+    foreach ($file in @("userChrome.css", "user\user.css")) {
+        $source = Join-Path $chromeSource $file
+        $dest = Join-Path $chromeDir $file
+        if (Test-Path $source) {
+            if (-not (Test-Path $dest) -or $force) {
+                Copy-Item -Path $source -Destination $dest -Force
+            } else {
+                Write-Host "Preserved: $file"
+            }
+        }
+    }
+
+    # Print legacy migration notice
+    if ($legacyMigrated) {
+        Write-Host ""
+        Write-Host "Note: Your previous userChrome.css used the legacy monolithic layout."
+        Write-Host "It has been backed up to: chrome\userChrome.css.legacy"
+        Write-Host "Move any personal tweaks from that file into chrome\user\user.css"
+    }
 
     # Configure Firefox preferences in user.js
     $userJs = Join-Path $profile.FullName "user.js"

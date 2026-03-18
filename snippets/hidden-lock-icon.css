@@ -1,0 +1,19 @@
+/* hidden-lock-icon.css
+ *
+ * Hide the padlock when not hovered, but only for secure sites.
+ * .notSecure is always surfaced since that's a real warning.
+ * .mixedContentBlocked could be worth surfacing too.
+ */
+
+#identity-box:not(.notSecure) {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#urlbar:not(:hover) #identity-box:not(.notSecure) {
+  opacity: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+  width: 0px;
+}

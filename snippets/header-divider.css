@@ -1,0 +1,18 @@
+/* header-divider.css
+ *
+ * Adds a subtle divider line below the header when no lightweight
+ * theme (lwtheme) is active. Aesthetic preference — fennec defaults
+ * to a borderless header for a cleaner look.
+ */
+
+:root:not([lwtheme]) .sidebar-browser-stack::before {
+  content: "";
+  position: fixed;
+  top: var(--fen-header-height);
+  width: calc(100% - var(--fen-gap-x));
+  height: 1px;
+  background-color: var(--toolbarbutton-icon-fill);
+  opacity: 0.3 !important;
+  pointer-events: none;
+  box-sizing: border-box;
+}

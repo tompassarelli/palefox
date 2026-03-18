@@ -1,0 +1,9 @@
+/* identity-icon-label.css
+ *
+ * Style the identity icon label — the DOM component that shows
+ * "Not Secure" when the connection is not secure.
+ */
+
+#identity-icon-label {
+  /* Styling for identity icon label */
+}

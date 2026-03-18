@@ -1,0 +1,691 @@
+/* fennec.css — core theme
+ *
+ * This file is overwritten on update.
+ * Put your customizations in user/user.css instead.
+ */
+
+/* #region dev-docs */
+
+/* #region firefox-chrome
+
+to understand fennec, we fundamentally need to grok firefox chrome
+
+#navigator-toolbox is the root container of most firefox chrome
+  - does not contain sidebar or browser content container
+  - #nav-bar (navigator-toolbox child) contains
+    - left nav buttons (back, forward, refresh)
+      - fennec hides some buttons, like home
+    - customizeable spring1 (spacer)
+      - fennec hides
+    - urlbar
+      - (fennec moves out of nav-bar, placing it above tabs)
+    - customizeable spring2 (spacer)
+      - fennec hides
+    - right buttons (web extensions, settings)
+      - fennec moves settings before left nav buttons
+
+#browser is the other primary container (nav toolbox's sibling) contains 
+  - sidebar-box
+  - sidebar-splitter
+  - tabbrowser-tabbox (contains html page content)
+    - note: can never have z-index priority compared to actual chrome
+      - mozilla does this for security reasons, the author assumes,
+        otherwise users could hide the chrome to confuse users
+
+#endregion firefox-chrome */
+
+/* #region fennec-ui
+
+=== Terms ===
+
+CC: Conceptual Component - not actually in DOM, but a layout objective
+gap: space between components, like padding/margin
+
+=== Components Overview ===
+
+[drawer] - CC
+  [ header  ] - CC 
+  [ urlbar  ]
+  [ sidebar ] 
+[/drawer]
+
+=== Component Details and Style System ===
+
+[drawer] 
+- gap on x-axis: --fen-gap-x
+- gap on y-axis: --fen-gap-y
+- left gap method: set padding on container components in the drawer
+  - examples include: navigator-toolbox, urlbar-container, sidebar-box
+- right gap method: set sidebar-spliter (drag-line) width to gap value
+
+[header]
+- #nav-bar > buttons: settings, forward/back, refresh, extensions
+
+[urlbar]
+- #nav-bar > urlbar is visually positioned out of #nav-bar section
+  and placed below it, aligned to left side of drawer
+- because urlbar is not part of sidebar in chrome, we need to resize it
+  with css type queries on sidebar width
+  - we don't resize it every pizel, but rather in chunks of 10px, so that
+    we can see the urlbar text resize in a more gradual manner
+    - to compensate for imperfect width, the default urlbar background 
+      is hidden when not focused, so that that a custom urlbar background 
+      which tracks sidebar width is visible
+  - whenever the urlbar expands, we extend the width to --fen-max-width
+
+[sidebar]
+- web extensions like sideberry, bookmarks, history
+
+=== Code Organization ===
+- code tends to be ordered with respect to the DOM top-bottom, left-right 
+- selectors tend to be ordered with respect to the DOM top-bottom, left-right
+- css is organized into regions, each region is prefixed with #region <region-name>
+- #regions organize sections of code that are related to each other
+  - start is prefixed with #region <region-name>
+  - end is suffixed with #endregion <region-name>
+  - regions can be folded with fold button or `za` key in vim
+
+
+=== Optional Features ===
+
+[autohide] (off by default)
+- sidebar must be enabled (not toggled off)
+- auto-collapses the drawer when the mouse leaves
+- hovering the left edge reveals it again
+- enable: uncomment @import url("autohide.css") in userChrome.css and restart Firefox
+
+/* #endregion fennec-ui */
+
+/* #endregion dev-docs */
+
+
+/* #region css vars and theme handling */
+:root {
+  /* Use Firefox Color theme variables instead of hardcoded colors */
+  --fen-color: var(--toolbar-bgcolor, light-dark(#fafafb, #36363a));
+  /* --toolbar-bgcolor is set by Firefox Color, fallback to OS appearance */
+
+  /* show sidebar gap */
+  --fen-show-sidebar-gap: 6px;
+  
+  /* gap between drawer components and edges of drawer */
+  --fen-gap-y: 6px;
+  --fen-gap-x: 10px;
+  --fen-tab-mx: 1px;
+  --fen-sidebar-splitter-width: calc(1.2 * var(--fen-gap-x));
+  
+  /* header buttons */
+  /* - nav btns need extra margin because settings btn is not in container */
+  /* - each nav-btn is typically 32px, then 2px of padding */
+  /* - but panelui padding/margin will not impat, not in container */
+  /* - so we mock a btn, and use panelui-gap for whatever padding is */
+  --fen-panelui-gap: 4px;
+  --fen-nav-btn-width: 31px;
+  --fen-nav-btn-gap: calc(var(--fen-gap-x) + var(--fen-nav-btn-width) + var(--fen-panelui-gap));
+  
+  /* header height - currently a partial function of drawer gap */
+  --fen-header-height: calc(32px + 2*var(--fen-gap-y));  
+  --fen-header-bg-color: var(--fen-color);
+  /* - dim header buttons a bit */
+  --fen-header-btn-dim: .8;
+  
+  /* tab bar and notifications, urlbar pos is partial function of */
+  --fen-tab-position-y: calc(16px + var(--fen-header-height) + var(--fen-urlbar-bg-height));
+  
+  /* urlbar */
+  /* - knob for urlbar position */
+  /* - the constant below if no urlbar-tabgap, means urlbar touches tabs*/
+  --fen-urlbar-position-y: calc(
+    var(--fen-tab-position-y) + var(--fen-gap-y) - var(--fen-urlbar-tabbar-gap) - 46px
+  );
+  --fen-urlbar-tabbar-gap: 12px;
+  
+  /* - keep urlbar-bg attached to urlbar, generally don't touch */
+  --fen-urlbar-bg-position-y: calc(
+    var(--fen-urlbar-position-y) + var(--fen-gap-y) + 1px
+  );
+  /* - urlbar bg size and style */
+  --fen-urlbar-bg-height: 38px;
+  /* Use Firefox theme variable for urlbar background */
+  --fen-urlbar-bg-color: var(--toolbar-field-background-color);
+  --fen-urlbar-border-radius: 4px;
+  
+  /* minimize media query sprawl for resizing urlbar */
+  --fen-max-width: 600px;
+}
+
+/* if a theme is present (like Firefox Color), respect it fully */
+:root[lwtheme] {
+  --fen-color: var(--toolbar-bgcolor);
+  --fen-header-bg-color: var(--toolbar-bgcolor);
+  --fen-urlbar-bg-color: var(--toolbar-field-background-color);
+  --fen-header-btn-dim: 1;
+}
+
+/* #endregion css variables and theme handling */
+
+
+/* #region dynamic sidebar toggle 
+ *
+ * note that autohide.css has hardcoded mirror
+ * transitions that correspond to the properties below
+ * it is advised to keep the configuration in sync
+ *
+ * */
+
+/* 
+ * set sidebar-hidden flex so animations apply when toggling 
+ * have a from/to. otherwise display:none prevents animations
+ *
+ * */
+#sidebar-box[hidden] {
+  display: flex !important;
+  width: 0px !important;
+  min-width: 0px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  transition: width 0.3s ease, padding 0.3s step-end, opacity 0.2s ease !important;
+}
+
+/* toggle the entire ui by toggling the sidebar */
+body:has(#sidebar-box[hidden]:not(:hover)) #navigator-toolbox {
+  width: 0px !important;
+  overflow: hidden !important;
+  pointer-events: none;
+  opacity: 0 !important;
+  transition: width 0.3s ease, opacity 0.2s ease !important;
+}
+
+body:has(#sidebar-box[hidden]:not(:hover)) toolbaritem#urlbar-container {
+  width: 0px !important;
+  max-width: 0px !important;
+  pointer-events: none;
+}
+
+body:has(#sidebar-box[hidden]) #identity-icon-box {
+	background-color: transparent !important;
+}
+
+body:has(#sidebar-box[hidden]) #urlbar {
+  opacity: 0 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+/* #endregion dynamic sidebar toggle */
+
+/* #region header */
+
+#navigator-toolbox {
+  position: absolute !important;
+  /* should cover the entire drawer area */
+  width: calc(var(--fen-max-width) + var(--fen-sidebar-splitter-width));
+  height: var(--fen-header-height);
+  z-index: 2 !important;  /* 3 spills extensions onto page*/
+  border: none !important;
+  padding-top: var(--fen-gap-y) !important;
+/*   background-color: var(--fen-color) !important; */
+  background-color: var(--fen-header-bg-color) !important;
+  transition: width 0.3s ease, opacity 0.3s ease 0.2s !important;
+}
+
+/* the thing that comes up when you hold alt, there's already settings menu */
+#toolbar-menubar {
+  display: none;
+}
+
+/* Firefox's native tabs - always disable, depend on sideberry for tabs */
+#TabsToolbar {
+  display: none;
+}
+
+/*  #nav-bar is basically fennec's header section, stubbed for structural reference */
+#nav-bar {
+  border-top: 0px !important;
+}
+
+/* dim the header buttons a tad to not draw too much attention */
+#nav-bar > toolbaritem {
+  opacity: var(--fen-header-btn-dim);
+}
+
+/* warning this object if set min-width statically 
+   will cause pinned ext. load failure when browser bootstrap */
+#nav-bar-customization-target {
+  background-color: var(--fen-header-bg-color);
+}
+
+/* dim the header buttons a tad to not draw too much attention */
+#nav-bar-customization-target > toolbarbutton {
+  opacity: var(--fen-header-btn-dim);
+}
+
+/* dim the header buttons a tad to not draw too much attention */
+#nav-bar-customization-target > toolbaritem {
+  opacity: var(--fen-header-btn-dim);
+}
+
+#nav-bar-customization-target > toolbaritem.unified-extensions-item {
+  margin-left: 0px !important; /* ext. buttons */
+}
+
+
+/* sidebar toggle - hide: bloat, just use any panel hotkey */
+#sidebar-button {
+  display: none;
+}
+
+#back-button {
+  margin-left: var(--fen-nav-btn-gap) !important;
+}
+
+/* adjust nav buttons when show sidebar option is enabled */
+body:not(:has(#sidebar-main[hidden])) #back-button {
+  margin-left: calc(var(--fen-show-sidebar-gap) + var(--fen-nav-btn-gap)) !important;
+}
+
+/* #forward-button {} */
+
+/* #stop-reload-button {} */
+
+/* goes to home page - hide: bloat, new tab should goto home */
+#home-button {
+  display: none;
+}
+
+/* currently serves no purpose to fennec */
+#customizableui-special-spring1 {
+  display: none;
+}
+
+/* #urlbar-container{} -- here structurally, styled later */
+
+/* currently serves no purpose to fennec */
+#customizableui-special-spring2 {
+  display: none;
+} 
+
+/* #downloads-button {} */
+
+/* #unified-extensions-button {} */
+/* when ext is pinned, extensions will overflow after unified button */
+
+/* settings menu */ 
+#PanelUI-button {
+  position:  absolute !important;
+  width: 26px !important;
+  margin: 0px !important;
+  top: 0px !important;;
+  left: calc(var(--fen-gap-x) + var(--fen-panelui-gap)) !important;
+}
+
+/* adjust settings buttons when show sidebar option is enabled */
+body:not(:has(#sidebar-main[hidden])) #PanelUI-button {
+  left: calc(var(--fen-show-sidebar-gap) + var(--fen-gap-x)) !important;
+}
+
+#PanelUI-menu-button {
+  width: 100%;
+  margin: 0px !important;
+  padding: 0px !important;
+}
+
+/* when the settings panel is clicked, give the popup container a background
+that ensures the tabs and urlbar aren't visible in the corner */
+panel#appMenu-popup {
+  background-image: linear-gradient(var(--fen-color),var(--fen-color));
+  background-repeat: no-repeat;
+  background-position: left;
+  background-size: 33.3333% 95%;  
+}
+
+/* bookmarks area - always disable */
+#PersonalToolbar {
+  display: none;
+}
+
+/* #endregion header */
+
+/* region vertical sidebar  */
+
+/* an option in mozilla to show side bar under hoziontal/vertical tabs */
+/* appears to the left of fennec url/sidebar */
+.wrapper {
+  background-color: var(--fen-color) !important;
+}
+
+/* endregion vertical sidebar */
+
+/* #region urlbar */
+
+/* url bar above the sideberry tabs */
+#urlbar-container {
+  position: absolute;
+  width: 215px !important;
+  margin: 0px !important;
+  margin-left: var(--fen-gap-x) !important;
+  top: var(--fen-urlbar-position-y);
+}
+
+#urlbar {
+  transition: opacity 0.3s ease 0.2s !important;
+}
+/* moz setting: "Show sidebar" active */
+body:not(:has(#sidebar-main[hidden])) #urlbar-container {
+  margin-left: 57.63px !important;
+}
+
+/* because we use a custom urlbar-background that tracks sidebar width
+   we need to hide default background unless active */
+#urlbar:not(:is([breakout-extend])) .urlbar-background {
+  display: none !important;
+}
+
+/* when urlbar breaks out, position with respect to drawer gap */
+#urlbar-background {
+  margin-left: calc(0.5*var(--fen-gap-x)) !important;
+  border-radius: 8px !important;
+}
+/* moz setting: "Show sidebar" active */
+body:not(:has(#sidebar-main[hidden])) #urlbar-background {
+  margin-left: 0px !important;
+}
+
+
+/* eager width adjustments for urlbar as sidebar width changes
+   math - aesthetically urlbar width of 215 maps to a sidebar width of 224px
+   224 appears to be min-width default for sidebar */
+
+/* selecting style instead of width because width isn't available at start */
+/* 200s */
+body:has(#browser > #sidebar-box[style*="; width: 23"]) #urlbar-container { width: 221px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 23"]) #urlbar-container { width: 221px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 24"]) #urlbar-container { width: 231px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 25"]) #urlbar-container { width: 241px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 26"]) #urlbar-container { width: 251px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 27"]) #urlbar-container { width: 261px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 28"]) #urlbar-container { width: 271px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 29"]) #urlbar-container { width: 281px !important; }
+
+/* 300s */
+body:has(#browser > #sidebar-box[style*="; width: 30"]) #urlbar-container { width: 291px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 31"]) #urlbar-container { width: 301px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 32"]) #urlbar-container { width: 311px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 33"]) #urlbar-container { width: 321px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 34"]) #urlbar-container { width: 331px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 35"]) #urlbar-container { width: 341px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 36"]) #urlbar-container { width: 351px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 37"]) #urlbar-container { width: 361px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 38"]) #urlbar-container { width: 371px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 39"]) #urlbar-container { width: 381px !important; }
+
+/* 400s */
+body:has(#browser > #sidebar-box[style*="; width: 40"]) #urlbar-container { width: 391px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 41"]) #urlbar-container { width: 401px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 42"]) #urlbar-container { width: 411px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 43"]) #urlbar-container { width: 421px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 44"]) #urlbar-container { width: 431px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 45"]) #urlbar-container { width: 441px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 46"]) #urlbar-container { width: 451px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 47"]) #urlbar-container { width: 461px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 48"]) #urlbar-container { width: 471px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 49"]) #urlbar-container { width: 481px !important; }
+
+/* 500s */
+body:has(#browser > #sidebar-box[style*="; width: 50"]) #urlbar-container { width: 491px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 51"]) #urlbar-container { width: 501px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 52"]) #urlbar-container { width: 511px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 53"]) #urlbar-container { width: 521px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 54"]) #urlbar-container { width: 531px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 55"]) #urlbar-container { width: 541px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 56"]) #urlbar-container { width: 551px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 57"]) #urlbar-container { width: 561px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 58"]) #urlbar-container { width: 571px !important; }
+body:has(#browser > #sidebar-box[style*="; width: 59"]) #urlbar-container { width: 581px !important; }
+
+/* 600 */
+body:has(#browser > #sidebar-box[style*="; width: 6"]) #urlbar-container { width: 591px !important; }
+
+/* set a minimum width for the url search */
+#urlbar:is([focused][breakout-extend]) {
+  width: var(--fen-max-width) !important;
+}
+
+/* remove google icon crowding search bar */
+#urlbar-searchmode-switcher {
+  display: none;
+}
+
+.urlbar-input-container {
+  border-radius: var(--fen-urlbar-border-radius) !important;
+  margin-left: 1px !important;
+}
+
+/* shield icon for tracking protections - show only when urlbar is focused */
+.urlbar-input-container #tracking-protection-icon-container {
+  opacity: 0;
+  position: absolute !important;
+}
+
+#urlbar:is([breakout-extend]) #tracking-protection-icon-container,
+#tracking-protection-icon-container:has([open]) {
+  transition: opacity 0.2s ease;
+  position: relative !important;
+  left: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 1;
+}
+
+/* cross site cookie configuration - show only when urlbar is focused */
+.urlbar-input-container #identity-permission-box {
+  opacity: 0;
+  position: absolute !important;
+}
+#urlbar:is([breakout-extend]) #identity-permission-box,
+#identity-permission-box:has([open]) {
+  transition: opacity 0.2s ease;
+  position: relative !important;
+  left: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 1;
+}
+
+#identity-box {
+  margin-left: 2px !important;
+}
+
+/* shows Firefox if on settings page, not strictly needed */
+#identity-box.chromeUI #identity-icon-label {
+  display: none;
+}
+
+/* align text with tabs */
+#identity-box.chromeUI {
+  margin-right: 6px !important;
+}
+
+/* give url text some padding when typing */
+body:has(#identity-box[pageproxystate="invalid"]) #urlbar-input {
+  padding-left: 5px !important;
+}
+
+/* align tab and url text - on extension page */
+#identity-box.extensionPage {
+  margin-right: 5px !important;
+}
+/* align tab and url text - when label text like not secure is present */
+#identity-box #identity-icon-label {
+  margin-left: 6px !important;
+}
+
+/* align tab and url text - on verified pages */
+#identity-box.verifiedDomain {
+  margin-right: 6px !important;
+}
+
+/* align url icon position with sideberry */
+#identity-icon-box {
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+}
+
+/* a hack to try to mitigat the werid sizing on this for better icon alignment*/
+/* #identity-icon-box > image#identity-icon {
+  transform: scaleX(1.05) !important;
+}*/
+
+/* highlight warning if not secure */
+/* deprecate to support themes more clenaly */
+/* body:has(#identity-box.notSecure) #identity-icon-label {
+  color: red;
+} */
+
+#identity-box[pageproxystate="valid"].notSecureText #identity-icon-label {
+	display: block !important;
+}
+/* always shown identity-icon label if not secure */
+#identity-box[pageproxystate="valid"].notSecureText #identity-icon-box {
+  flex-shrink: 0 !important;
+  min-width: 125px;
+}
+
+/*
+FIREFOX SECURITY STATES REFERENCE
+
+Reasonably safe to customize:
+- .chromeUI          - Firefox internal pages
+- .extensionPage     - Extension pages  
+- .verifiedDomain    - HTTPS with valid cert
+- .verifiedIdentity  - EV certificates
+
+Preserve these (security warnings):
+- .notSecure         - HTTP or broken HTTPS
+- .insecureLoginForms - HTTPS page with HTTP login
+- .mixedContentBlocked - HTTPS with blocked mixed content
+- .mixedActiveContent  - HTTPS with active mixed content
+*/
+
+body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
+    content: "🦊 Fennec UI - HTTP Alert: Not Secure";
+    text-align: center;
+    font-size: 24px;
+    margin-left: 0px;
+    display: block;
+    position: inherit;
+    z-index: 3;
+    width: 100%;
+    height: 46px;
+    padding-top: 8px;
+    box-sizing: border-box;
+    background-color: var(--fen-color);
+}
+
+/* remove from right-side of urlbar: favorite button, bookmark btn, misc other things */
+#urlbar:not(:is([breakout-extend])) 
+#page-action-buttons {
+  display: none !important;
+}
+
+/* #endregion urlbar */
+
+/* #region sidebar */
+
+/* smallest width seems to be 224px */
+#sidebar-box {
+  max-width: var(--fen-max-width) !important;
+  min-width: 0px !important;
+  padding-left: var(--fen-gap-x);
+  background-color: var(--fen-color) !important;
+  transition: width 0.3s ease, max-width 0.3s ease, margin-right 0.3s ease, padding 0.3s step-start, opacity 0.3s ease 0.2s !important;
+}
+
+/* Remove the "Sideberry", "History", etc. sidepanel header  */
+#sidebar-header {
+  display: none;
+}
+
+box#sidebar-main {
+  position: relative !important;
+  top: var(--fen-header-height) !important;
+  height: calc(100vh - var(--fen-header-height)) !important;
+}
+
+/* create space for urlbar area inside the sidebar */
+#sidebar-box::before {
+  content: "";
+  display: block;
+  height: var(--fen-tab-position-y);
+  width: 100%;
+  pointer-events: none;
+  box-sizing: border-box;
+  color: aliceblue;
+}
+
+/* urlbar-background (custom) so its aligned with tabs */
+#sidebar-box::after {
+  content: "";
+  position: absolute;
+  top: var(--fen-urlbar-bg-position-y);
+  height: var(--fen-urlbar-bg-height);
+  width: calc(100% - var(--fen-gap-x));
+  left: calc(var(--fen-gap-x));
+  pointer-events: none;
+  box-sizing: border-box;
+  background-color: var(--fen-urlbar-bg-color);
+  border-radius: var(--fen-urlbar-border-radius) !important;
+}
+/* vbox.urlbarView {
+  background-color: var(--fen-urlbar-bg-color) !important;
+} */
+
+.sidebar-browser-stack {
+  padding-bottom: var(--fen-gap-x);
+  background-coloR: var(--fennec-color) !important;
+}
+
+/* #region notifications */
+
+#notifications-toolbar {
+	position: absolute;
+	top: var(--fen-tab-position-y);
+	left: var(--fen-gap-x);
+	max-width: 250px;
+}
+
+/* #endregion notifications */
+
+/* #region sidebar-border */ 
+
+/* the gutter between the sidebar and page */
+#sidebar-splitter {
+  --splitter-width: var(--fen-sidebar-splitter-width) !important;
+  width: var(--fen-sidebar-splitter-width) !important;
+  margin: 0px !important;
+  border: 0px !important;
+  /* for theme support... */
+  /* make top y% see-through, rest uses --fen-color */
+  /* allows the splitter to be useable near nav buttons, 
+     but stops it from clipping some backgrounds  */
+  background-color: transparent !important;
+  background-image: linear-gradient(
+    to bottom,
+    /* transparent until exactly Npx */
+    transparent 0,
+    transparent var(--fen-header-height),
+
+    /* adjacent stop at the exact same position => instant jump (no blend) */
+    var(--fen-color) 0,
+    var(--fen-color) 100%
+  );
+}
+
+/* #endregion sidebar-border */ 
+
+/* #region sideberry */
+/* done in sideberry css */
+/* #endregion sideberry */
+
+
+/* #endregion sidebar */
