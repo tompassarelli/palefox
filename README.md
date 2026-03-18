@@ -1,140 +1,338 @@
-# Fennec
+# 🦊 Fennec
 
-Fennec is a minimal Firefox setup built with userChrome.css, designed around vertical tabs, zen mode, and keyboard-driven browsing. One CSS file, no fork, no build — the sidebar-first workflow of Zen Browser without leaving Firefox.
+> A minimal, sidebar-first Firefox UI built with `userChrome.css` — Zen Browser workflow, zero forks.
 
-|              Sidebar Open               |                       Zen Mode                        |
+Fennec transforms Firefox into a keyboard-driven, vertical-tab browser using only CSS. No build steps, no forks — just modular CSS files and your existing Firefox.
+
+|              Sidebar Open               |               Zen Mode (Sidebar Hidden)               |
 | :-------------------------------------: | :---------------------------------------------------: |
 | ![Fennec with sidebar](img/fennec.webp) | ![Fennec without sidebar](img/fennec-no-sidebar.webp) |
 
-## Features
+---
 
-🔗 **Enhanced Sideberry Integration** - Urlbar inside the sidebar-box, tracks sidebar width, and expands when focused
+## ✨ Features
 
-🧘 **Zen Mode** - Toggling the sidebar hides the UI, maximizing screen space and aiding focus when tiled or maximized
+| Feature                      | Description                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------- |
+| 🔗 **Sideberry Integration** | URL bar lives inside the sidebar container, auto-resizes with sidebar width, expands on focus |
+| 🧘 **Zen Mode**              | Toggle sidebar to hide entire UI chrome — maximizes focus when tiled or fullscreen            |
+| ⌨️ **Keyboard-First UX**     | Minimal visible controls designed for Vimium/Vimium-FF workflows                              |
+| 🎨 **Theme Aware**           | Respects Firefox Color themes + system light/dark mode via CSS variables                      |
+| 🧩 **Modular Architecture**  | Clean separation of core theme, optional modules, and user customizations                     |
+| 🔄 **Update-Safe**           | Your personal styles persist across theme updates                                             |
+| 🐧 **Nix/Home Manager**      | Declarative installation supported for NixOS users                                            |
 
-✨ **Minimal Chrome** - Only essential objects exposed, coherent with a keyboard driven UX
+---
 
-🛠️ **Community Minded** - Clean code and detailed docs to support customization and contribution
+## 🚀 Quick Start
 
-🎨 **Theme Support** - System themes (light-dark) supported. User created Firefox themes are also supported.
+### Prerequisites
 
-## Installation
+- Firefox 128+ (for `:has()` selector support)
+- [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) extension installed
 
-> Please see [security considerations](#security-considerations) before installing
+### One-Line Install
 
-### 1. Install the Sideberry Extension
-
-Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) from Firefox Add-ons.
-
-### 2. Install CSS
-
-Choose **one** of the two methods below:
-
-#### Option A: Automated (recommended)
-
-The script does the following:
-
-- Backs up your existing `chrome` folder (if any) to `chrome.bak.<timestamp>`
-- Copies Fennec's `chrome/` files into your Firefox profile
-- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
-
-> **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it). Your backup is in `chrome.bak.*`.
-
-**macOS / Linux:**
+**Linux / macOS**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
 ```
 
-**Windows** (PowerShell):
+**Windows (PowerShell)**
 
 ```powershell
 irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | iex
 ```
 
-#### Option B: Manual
+> 💡 **What the script does:**
+>
+> 1. Backs up existing `chrome/` folder → `chrome.bak.<timestamp>`
+> 2. Copies Fennec's CSS modules into your Firefox profile
+> 3. Writes required prefs to `user.js`
+> 4. **Preserves** your `userOverrides.css` (won't overwrite on update)
+>
+> **To uninstall:** Delete the `chrome/` folder and remove Fennec entries from `user.js`.
 
-**Enable required Firefox settings:**
+---
 
-> Note: only `toolkit.legacyUserProfileCustomizations.stylesheets` requires `about:config`. The rest are defaults historically and can also be changed in Settings.
+## 🛠️ Manual Installation
 
-1. Go to `about:config` in the address bar
-2. Set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
-3. Set `sidebar.verticalTabs` to `false` (or turn on **Horizontal tabs** in Settings)
-4. Set `sidebar.revamp` to `false` (or turn off **Show Sidebar** in Settings)
+### 1. Enable Custom Stylesheets
 
-**Locate your Firefox profile directory:**
+Go to `about:config` and set:
 
-1. Go to `about:support` in the address bar
-2. Under "Application Basics", click **Open Profile Folder**
-   - Flatpak users: the profile directory is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>`
-
-**Copy the CSS files:**
-
-1. Inside the profile folder, create a `chrome` directory if it doesn't already exist
-2. Copy `userChrome.css` from this repo's `chrome/` folder into that `chrome` directory
-3. Copy `autohide.css` into the same `chrome` directory (needed if you want [autohide](#autohide-off-by-default))
-
-### 3. Restart Firefox
-
-- Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
-
-### Alternative: Nix / Home Manager
-
-Fennec can also be installed declaratively via a Home Manager module — this handles CSS, prefs, and Sideberry in one step.
-
-1. Add fennec to your flake inputs:
-
-```nix
-inputs.fennec.url = "github:tompassarelli/fennec";
+```ini
+toolkit.legacyUserProfileCustomizations.stylesheets = true
 ```
 
-2. Import the module in your Home Manager config:
+### 2. Disable Conflicting UI Features
 
-```nix
-imports = [ inputs.fennec.homeManagerModules.default ];
+Either in `about:config`:
+
+```ini
+sidebar.verticalTabs = false
+sidebar.revamp = false
 ```
 
-3. Enable it:
+_Or via Firefox Settings → uncheck "Show Sidebar" and enable "Horizontal tabs"._
 
-```nix
-programs.fennec = {
-  enable = true;
-  profile = "your-profile-name";  # optional, defaults to "default-release"
-  autohide = false;               # optional
-};
+### 3. Copy CSS Files
+
+**File Structure:**
+
+```
+chrome/
+├── userChrome.css       # Entry point (configure here)
+├── fennec.css           # Core theme (do not edit)
+├── autohide.css         # Optional module
+└── userOverrides.css   # Your personal customizations
 ```
 
-4. Rebuild with `nixos-rebuild switch` or `home-manager switch`
+1. Open your profile folder: go to `about:support` → **Open Profile Folder**
+   > 🐧 **Flatpak users:** Profile is at `~/.var/app/org.mozilla.firefox/.mozilla/firefox/<profile>/`
+2. Create a `chrome/` directory inside it (if missing)
+3. Copy all files from the repo's `chrome/` folder
 
-> Note: Sideberry is installed automatically via [NUR](https://github.com/nix-community/NUR). Ensure NUR is in your flake inputs and overlays. Set `sideberry = false` if you manage extensions separately.
+### 4. Configure Features
 
-## Optional Features
+Open `userChrome.css` and uncomment modules you want:
 
-### Autohide (off by default)
+```css
+/* Required - always enabled */
+@import url("fennec.css");
 
-Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collapses when the mouse leaves and reappears when hovering the left edge of the window.
+/* Optional - uncomment to enable */
+/* @import url("autohide.css"); */
 
-To enable:
+/* Your customizations - safe to edit */
+@import url("userOverrides.css");
+```
 
-1. Ensure `autohide.css` is in the same `chrome` directory as `userChrome.css` (see [installation step 2](#2-install-css))
-2. Uncomment `@import url("autohide.css");` in `userChrome.css`
+### 5. Restart Firefox
+
+> ⚠️ **Sidebar invisible after restart?**
+> Press `Ctrl+H` to toggle the history panel, then activate Sideberry from the extensions menu.
+
+---
+
+## 📁 File Structure
+
+| File                | Purpose                     | Edit?  | Overwritten on Update? |
+| ------------------- | --------------------------- | ------ | ---------------------- |
+| `userChrome.css`    | Entry point, module imports | ✅ Yes | ❌ No                  |
+| `fennec.css`        | Core theme styles           | ❌ No  | ✅ Yes                 |
+| `autohide.css`      | Optional autohide module    | ❌ No  | ✅ Yes                 |
+| `userOverrides.css` | Personal customizations     | ✅ Yes | ❌ No                  |
+
+**Best Practice:** Put all your custom CSS in `userOverrides.css`. This file is never overwritten during updates.
+
+---
+
+## 🧩 Optional Features
+
+### Autohide Sidebar _(off by default)_
+
+Auto-collapses the UI when the mouse leaves; reappears on hover at the left edge.
+
+**Enable:**
+
+1. Ensure `autohide.css` is in your `chrome/` folder
+2. Uncomment this line in `userChrome.css`:
+   ```css
+   @import url("autohide.css");
+   ```
 3. Restart Firefox
+
+> ⚠️ **Note:** Autohide conflicts with the default dynamic sidebar toggle. If you experience issues, comment out sidebar toggle rules in `userOverrides.css`.
 
 ### Recommended Extensions
 
-- **[Vimium](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)** - Keyboard-driven navigation that complements the minimal, distraction-free interface
+| Extension                                                                        | Purpose                                                |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [Vimium-FF](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)           | Keyboard navigation that complements the minimal UI    |
+| [Tree Style Tab](https://addons.mozilla.org/en-US/firefox/addon/tree-style-tab/) | Alternative to Sideberry if you prefer native tab tree |
 
-## Help
+---
 
-If something isn't working, check [open issues](https://github.com/tompassarelli/fennec/issues) or file a new one.
+## 🎨 Customization
 
-## Security Considerations
+### Change Colors, Spacing, or Sizes
 
-- The install guide directs users to download Firefox extensions. Firefox extensions can introduce security vulnerabilities and/or take direct hostile actions against users.
-- Zen Mode hides the UI which obviously suppresses security signals like padlock warnings. In appreciation of this concern, Fennec will still attempt to surface a custom HTTP Not Secure security warning prepended to page content as a header alert. Not a solution against phishing and other attacks/vulnerabilities, only toggle the UI after the page has been verified as secure and trustworthy.
-- **Use at your own risk** - The author is not liable for any security issues, data breaches, or other damages of usage of this repository or mentioned extensions.
-- **You are responsible** for verifying the security of websites, code, and extensions used
-- Always keep Firefox updated
+Edit `userOverrides.css` to override default variables:
 
-**By using this theme and mentioned Firefox extensions, you acknowledge these risks and agree that the author bears no responsibility for any consequences.**
+```css
+:root {
+  --fen-gap-x: 15px; /* Default: 10px */
+  --fen-gap-y: 8px; /* Default: 6px */
+  --fen-max-width: 700px; /* Default: 600px */
+  --fen-header-height: 50px; /* Default: calculated */
+}
+```
+
+### Hide Specific Elements
+
+```css
+/* Example: Hide extensions button */
+#unified-extensions-button {
+  display: none !important;
+}
+
+/* Example: Change URL bar border radius */
+#urlbar-background {
+  border-radius: 8px !important;
+}
+
+/* Example: Different sidebar background */
+#sidebar-box {
+  background-color: #2b2b2b !important;
+}
+```
+
+> 💡 **Tip:** `userOverrides.css` loads **after** `fennec.css`, so your rules take priority.
+
+---
+
+## 🐧 Nix / Home Manager Installation
+
+Declarative setup for NixOS users:
+
+1. Add to your `flake.inputs`:
+
+   ```nix
+   inputs.fennec.url = "github:tompassarelli/fennec";
+   ```
+
+2. Import the module in Home Manager config:
+
+   ```nix
+   imports = [ inputs.fennec.homeManagerModules.default ];
+   ```
+
+3. Enable in your configuration:
+
+   ```nix
+   programs.fennec = {
+     enable = true;
+     profile = "your-profile-name";  # optional, default: "default-release"
+     autohide = false;               # optional
+     sideberry = true;               # installs via NUR
+   };
+   ```
+
+4. Apply: `home-manager switch` or `nixos-rebuild switch`
+
+> 📦 Sideberry installs automatically via [NUR](https://github.com/nix-community/NUR). Set `sideberry = false` if you manage extensions manually.
+
+---
+
+## 🔄 Updating Fennec
+
+When a new version is released:
+
+### Automatic (via install script)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/fennec/main/install.sh | bash
+```
+
+### Manual
+
+1. Download new `fennec.css` and `autohide.css` from the repo
+2. Replace the old files in your `chrome/` folder
+3. **Do NOT replace:** `userChrome.css` or `userOverrides.css`
+4. Restart Firefox
+
+> ✅ Your personal customizations in `userOverrides.css` are preserved!
+
+---
+
+## 🔒 Security Considerations
+
+> ⚠️ **Read before installing**
+
+- **Extensions**: Third-party Firefox extensions can introduce vulnerabilities. Only install from trusted sources (e.g., official Mozilla Add-ons).
+- **Zen Mode**: Hiding the UI suppresses browser security indicators (padlock, HTTPS warnings). Fennec adds a custom "Not Secure" header alert for HTTP pages, but this is **not** a substitute for browser security UI.
+- **Best Practice**: Only toggle Zen Mode after verifying a site is trustworthy.
+- **No Warranty**: This project is provided "as is". The author is not liable for security issues, data loss, or damages arising from its use.
+
+**By using Fennec, you acknowledge these risks and accept responsibility for your browsing security.**
+
+---
+
+## 🛟 Troubleshooting
+
+| Issue                  | Solution                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| Sidebar not visible    | Press `Ctrl+H`, then activate Sideberry from extensions menu                          |
+| CSS not applying       | Verify `toolkit.legacyUserProfileCustomizations.stylesheets = true` in `about:config` |
+| URL bar misaligned     | Ensure `sidebar.revamp = false`                                                       |
+| Theme colors broken    | Check that `:root[lwtheme]` variables are not overridden elsewhere                    |
+| Autohide not working   | Ensure `autohide.css` is imported in `userChrome.css`                                 |
+| Conflicts after update | Check `userOverrides.css` for outdated selectors                                      |
+
+Still stuck? → [Open an issue](https://github.com/tompassarelli/fennec/issues)
+
+---
+
+## 🧑‍💻 For Developers / Contributors
+
+### Repository Structure
+
+```
+fennec/
+├── chrome/
+│   ├── userChrome.css       # Entry point (imports)
+│   ├── fennec.css           # Core theme
+│   ├── autohide.css         # Optional module
+│   └── userOverrides.css    # User template
+├── install.sh               # POSIX-compatible installer
+├── install.ps1              # Windows PowerShell installer
+├── home-manager/            # Nix module
+├── img/                     # Screenshots
+├── README.md                # This file
+└── css_archive.md           # Archived/experimental code
+```
+
+### Code Style
+
+- CSS organized in `#region` blocks (foldable in VS Code / Vim `za`)
+- Variables prefixed with `--fen-` for easy identification
+- `!important` used sparingly, only where Firefox native styles override
+- Each module file has version header and update warnings
+
+### Development Workflow
+
+1. Fork the repo
+2. Test changes in a dedicated Firefox profile
+3. Document new CSS variables or behaviors in `:root`
+4. Update version numbers in affected files
+5. Open a PR with a clear description
+
+### Building a Module
+
+If you want to create an optional module (like `autohide.css`):
+
+1. Create `yourModule.css` in `chrome/`
+2. Add version header with conflict warnings
+3. Document in `userChrome.css` as optional import
+4. Update README with feature description
+
+---
+
+## 📄 License
+
+MIT — Use, modify, and distribute freely. Attribution appreciated.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## 🙏 Acknowledgments
+
+- [Sideberry](https://github.com/mbnuqw/sidebery) — Vertical tabs extension that makes Fennec possible
+- [Zen Browser](https://zen-browser.app/) — Inspiration for the sidebar-first workflow
+- [Lepton](https://github.com/black7375/Firefox-UI-Fix) — CSS architecture inspiration
+- Firefox community — For keeping `userChrome.css` alive
+
+---
+
+**Made with ❤️ by [Tom Passarelli](https://github.com/tompassarelli)**
