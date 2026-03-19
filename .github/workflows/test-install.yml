@@ -15,24 +15,29 @@ on:
       - chrome/**
 
 jobs:
-  # Firefox on ubuntu-latest is a snap, which stores profiles at
-  # ~/snap/firefox/... instead of ~/.mozilla/firefox. The installer
-  # targets the native path (correct for non-snap installs). Snap
-  # Firefox support is tracked separately.
   test-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Create Firefox profile
-        run: mkdir -p ~/.mozilla/firefox/test.default-release
+        run: MOZ_HEADLESS=1 firefox -CreateProfile default-release
+
+      - name: Verify profile path
+        run: |
+          profiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
+          test -d "$profiles_dir" || { echo "FAIL: $profiles_dir not created"; exit 1; }
+          echo "Profile root confirmed at $profiles_dir"
+          ls -la "$profiles_dir/"
 
       - name: Run install script
         run: FENNEC_LOCAL=. ./install.sh
 
       - name: Verify installation
         run: |
-          profile="$HOME/.mozilla/firefox/test.default-release"
+          profiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
+          profile=$(find "$profiles_dir" -maxdepth 1 -type d -name '*.default-release' | head -1)
+          test -n "$profile" || { echo "FAIL: no *.default-release profile found"; exit 1; }
 
           test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
           test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
@@ -174,27 +179,28 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create Firefox profile
-        run: mkdir -p ~/.mozilla/firefox/test.default-release
+        run: |
+          MOZ_HEADLESS=1 firefox -CreateProfile default-release
+          profiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
+          profile=$(find "$profiles_dir" -maxdepth 1 -type d -name '*.default-release' | head -1)
+          echo "PROFILE=$profile" >> "$GITHUB_ENV"
 
       - name: First install
         run: FENNEC_LOCAL=. ./install.sh
 
       - name: Simulate user customizations
         run: |
-          profile="$HOME/.mozilla/firefox/test.default-release"
-          echo "/* MY CUSTOM CSS */" >> "$profile/chrome/user/user.css"
-          echo "/* MY ENTRY POINT EDIT */" >> "$profile/chrome/userChrome.css"
+          echo "/* MY CUSTOM CSS */" >> "$PROFILE/chrome/user/user.css"
+          echo "/* MY ENTRY POINT EDIT */" >> "$PROFILE/chrome/userChrome.css"
 
       - name: Second install (should preserve user files)
         run: FENNEC_LOCAL=. ./install.sh
 
       - name: Verify preservation
         run: |
-          profile="$HOME/.mozilla/firefox/test.default-release"
-
-          grep -q "MY CUSTOM CSS" "$profile/chrome/user/user.css" || { echo "FAIL: user.css was overwritten"; exit 1; }
-          grep -q "MY ENTRY POINT EDIT" "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css was overwritten"; exit 1; }
-          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing after second install"; exit 1; }
+          grep -q "MY CUSTOM CSS" "$PROFILE/chrome/user/user.css" || { echo "FAIL: user.css was overwritten"; exit 1; }
+          grep -q "MY ENTRY POINT EDIT" "$PROFILE/chrome/userChrome.css" || { echo "FAIL: userChrome.css was overwritten"; exit 1; }
+          test -f "$PROFILE/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing after second install"; exit 1; }
 
           echo "Preservation test passed."
 
@@ -205,7 +211,10 @@ jobs:
 
       - name: Create Firefox profile with legacy userChrome.css
         run: |
-          profile="$HOME/.mozilla/firefox/test.default-release"
+          MOZ_HEADLESS=1 firefox -CreateProfile default-release
+          profiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
+          profile=$(find "$profiles_dir" -maxdepth 1 -type d -name '*.default-release' | head -1)
+          echo "PROFILE=$profile" >> "$GITHUB_ENV"
           mkdir -p "$profile/chrome"
           cat > "$profile/chrome/userChrome.css" << 'LEGACY'
           /* #region dev-docs */
@@ -220,17 +229,15 @@ jobs:
 
       - name: Verify legacy migration
         run: |
-          profile="$HOME/.mozilla/firefox/test.default-release"
-
           # Legacy file should be backed up
-          test -f "$profile/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing"; exit 1; }
-          grep -q "MY OLD TWEAK" "$profile/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing user content"; exit 1; }
+          test -f "$PROFILE/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing"; exit 1; }
+          grep -q "MY OLD TWEAK" "$PROFILE/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing user content"; exit 1; }
 
           # New modular userChrome.css should be in place
-          grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: new modular userChrome.css not installed"; exit 1; }
+          grep -q '@import url("fennec/fennec.css")' "$PROFILE/chrome/userChrome.css" || { echo "FAIL: new modular userChrome.css not installed"; exit 1; }
 
           # Core files should exist
-          test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing"; exit 1; }
+          test -f "$PROFILE/chrome/fennec/fennec.css" || { echo "FAIL: fennec.css missing"; exit 1; }
 
           echo "Legacy migration test passed."
 

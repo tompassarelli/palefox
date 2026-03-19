@@ -68,6 +68,7 @@ case "$(uname -s)" in
             native_dir="$HOME/.librewolf"
         else
             flatpak_dir="$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"
+            xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
             native_dir="$HOME/.mozilla/firefox"
         fi
         if [ -d "$flatpak_dir" ]; then
