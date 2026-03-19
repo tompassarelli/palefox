@@ -4,7 +4,7 @@ Fennec is a minimal Firefox/Librewolf setup built with userChrome.css, designed 
 
 | Sidebar Open | Zen Mode |
 |:---:|:---:|
-| ![Fennec with sidebar](fennec.webp) | ![Fennec without sidebar](fennec-no-sidebar.webp) |
+| ![Fennec with sidebar](https://github.com/user-attachments/assets/9fc9691d-8e5e-4864-bdd8-0aa696955d86) | ![Fennec without sidebar](https://github.com/user-attachments/assets/7db86916-8c1c-4feb-91de-0f62d5fab209) |
 
 ## Features
 
