@@ -151,8 +151,8 @@ gap: space between components, like padding/margin
   --fen-urlbar-bg-color: var(--toolbar-field-background-color);
   --fen-urlbar-border-radius: 4px;
   
-  /* minimize media query sprawl for resizing urlbar */
-  --fen-max-width: 300px;
+  /* max drawer width — used by navigator-toolbox and focused urlbar */
+  --fen-max-width: 600px;
 
   /* transition speed — set to 0s by reduced motion */
   --fen-ts-2: 0.2s;
