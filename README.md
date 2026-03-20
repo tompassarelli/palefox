@@ -132,6 +132,7 @@ To enable:
 
 ### Recommended Extensions
 
+- **[Fennec Update Notifier](https://addons.mozilla.org/en-US/firefox/addon/fennec-update-notifier/)** - Get notified when a new version of Fennec is available
 - **[Vimium](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)** - Keyboard-driven navigation that complements the minimal, distraction-free interface
 
 ## Help 
