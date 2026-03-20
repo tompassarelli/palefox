@@ -116,15 +116,16 @@ gap: space between components, like padding/margin
   
   /* header buttons */
   /* - nav btns need extra margin because settings btn is not in container */
-  /* - each nav-btn is typically 32px, then 2px of padding */
+  /* - each nav-btn is typically btn-size, then 2px of padding */
   /* - but panelui padding/margin will not impat, not in container */
   /* - so we mock a btn, and use panelui-gap for whatever padding is */
+  --fen-btn-size: 32px;
   --fen-panelui-gap: 4px;
-  --fen-nav-btn-width: 31px;
+  --fen-nav-btn-width: calc(var(--fen-btn-size) - 1px);
   --fen-nav-btn-gap: calc(var(--fen-gap-x) + var(--fen-nav-btn-width) + var(--fen-panelui-gap));
-  
-  /* header height - currently a partial function of drawer gap */
-  --fen-header-height: calc(32px + 2*var(--fen-gap-y));  
+
+  /* header height - derived from button size + vertical gap */
+  --fen-header-height: calc(var(--fen-btn-size) + 2*var(--fen-gap-y));  
   --fen-header-bg-color: var(--fen-color);
   /* - dim header buttons a bit */
   --fen-header-btn-dim: .8;
@@ -145,7 +146,7 @@ gap: space between components, like padding/margin
     var(--fen-urlbar-position-y) + var(--fen-gap-y) + 1px
   );
   /* - urlbar bg size and style */
-  --fen-urlbar-bg-height: 38px;
+  --fen-urlbar-bg-height: calc(var(--fen-btn-size) + 6px);
   /* Use Firefox theme variable for urlbar background */
   --fen-urlbar-bg-color: var(--toolbar-field-background-color);
   --fen-urlbar-border-radius: 4px;
@@ -164,6 +165,14 @@ gap: space between components, like padding/margin
   --fen-header-bg-color: var(--toolbar-bgcolor);
   --fen-urlbar-bg-color: var(--toolbar-field-background-color);
   --fen-header-btn-dim: 1;
+}
+
+/* UI density — adjust button/urlbar sizing to match Firefox density setting */
+:root[uidensity="compact"] {
+  --fen-btn-size: 28px;
+}
+:root[uidensity="touch"] {
+  --fen-btn-size: 34px;
 }
 
 /* platform fonts — use native system font for each OS */
