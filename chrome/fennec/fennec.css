@@ -92,7 +92,7 @@ gap: space between components, like padding/margin
 - sidebar must be enabled (not toggled off)
 - auto-collapses the drawer when the mouse leaves
 - hovering the left edge reveals it again
-- enable: uncomment @import url("autohide.css") in userChrome.css and restart Firefox
+- enable: set fennec.autohide to true in about:config and restart Firefox
 
 /* #endregion fennec-ui */
 
@@ -165,9 +165,9 @@ gap: space between components, like padding/margin
 /* #endregion css variables and theme handling */
 
 
-/* #region dynamic sidebar toggle 
+/* #region dynamic sidebar toggle
  *
- * note that autohide.css has hardcoded mirror
+ * note that #region autohide has hardcoded mirror
  * transitions that correspond to the properties below
  * it is advised to keep the configuration in sync
  *
@@ -213,6 +213,70 @@ body:has(#sidebar-box[hidden]) #urlbar {
 }
 
 /* #endregion dynamic sidebar toggle */
+
+
+/* #region autohide (about:config: fennec.autohide)
+ *
+ * When active, the drawer auto-collapses when the mouse leaves and
+ * reappears on hover over the left edge of the window.
+ * Sidebar must be enabled (not toggled off).
+ *
+ * mirrors the transitions in #region dynamic sidebar toggle, but
+ * collapses to 20px (detection zone) instead of 0px, using negative
+ * margin to hide the overflow.
+ */
+
+@media -moz-pref("fennec.autohide") {
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    #sidebar-box:not([hidden]) {
+    display: flex !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    margin-right: -20px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    z-index: 10 !important;
+    transition: width 0.3s ease, max-width 0.3s ease, margin-right 0.3s ease, padding 0.3s step-end, opacity 0.2s ease !important;
+  }
+
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    #navigator-toolbox {
+    width: 0px !important;
+    overflow: hidden !important;
+    pointer-events: none;
+    opacity: 0 !important;
+    transition: width 0.3s ease, opacity 0.2s ease !important;
+  }
+
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    toolbaritem#urlbar-container {
+    width: 0px !important;
+    max-width: 0px !important;
+    pointer-events: none;
+  }
+
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    #urlbar {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+  }
+
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    #identity-icon-box {
+    background-color: transparent !important;
+  }
+
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+    #sidebar-splitter {
+    display: none !important;
+  }
+}
+
+/* #endregion autohide */
+
 
 /* #region header */
 

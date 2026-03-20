@@ -57,19 +57,18 @@ irm https://raw.githubusercontent.com/tompassarelli/fennec/main/install.ps1 | ie
 
 The script does the following:
 - Detects Firefox or LibreWolf profile directories (including Flatpak and XDG paths on Linux)
-- Copies core files (`fennec/fennec.css`, `fennec/autohide.css`) into your profile — always updated
+- Copies core files (`fennec/fennec.css`) into your profile — always updated
 - Creates `userChrome.css` (entry point) and `user/user.css` (your customizations) if they don't exist — preserved on update
-- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets
+- Writes prefs to `user.js`: disables vertical tabs, disables the sidebar revamp, enables custom stylesheets, sets `fennec.*` defaults
 - Use `--force` to overwrite all files (e.g. clean reinstall)
 - Use `--no-backup` to skip the backup
 
 The entry point wires everything together:
 ```css
 @import url("fennec/fennec.css");
-/* @import url("fennec/autohide.css"); */
 @import url("user/user.css");
 ```
-Fennec updates `chrome/fennec/`. Your tweaks live in `chrome/user/`. `userChrome.css` just wires them together — advanced users can edit it to add extra imports.
+Fennec updates `chrome/fennec/`. Your tweaks live in `chrome/user/`. `userChrome.css` just wires them together — advanced users can edit it to add extra imports. Toggle features in `about:config` by typing `fennec.` to see all options.
 
 > **To uninstall:** delete the `chrome` folder and remove the Fennec lines from `user.js` in your profile directory (or delete `user.js` entirely if Fennec created it).
 
@@ -137,8 +136,8 @@ programs.fennec = {
 Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collapses when the mouse leaves and reappears when hovering the left edge of the window.
 
 To enable:
-1. Ensure `fennec/autohide.css` is in your `chrome/fennec/` directory (see [installation step 2](#2-install-css))
-2. Uncomment `@import url("fennec/autohide.css");` in `userChrome.css`
+1. Go to `about:config` in the address bar
+2. Set `fennec.autohide` to `true`
 3. Restart Firefox
 
 ### Recommended Extensions

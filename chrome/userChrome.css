@@ -1,10 +1,11 @@
 /* fennec — entry point
  *
- * Enable optional modules by uncommenting their @import line.
+ * Toggle features in about:config (type "fennec." to see all options):
+ *   fennec.autohide — auto-collapse sidebar when mouse leaves
+ *
  * Put your personal CSS in user/user.css — it won't be
  * overwritten when fennec is updated.
  */
 
 @import url("fennec/fennec.css");
-/* @import url("fennec/autohide.css"); */
 @import url("user/user.css");

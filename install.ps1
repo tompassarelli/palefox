@@ -166,7 +166,7 @@ try {
     }
 
     # Core files — always overwrite
-    foreach ($file in @("fennec\fennec.css", "fennec\autohide.css")) {
+    foreach ($file in @("fennec\fennec.css")) {
         $source = Join-Path $chromeSource $file
         $dest = Join-Path $chromeDir $file
         if (Test-Path $source) {
@@ -217,6 +217,8 @@ try {
     Set-BrowserPref "toolkit.legacyUserProfileCustomizations.stylesheets" "true"
     Set-BrowserPref "sidebar.verticalTabs" "false"
     Set-BrowserPref "sidebar.revamp" "false"
+    Set-BrowserPref "sidebar.position_start" "true"
+    Set-BrowserPref "fennec.autohide" "false"
 
     Write-Host "Done. Restart $browserName for changes to take effect."
 } finally {

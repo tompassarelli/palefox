@@ -10,13 +10,15 @@ let
   userChromeContent = lib.concatStringsSep "\n" (
     [ ''/* fennec — entry point (managed by Home Manager)''
       '' *''
+      '' * Toggle features in about:config (type "fennec." to see all options):''
+      '' *   fennec.autohide — auto-collapse sidebar when mouse leaves''
+      '' *''
       '' * To customize: set programs.fennec.extraConfig in your nix config,''
       '' * or edit user/user.css directly.''
       '' */''
       ""
       ''@import url("fennec/fennec.css");''
     ]
-    ++ lib.optional cfg.autohide ''@import url("fennec/autohide.css");''
     ++ map (imp: ''@import url("${imp}");'') cfg.userChromeImports
     ++ [ ''@import url("user/user.css");'' ]
   );
@@ -39,7 +41,7 @@ in
     autohide = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Enable the autohide module (sidebar collapses when mouse leaves).";
+      description = "Auto-collapse sidebar when mouse leaves (sets fennec.autohide in about:config).";
     };
 
     sideberry = lib.mkOption {
@@ -69,6 +71,8 @@ in
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
           "sidebar.verticalTabs" = false;
           "sidebar.revamp" = false;
+          "sidebar.position_start" = true;
+          "fennec.autohide" = cfg.autohide;
         };
         extensions = lib.mkIf cfg.sideberry {
           packages = [
@@ -80,10 +84,6 @@ in
 
     home.file."${chromeDir}/fennec/fennec.css" = {
       source = "${flakeSelf}/chrome/fennec/fennec.css";
-    };
-
-    home.file."${chromeDir}/fennec/autohide.css" = lib.mkIf cfg.autohide {
-      source = "${flakeSelf}/chrome/fennec/autohide.css";
     };
 
     home.file."${chromeDir}/userChrome.css" = {

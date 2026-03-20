@@ -41,13 +41,15 @@ jobs:
 
           test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
           test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
-          test -f "$profile/chrome/fennec/autohide.css" || { echo "FAIL: fennec/autohide.css missing"; exit 1; }
+
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
           test -f "$profile/chrome/user/user.css" || { echo "FAIL: user/user.css missing"; exit 1; }
           grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: fennec.css import missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
+          grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
+          grep -q 'fennec.autohide' "$profile/user.js" || { echo "FAIL: fennec.autohide pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -78,6 +80,8 @@ jobs:
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
+          grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
+          grep -q 'fennec.autohide' "$profile/user.js" || { echo "FAIL: fennec.autohide pref missing"; exit 1; }
 
           # Confirm native path was NOT used
           if [ -d "$HOME/.mozilla/firefox" ]; then
@@ -117,6 +121,8 @@ jobs:
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
+          grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
+          grep -q 'fennec.autohide' "$profile/user.js" || { echo "FAIL: fennec.autohide pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -158,7 +164,7 @@ jobs:
 
           if (-not (Test-Path "$($prof.FullName)\chrome\fennec")) { Write-Error "FAIL: chrome\fennec\ missing"; exit 1 }
           if (-not (Test-Path "$($prof.FullName)\chrome\fennec\fennec.css")) { Write-Error "FAIL: fennec\fennec.css missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\fennec\autohide.css")) { Write-Error "FAIL: fennec\autohide.css missing"; exit 1 }
+
           if (-not (Test-Path "$($prof.FullName)\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
           if (-not (Test-Path "$($prof.FullName)\chrome\user\user.css")) { Write-Error "FAIL: user\user.css missing"; exit 1 }
           $userChrome = Get-Content "$($prof.FullName)\chrome\userChrome.css" -Raw
@@ -167,6 +173,8 @@ jobs:
           if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: stylesheets pref missing"; exit 1 }
           if ($userJs -notmatch "sidebar.verticalTabs") { Write-Error "FAIL: sidebar.verticalTabs pref missing"; exit 1 }
           if ($userJs -notmatch "sidebar.revamp") { Write-Error "FAIL: sidebar.revamp pref missing"; exit 1 }
+          if ($userJs -notmatch "sidebar.position_start") { Write-Error "FAIL: sidebar.position_start pref missing"; exit 1 }
+          if ($userJs -notmatch "fennec.autohide") { Write-Error "FAIL: fennec.autohide pref missing"; exit 1 }
 
           Write-Host "--- chrome/ contents ---"
           Get-ChildItem "$($prof.FullName)\chrome" -Recurse
@@ -276,11 +284,12 @@ jobs:
 
           test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
           test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
-          test -f "$profile/chrome/fennec/autohide.css" || { echo "FAIL: fennec/autohide.css missing"; exit 1; }
+
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
           test -f "$profile/chrome/user/user.css" || { echo "FAIL: user/user.css missing"; exit 1; }
           grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: fennec.css import missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          grep -q 'fennec.autohide' "$profile/user.js" || { echo "FAIL: fennec.autohide pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -314,11 +323,12 @@ jobs:
 
           test -d "$profile/chrome/fennec" || { echo "FAIL: chrome/fennec/ missing"; exit 1; }
           test -f "$profile/chrome/fennec/fennec.css" || { echo "FAIL: fennec/fennec.css missing"; exit 1; }
-          test -f "$profile/chrome/fennec/autohide.css" || { echo "FAIL: fennec/autohide.css missing"; exit 1; }
+
           test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
           test -f "$profile/chrome/user/user.css" || { echo "FAIL: user/user.css missing"; exit 1; }
           grep -q '@import url("fennec/fennec.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: fennec.css import missing"; exit 1; }
           grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          grep -q 'fennec.autohide' "$profile/user.js" || { echo "FAIL: fennec.autohide pref missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -366,13 +376,14 @@ jobs:
 
           if (-not (Test-Path "$($prof.FullName)\chrome\fennec")) { Write-Error "FAIL: chrome\fennec\ missing"; exit 1 }
           if (-not (Test-Path "$($prof.FullName)\chrome\fennec\fennec.css")) { Write-Error "FAIL: fennec\fennec.css missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\fennec\autohide.css")) { Write-Error "FAIL: fennec\autohide.css missing"; exit 1 }
+
           if (-not (Test-Path "$($prof.FullName)\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
           if (-not (Test-Path "$($prof.FullName)\chrome\user\user.css")) { Write-Error "FAIL: user\user.css missing"; exit 1 }
           $userChrome = Get-Content "$($prof.FullName)\chrome\userChrome.css" -Raw
           if ($userChrome -notmatch '@import url\("fennec/fennec.css"\)') { Write-Error "FAIL: fennec.css import missing"; exit 1 }
           $userJs = Get-Content "$($prof.FullName)\user.js" -Raw
           if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: stylesheets pref missing"; exit 1 }
+          if ($userJs -notmatch "fennec.autohide") { Write-Error "FAIL: fennec.autohide pref missing"; exit 1 }
 
           Write-Host "--- chrome/ contents ---"
           Get-ChildItem "$($prof.FullName)\chrome" -Recurse

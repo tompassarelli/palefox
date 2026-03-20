@@ -183,7 +183,7 @@ echo "Installing fennec..."
 mkdir -p "$chrome_dir/fennec" "$chrome_dir/user"
 
 # Core files — always overwrite
-for file in fennec/fennec.css fennec/autohide.css; do
+for file in fennec/fennec.css; do
     if [ -f "$extracted/$file" ]; then
         cp "$extracted/$file" "$chrome_dir/$file"
     fi
@@ -223,5 +223,7 @@ set_pref() {
 set_pref "toolkit.legacyUserProfileCustomizations.stylesheets" "true"
 set_pref "sidebar.verticalTabs" "false"
 set_pref "sidebar.revamp" "false"
+set_pref "sidebar.position_start" "true"
+set_pref "fennec.autohide" "false"
 
 echo "Done. Restart $BROWSER_NAME for changes to take effect."
