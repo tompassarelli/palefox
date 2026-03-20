@@ -1,6 +1,11 @@
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/7ebd8f20-2846-4e0e-9d9f-de563a589805" alt="Fennec logo" width="96" />
+
 # Fennec
 
-Fennec is a minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringing a Zen-style sidebar workflow to stock Firefox or LibreWolf — no fork, no build.
+Minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringing a Zen-style sidebar workflow to stock Firefox or LibreWolf — no fork, no build.
+
+</div>
 
 | Sidebar Open | Zen Mode |
 |:---:|:---:|
@@ -8,7 +13,7 @@ Fennec is a minimal, customizable Firefox/LibreWolf setup built with userChrome.
 
 ## Features
 
-🧩 **Enhanced Sidebery Integration** - Urlbar in the sidebar, expands on focus, tracks sidebar width
+🧩 **Enhanced Sidebery Integration** - Urlbar in the sidebar, expands on focus
 
 🧘 **Zen Mode** - Toggle the sidebar to hide the UI and maximize focus
 
