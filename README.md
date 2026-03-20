@@ -137,7 +137,7 @@ Sidebar must be enabled (not toggled off). When enabled, the drawer auto-collaps
 
 To enable:
 1. Go to `about:config` in the address bar
-2. Set `fennec.autohide` to `true`
+2. Set `fennec.sidebar.autohide` to `true`
 3. Restart Firefox
 
 ### Floating Urlbar (off by default)
