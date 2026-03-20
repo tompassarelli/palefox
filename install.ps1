@@ -218,7 +218,7 @@ try {
     Set-BrowserPref "sidebar.verticalTabs" "false"
     Set-BrowserPref "sidebar.revamp" "false"
     Set-BrowserPref "sidebar.position_start" "true"
-    Set-BrowserPref "fennec.sidebar.autohide" "false"
+    Set-BrowserPref "fennec.drawer.autohide" "false"
     Set-BrowserPref "fennec.urlbar.float" "false"
 
     Write-Host "Done. Restart $browserName for changes to take effect."

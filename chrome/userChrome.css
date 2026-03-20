@@ -1,7 +1,7 @@
 /* fennec — entry point
  *
  * Toggle features in about:config (type "fennec." to see all options):
- *   fennec.sidebar.autohide      — auto-collapse sidebar when mouse leaves
+ *   fennec.drawer.autohide      — auto-collapse sidebar when mouse leaves
  *   fennec.urlbar.float  — float urlbar centered on viewport when focused
  *
  * Put your personal CSS in user/user.css — it won't be

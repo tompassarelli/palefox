@@ -11,7 +11,7 @@ let
     [ ''/* fennec — entry point (managed by Home Manager)''
       '' *''
       '' * Toggle features in about:config (type "fennec." to see all options):''
-      '' *   fennec.sidebar.autohide — auto-collapse sidebar when mouse leaves''
+      '' *   fennec.drawer.autohide — auto-collapse sidebar when mouse leaves''
       '' *''
       '' * To customize: set programs.fennec.extraConfig in your nix config,''
       '' * or edit user/user.css directly.''
@@ -41,7 +41,7 @@ in
     autohide = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Auto-collapse sidebar when mouse leaves (sets fennec.sidebar.autohide in about:config).";
+      description = "Auto-collapse sidebar when mouse leaves (sets fennec.drawer.autohide in about:config).";
     };
 
     floatingUrlbar = lib.mkOption {
@@ -78,7 +78,7 @@ in
           "sidebar.verticalTabs" = false;
           "sidebar.revamp" = false;
           "sidebar.position_start" = true;
-          "fennec.sidebar.autohide" = cfg.autohide;
+          "fennec.drawer.autohide" = cfg.autohide;
           "fennec.urlbar.float" = cfg.floatingUrlbar;
         };
         extensions = lib.mkIf cfg.sideberry {

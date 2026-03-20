@@ -92,7 +92,7 @@ gap: space between components, like padding/margin
 - sidebar must be enabled (not toggled off)
 - auto-collapses the drawer when the mouse leaves
 - hovering the left edge reveals it again
-- enable: set fennec.sidebar.autohide to true in about:config and restart Firefox
+- enable: set fennec.drawer.autohide to true in about:config and restart Firefox
 
 /* #endregion fennec-ui */
 
@@ -199,7 +199,7 @@ gap: space between components, like padding/margin
 /* #endregion css variables and theme handling */
 
 
-/* #region dynamic sidebar toggle
+/* #region dynamic drawer toggle
  *
  * note that #region autohide has hardcoded mirror
  * transitions that correspond to the properties below
@@ -246,21 +246,21 @@ body:has(#sidebar-box[hidden]) #urlbar {
   transition: opacity var(--fen-ts-2) ease !important;
 }
 
-/* #endregion dynamic sidebar toggle */
+/* #endregion dynamic drawer toggle */
 
 
-/* #region autohide (about:config: fennec.sidebar.autohide)
+/* #region autohide (about:config: fennec.drawer.autohide)
  *
  * When active, the drawer auto-collapses when the mouse leaves and
  * reappears on hover over the left edge of the window.
  * Sidebar must be enabled (not toggled off).
  *
- * mirrors the transitions in #region dynamic sidebar toggle, but
+ * mirrors the transitions in #region dynamic drawer toggle, but
  * collapses to 20px (detection zone) instead of 0px, using negative
  * margin to hide the overflow.
  */
 
-@media -moz-pref("fennec.sidebar.autohide") {
+@media -moz-pref("fennec.drawer.autohide") {
   body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     #sidebar-box:not([hidden]) {
     display: flex !important;
