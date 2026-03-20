@@ -8,15 +8,15 @@ Fennec is a minimal Firefox/Librewolf setup built with userChrome.css, designed 
 
 ## Features
 
-🔗 **Enhanced Sideberry Integration** - Urlbar inside the sidebar-box, tracks sidebar width, and expands when focused
+🔗 **Enhanced Sideberry Integration** - Urlbar inside the sidebar, tracks width, and expands when focused
 
 🧘 **Zen Mode** - Toggling the sidebar hides the UI, maximizing screen space and aiding focus when tiled or maximized
 
 ✨ **Minimal Chrome** - Only essential objects exposed, coherent with a keyboard driven UX
 
-🛠️ **Community Minded** - Clean code and detailed docs to support customization and contribution
+🤝 **Community Minded** - Clean code and detailed docs to support customization and contribution
 
-🎨 **Theme Support** - System themes (light-dark) supported. User created Firefox themes are also supported.
+🎨 **Theme Support** - System themes (light/dark) and user-created Firefox themes supported
 
 ## Installation
 
@@ -66,7 +66,7 @@ Fennec updates `chrome/fennec/`. Your tweaks live in `chrome/user/`. `userChrome
 
 **Enable required Firefox settings:**
 
-> Note: only `toolkit.legacyUserProfileCustomizations.stylesheets` requires `about:config`. The rest are defaults historically and can also be changed in Settings.
+> Note: only `toolkit.legacyUserProfileCustomizations.stylesheets` requires `about:config`; the rest can be changed in Settings.
 
 1. Go to `about:config` in the address bar
 2. Set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
@@ -84,7 +84,7 @@ Fennec updates `chrome/fennec/`. Your tweaks live in `chrome/user/`. `userChrome
 2. Copy `userChrome.css`, the `fennec/` folder, and the `user/` folder from this repo's `chrome/` directory into your profile's `chrome/` directory
 3. Put your personal customizations in `user/user.css` — it won't be overwritten when fennec is updated
 
-> **Upgrading from an older version?** If you previously had a monolithic `userChrome.css` with all CSS inline, the install script will detect this, back up your old file to `userChrome.css.legacy`, and install the new modular entry point. Move any personal tweaks from the legacy file into `user/user.css`.
+> **Upgrading from an older version?** If you had a monolithic `userChrome.css`, the install script will back it up to `userChrome.css.legacy` and install the new modular entry point. Move personal tweaks into `user/user.css`.
 
 ### 3. Restart your browser
    - Note: if the sidebar is invisible, you might have it toggled off. Try `Ctrl+H` to toggle history, then activate the Sideberry tabs menu from there by clicking on the extension icon.
@@ -142,9 +142,5 @@ If something isn't working, check [open issues](https://github.com/tompassarelli
 ## Security Considerations
 
 - The install guide directs users to download Firefox extensions. Firefox extensions can introduce security vulnerabilities and/or take direct hostile actions against users.
-- Zen Mode hides the UI which obviously suppresses security signals like padlock warnings. In appreciation of this concern, Fennec will still attempt to surface a custom HTTP Not Secure security warning prepended to page content as a header alert. Not a solution against phishing and other attacks/vulnerabilities, only toggle the UI after the page has been verified as secure and trustworthy.
-- **Use at your own risk** - The author is not liable for any security issues, data breaches, or other damages of usage of this repository or mentioned extensions.
-- **You are responsible** for verifying the security of websites, code, and extensions used
-- Always keep Firefox updated
-
-**By using this theme and mentioned Firefox extensions, you acknowledge these risks and agree that the author bears no responsibility for any consequences.**
+- Zen Mode hides UI elements including security signals like padlock warnings. Fennec surfaces a custom HTTP-not-secure warning, but this is not a substitute for native browser indicators — verify pages before toggling the UI.
+- **Use at your own risk** — the author is not liable for any security issues, data breaches, or other damages. You are responsible for verifying the security of websites, code, and extensions used.
