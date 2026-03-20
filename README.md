@@ -152,6 +152,10 @@ Your tweaks live in `chrome/user/user.css` — this file is never overwritten by
 }
 ```
 
+## Contributing
+
+Contributions welcome — especially bug fixes, docs improvements, and focused CSS refinements. For larger changes, please open an issue first. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Security
 
 - Extensions are privileged software — install only ones you trust
