@@ -549,6 +549,49 @@ body:has(#browser > #sidebar-box[style*="; width: 6"]) #urlbar-container { width
   width: var(--fen-max-width) !important;
 }
 
+/* #region floating urlbar (about:config: fennec.urlbar.float)
+ *
+ * When active, the urlbar detaches from the sidebar and floats
+ * centered on the viewport when focused. Provides a full search
+ * experience without being constrained by sidebar width.
+ */
+
+@media -moz-pref("fennec.urlbar.float") {
+  #urlbar:is([focused][breakout-extend]) {
+    position: fixed !important;
+    left: calc(50% - min(80vw, 720px) / 2) !important;
+    top: 25% !important;
+    width: 80vw !important;
+    max-width: 720px !important;
+    z-index: 10 !important;
+    transition: none !important;
+  }
+
+  #urlbar:is([focused][breakout-extend]) #urlbar-input {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+  }
+
+  #urlbar:is([focused][breakout-extend]) .urlbar-background {
+    border-radius: 12px !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.075), 0 24px 48px rgba(0, 0, 0, 0.175) !important;
+  }
+
+  /* placeholder text in sidebar while urlbar is floating */
+  body:has(#urlbar:is([focused][breakout-extend])) #urlbar-container::after {
+    content: "Searching\2026";
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    height: var(--fen-urlbar-bg-height);
+    margin-top: -2px;
+    opacity: 0.4;
+    font-size: 14px;
+  }
+}
+
+/* #endregion floating urlbar */
+
 /* remove google icon crowding search bar */
 #urlbar-searchmode-switcher {
   display: none;

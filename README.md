@@ -140,6 +140,15 @@ To enable:
 2. Set `fennec.autohide` to `true`
 3. Restart Firefox
 
+### Floating Urlbar (off by default)
+
+When enabled, the urlbar detaches from the sidebar and floats centered on the viewport when focused — like a spotlight/command palette. A "Searching..." placeholder stays in the sidebar.
+
+To enable:
+1. Go to `about:config` in the address bar
+2. Set `fennec.urlbar.float` to `true`
+3. Restart Firefox
+
 ### Accessibility
 
 Fennec respects your OS "reduce motion" setting — all transitions become instant. On Linux you can also set `ui.prefersReducedMotion` to `1` in `about:config`.

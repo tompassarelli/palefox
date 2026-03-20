@@ -219,6 +219,7 @@ try {
     Set-BrowserPref "sidebar.revamp" "false"
     Set-BrowserPref "sidebar.position_start" "true"
     Set-BrowserPref "fennec.autohide" "false"
+    Set-BrowserPref "fennec.urlbar.float" "false"
 
     Write-Host "Done. Restart $browserName for changes to take effect."
 } finally {

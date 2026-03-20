@@ -44,6 +44,12 @@ in
       description = "Auto-collapse sidebar when mouse leaves (sets fennec.autohide in about:config).";
     };
 
+    floatingUrlbar = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Float urlbar centered on viewport when focused (sets fennec.urlbar.float in about:config).";
+    };
+
     sideberry = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -73,6 +79,7 @@ in
           "sidebar.revamp" = false;
           "sidebar.position_start" = true;
           "fennec.autohide" = cfg.autohide;
+          "fennec.urlbar.float" = cfg.floatingUrlbar;
         };
         extensions = lib.mkIf cfg.sideberry {
           packages = [

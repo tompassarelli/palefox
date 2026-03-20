@@ -225,5 +225,6 @@ set_pref "sidebar.verticalTabs" "false"
 set_pref "sidebar.revamp" "false"
 set_pref "sidebar.position_start" "true"
 set_pref "fennec.autohide" "false"
+set_pref "fennec.urlbar.float" "false"
 
 echo "Done. Restart $BROWSER_NAME for changes to take effect."
