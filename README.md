@@ -70,6 +70,13 @@ See the [full installation guide](docs/install.md) for manual install, flags, an
 
 Actively maintained with recent releases and ongoing improvements. If something isn't working, check [open issues](https://github.com/tompassarelli/fennec/issues) or file a new one.
 
+## Acknowledgments
+
+Fennec draws inspiration from:
+
+- [Zen Browser](https://zen-browser.app/) — sidebar design
+- [parfait](https://github.com/reizumii/parfait) — findbar and accessibility
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=tompassarelli%2Ffennec&type=date&legend=top-left">
