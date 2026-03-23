@@ -290,17 +290,22 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: width var(--fen-ts-3) ease, opacity var(--fen-ts-2) ease !important;
   }
 
-  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     toolbaritem#urlbar-container {
     width: 0px !important;
     max-width: 0px !important;
     pointer-events: none;
   }
 
-  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     #urlbar {
     opacity: 0 !important;
     transition: opacity var(--fen-ts-2) ease !important;
+  }
+
+  /* skip the opacity transition when urlbar gains focus during autohide */
+  body:has(#urlbar:is([focused][breakout-extend])) #urlbar {
+    transition: none !important;
   }
 
   body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
@@ -313,6 +318,8 @@ body:has(#sidebar-box[hidden]) #urlbar {
     display: none !important;
   }
 }
+
+
 
 /* #endregion autohide */
 
@@ -524,7 +531,6 @@ body:has(#browser > #sidebar-box[style*="; width: 3"]) #urlbar-container { width
  * centered on the viewport when focused. Provides a full search
  * experience without being constrained by sidebar width.
  */
-
 @media -moz-pref("fennec.urlbar.float") {
   #urlbar:is([focused][breakout-extend]) {
     position: fixed !important;
