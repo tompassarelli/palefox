@@ -7,9 +7,10 @@ Minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringin
 
 </div>
 
-| Sidebar Open | Zen Mode |
-|:---:|:---:|
-| ![Fennec with sidebar](https://github.com/user-attachments/assets/9fc9691d-8e5e-4864-bdd8-0aa696955d86) | ![Fennec without sidebar](https://github.com/user-attachments/assets/7db86916-8c1c-4feb-91de-0f62d5fab209) |
+<table><tr>
+<td align="center"><strong>Default</strong><br><img src="https://github.com/user-attachments/assets/9fc9691d-8e5e-4864-bdd8-0aa696955d86" alt="Fennec default view" /></td>
+<td align="center"><strong>Zen Mode</strong><br><img src="https://github.com/user-attachments/assets/7db86916-8c1c-4feb-91de-0f62d5fab209" alt="Fennec zen mode" /></td>
+</tr></table>
 
 ## Features
 
