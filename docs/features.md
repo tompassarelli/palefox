@@ -25,5 +25,6 @@ Fennec respects your OS "reduce motion" setting — all transitions become insta
 ## Recommended Extensions
 
 - **[Vimium](https://addons.mozilla.org/en-US/firefox/addon/vimium-ff/)** - Keyboard-driven navigation that complements the minimal, distraction-free interface
+- **[New Tab Override](https://addons.mozilla.org/en-US/firefox/addon/new-tab-override/)** - Replace the default new tab page with a custom URL. Point it at a localhost service serving a barebones HTML page (without autofocus on the URL bar) so Vimium keybindings work immediately on new tabs
 
 To get notified about new Fennec releases, [watch the GitHub repository](https://github.com/tompassarelli/fennec) and select "Releases only" under custom notifications.
