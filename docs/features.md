@@ -24,7 +24,7 @@ Fennec ships an optional `sidebery.css` that styles Sidebery itself to feel clos
 
 To enable:
 1. Open Sidebery's settings (click the extension icon, then the gear)
-2. Go to **Settings → Styles → Editor**
+2. Go to **Settings → Style editor**
 3. Paste the contents of [`sidebery.css`](https://raw.githubusercontent.com/tompassarelli/fennec/main/sidebery.css) into the editor and save
 
 This lives outside the userChrome install because Sidebery manages its own styles through its own UI.
