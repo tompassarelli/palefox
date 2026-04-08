@@ -1,0 +1,23 @@
+.PinnedTabsBar {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.PinnedTabsBar .tab-wrapper {
+  width: calc(25% - 2px);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+div.tab-wrapper .Tab {
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  min-width: 100%;
+}
+
+
+div.tab-wrapper .Tab .fav .fav-icon {
+  transform: scale(1.3);
+}

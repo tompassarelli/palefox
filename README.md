@@ -14,7 +14,7 @@ Minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringin
 
 ## Features
 
-🧩 **Enhanced Sidebery Integration** - Urlbar in the sidebar, expands on focus
+🧩 **Enhanced Sidebery Integration** - Urlbar in the sidebar, expands on focus; optional `sidebery.css` for native-style larger tab icons
 
 🧘 **Zen Mode** - Toggle the sidebar to hide the UI and maximize focus
 

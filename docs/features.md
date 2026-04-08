@@ -18,6 +18,17 @@ To enable:
 2. Set `fennec.urlbar.float` to `true`
 3. Restart Firefox
 
+## Sidebery Custom Styles (optional)
+
+Fennec ships an optional `sidebery.css` that styles Sidebery itself to feel closer to native Firefox: larger favicons for pinned tabs, a 4-column pinned grid, and subtle translucent tab backgrounds.
+
+To enable:
+1. Open Sidebery's settings (click the extension icon, then the gear)
+2. Go to **Settings → Styles → Editor**
+3. Paste the contents of [`sidebery.css`](https://raw.githubusercontent.com/tompassarelli/fennec/main/sidebery.css) into the editor and save
+
+This lives outside the userChrome install because Sidebery manages its own styles through its own UI.
+
 ## Accessibility
 
 Fennec respects your OS "reduce motion" setting — all transitions become instant. On Linux you can also set `ui.prefersReducedMotion` to `1` in `about:config`.
