@@ -15,7 +15,7 @@ to understand fennec, we fundamentally need to grok firefox chrome
   - #nav-bar (navigator-toolbox child) contains
     - left nav buttons (back, forward, refresh)
       - fennec hides some buttons, like home
-    - customizeable spring1 (spacer)
+    - customizable spring1 (spacer)
       - fennec hides
     - urlbar
       - (fennec moves out of nav-bar, placing it above tabs)
@@ -74,7 +74,7 @@ gap: space between components, like padding/margin
   - whenever the urlbar expands, we extend the width to --fen-max-width
 
 [sidebar]
-- web extensions like sideberry, bookmarks, history
+- web extensions like Sidebery, bookmarks, history
 
 === Code Organization ===
 - code tends to be ordered with respect to the DOM top-bottom, left-right 
@@ -117,7 +117,7 @@ gap: space between components, like padding/margin
   /* header buttons */
   /* - nav btns need extra margin because settings btn is not in container */
   /* - each nav-btn is typically btn-size, then 2px of padding */
-  /* - but panelui padding/margin will not impat, not in container */
+  /* - but panelui padding/margin will not impact, not in container */
   /* - so we mock a btn, and use panelui-gap for whatever padding is */
   --fen-btn-size: 32px;
   --fen-panelui-gap: 4px;
@@ -274,7 +274,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
  * [multiselected] detection: on Linux, :hover is cleared by a
  * spurious mouseleave at drag-start (Mozilla bug 1818517). Firefox
  * sets [multiselected] on chrome-side tabbrowser-tab elements during
- * tab drags (including Sideberry drags), so we gate on that too.
+ * tab drags (including Sidebery drags), so we gate on that too.
  */
 
 @media -moz-pref("fennec.drawer.autohide") {
@@ -385,7 +385,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
   display: none;
 }
 
-/* Firefox's native tabs - always disable, depend on sideberry for tabs */
+/* Firefox's native tabs - always disable, depend on Sidebery for tabs */
 #TabsToolbar {
   display: none;
 }
@@ -514,7 +514,7 @@ panel#appMenu-popup {
 
 /* #region urlbar */
 
-/* url bar above the sideberry tabs */
+/* url bar above the Sidebery tabs */
 #urlbar-container {
   position: absolute;
   width: 300px !important; /* fallback */
@@ -741,13 +741,13 @@ body:has(#identity-box[pageproxystate="invalid"]) #urlbar-input {
   margin-right: 6px !important;
 }
 
-/* align url icon position with sideberry */
+/* align url icon position with Sidebery */
 #identity-icon-box {
   padding-left: 5px !important;
   padding-right: 5px !important;
 }
 
-/* a hack to try to mitigat the werid sizing on this for better icon alignment*/
+/* a hack to try to mitigate the weird sizing on this for better icon alignment*/
 /* #identity-icon-box > image#identity-icon {
   transform: scaleX(1.05) !important;
 }*/
@@ -772,13 +772,13 @@ FIREFOX SECURITY STATES REFERENCE
 
 Reasonably safe to customize:
 - .chromeUI          - Firefox internal pages
-- .extensionPage     - Extension pages  
+- .extensionPage     - Extension pages
 - .verifiedDomain    - HTTPS with valid cert
 - .verifiedIdentity  - EV certificates
 
 Preserve these (security warnings):
-- .notSecure         - HTTP or broken HTTPS
-- .insecureLoginForms - HTTPS page with HTTP login
+- .notSecure           - HTTP or broken HTTPS
+- .insecureLoginForms  - HTTPS page with HTTP login
 - .mixedContentBlocked - HTTPS with blocked mixed content
 - .mixedActiveContent  - HTTPS with active mixed content
 */
@@ -878,7 +878,7 @@ body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
   transition: width var(--fen-ts-3) ease, max-width var(--fen-ts-3) ease, margin-right var(--fen-ts-3) ease, padding var(--fen-ts-3) step-start, opacity var(--fen-ts-3) ease var(--fen-ts-2) !important;
 }
 
-/* Remove the "Sideberry", "History", etc. sidepanel header  */
+/* Remove the "Sidebery", "History", etc. sidepanel header  */
 #sidebar-header {
   display: none;
 }
@@ -943,7 +943,7 @@ box#sidebar-main {
   border: 0px !important;
   /* for theme support... */
   /* make top y% see-through, rest uses --fen-color */
-  /* allows the splitter to be useable near nav buttons, 
+  /* allows the splitter to be usable near nav buttons,
      but stops it from clipping some backgrounds  */
   background-color: transparent !important;
   background-image: linear-gradient(
@@ -960,9 +960,9 @@ box#sidebar-main {
 
 /* #endregion sidebar-border */ 
 
-/* #region sideberry */
-/* done in sideberry css */
-/* #endregion sideberry */
+/* #region Sidebery */
+/* done in Sidebery css */
+/* #endregion Sidebery */
 
 
 /* #endregion sidebar */
