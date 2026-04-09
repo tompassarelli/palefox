@@ -314,7 +314,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
   }
 
   /* collapsed state */
-  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #sidebar-box:not([hidden]) {
     display: flex !important;
     width: 8px !important;
@@ -327,7 +327,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: width var(--fen-ts-3) ease var(--fen-autohide-collapse-delay), max-width var(--fen-ts-3) ease var(--fen-autohide-collapse-delay), padding var(--fen-ts-3) step-end var(--fen-autohide-collapse-delay), opacity var(--fen-ts-2) ease var(--fen-autohide-collapse-delay) !important;
   }
 
-  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #navigator-toolbox {
     width: 0px !important;
     overflow: hidden !important;
@@ -336,14 +336,14 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: width var(--fen-ts-3) ease, opacity var(--fen-ts-2) ease !important;
   }
 
-  body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:hover:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     toolbaritem#urlbar-container {
     width: 0px !important;
     max-width: 0px !important;
     pointer-events: none;
   }
 
-  body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:hover:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     #urlbar {
     opacity: 0 !important;
     transition: opacity var(--fen-ts-2) ease !important;
@@ -354,7 +354,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: none !important;
   }
 
-  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #identity-icon-box {
     background-color: transparent !important;
   }
