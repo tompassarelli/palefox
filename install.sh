@@ -227,4 +227,9 @@ set_pref "sidebar.position_start" "true"
 set_pref "fennec.drawer.autohide" "false"
 set_pref "fennec.urlbar.float" "false"
 
+# GTK may send spurious leave events that break autohide
+if [ "$(uname -s)" = "Linux" ]; then
+    set_pref "widget.gtk.ignore-bogus-leave-notify" 1
+fi
+
 echo "Done. Restart $BROWSER_NAME for changes to take effect."
