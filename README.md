@@ -3,7 +3,7 @@
 
 # Palefox
 
-Minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringing a Zen Browser sidebar workflow to stock Firefox or LibreWolf — no fork, no build.
+Minimal, customizable Firefox/LibreWolf setup built, bringing a Zen Browser sidebar workflow to stock Firefox or LibreWolf — no fork, no build.
 
 </div>
 
@@ -28,7 +28,7 @@ Minimal, customizable Firefox/LibreWolf setup built with userChrome.css, bringin
 
 Palefox is for people who want the Zen-style sidebar workflow while staying on stock Firefox or LibreWolf.
 
-- No browser fork — just CSS
+- No browser fork — CSS + JS via [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig)
 - Update-safe customizations — your tweaks survive Palefox updates
 - Works on Firefox and LibreWolf
 

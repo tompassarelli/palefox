@@ -1,5 +1,5 @@
 {
-  description = "Palefox — minimal Firefox userChrome.css setup";
+  description = "Palefox — minimal Firefox userChrome setup";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
