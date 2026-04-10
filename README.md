@@ -75,4 +75,6 @@ Actively maintained with recent releases and ongoing improvements. If something 
 Fennec draws inspiration from:
 
 - [Zen Browser](https://zen-browser.app/) — sidebar design
+- [GWfox](https://github.com/akkva/gwfox) — CSS theming techniques
+- [FF-ULTIMA](https://github.com/soulhotel/FF-ULTIMA) — feature and layout ideas
 - [parfait](https://github.com/reizumii/parfait) — findbar and accessibility
