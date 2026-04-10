@@ -399,9 +399,9 @@ body:has(#sidebar-box[hidden]) #urlbar {
     }
   }
 
-  /* prevent collapse while a toolbar menu is open.
-     repeats the collapse selector chain + adds :has(menu open) for higher specificity. */
-  body:has(toolbarbutton[open="true"]):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  /* prevent collapse while any menu or context menu is open.
+     repeats the collapse selector chain + adds :has(popup/menu open) for higher specificity. */
+  body:has(:is(toolbarbutton[open="true"], menupopup:hover)):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #sidebar-box:not([hidden]) {
     width: var(--pfx-autohide-width) !important;
     min-width: 0 !important;
@@ -413,7 +413,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: none !important;
   }
 
-  body:has(toolbarbutton[open="true"]):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  body:has(:is(toolbarbutton[open="true"], menupopup:hover)):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #navigator-toolbox {
     width: var(--pfx-autohide-width) !important;
     overflow: visible !important;
@@ -422,20 +422,20 @@ body:has(#sidebar-box[hidden]) #urlbar {
     transition: none !important;
   }
 
-  body:has(toolbarbutton[open="true"]):not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:has(:is(toolbarbutton[open="true"], menupopup:hover)):not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     toolbaritem#urlbar-container {
     width: calc(var(--pfx-autohide-width) - 9px) !important;
     max-width: calc(var(--pfx-autohide-width) - 9px) !important;
     pointer-events: auto;
   }
 
-  body:has(toolbarbutton[open="true"]):not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
+  body:has(:is(toolbarbutton[open="true"], menupopup:hover)):not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover))
     #urlbar {
     opacity: 1 !important;
     transition: none !important;
   }
 
-  body:has(toolbarbutton[open="true"]):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
+  body:has(:is(toolbarbutton[open="true"], menupopup:hover)):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected]))
     #identity-icon-box {
     background-color: initial !important;
   }
