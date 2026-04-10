@@ -180,6 +180,17 @@ try {
         Copy-Item -Path (Join-Path $utilsSource "*") -Destination $utilsDir -Force
     }
 
+    # Default scripts — add if missing
+    $jsSource = Join-Path $chromeSource "JS"
+    if (Test-Path $jsSource) {
+        foreach ($file in (Get-ChildItem -Path $jsSource -File)) {
+            $dest = Join-Path $jsDir $file.Name
+            if (-not (Test-Path $dest)) {
+                Copy-Item -Path $file.FullName -Destination $dest
+            }
+        }
+    }
+
     # User files — preserve if present, create if missing
     foreach ($file in @("userChrome.css", "user.css")) {
         $source = Join-Path $chromeSource $file

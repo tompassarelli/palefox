@@ -196,6 +196,17 @@ if [ -d "$extracted/utils" ]; then
     cp "$extracted/utils/"* "$chrome_dir/utils/"
 fi
 
+# Default scripts — add if missing
+if [ -d "$extracted/JS" ]; then
+    for file in "$extracted/JS/"*; do
+        [ -f "$file" ] || continue
+        dest="$chrome_dir/JS/$(basename "$file")"
+        if [ ! -f "$dest" ]; then
+            cp "$file" "$dest"
+        fi
+    done
+fi
+
 # User files — preserve if present, create if missing
 for file in userChrome.css user.css; do
     if [ -f "$extracted/$file" ]; then
