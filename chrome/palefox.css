@@ -187,9 +187,9 @@ gap: space between components, like padding/margin
   --pfx-autohide-width: 240px;
 
   /* width of the invisible hover strip that triggers sidebar expand
-     default: 8px — override via about:config boolean ladder:
-     pfx.drawer.autohide.expandTriggerWidth.{2px,4px,6px,10px} */
-  --pfx-autohide-expand-trigger-width: 8px;
+     default: 12px — override via about:config boolean ladder:
+     pfx.drawer.autohide.expandTriggerWidth.{2px,4px,6px,8px,10px,12px} */
+  --pfx-autohide-expand-trigger-width: 12px;
 }
 
 /* if a theme is present (like Firefox Color), respect it fully */
@@ -313,8 +313,14 @@ body:has(#sidebar-box[hidden]) #urlbar {
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.6px") {
   :root { --pfx-autohide-expand-trigger-width: 6px; }
 }
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.8px") {
+  :root { --pfx-autohide-expand-trigger-width: 8px; }
+}
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.10px") {
   :root { --pfx-autohide-expand-trigger-width: 10px; }
+}
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.12px") {
+  :root { --pfx-autohide-expand-trigger-width: 12px; }
 }
 
 @media -moz-pref("pfx.drawer.autohide") {
