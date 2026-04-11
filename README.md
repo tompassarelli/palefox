@@ -40,12 +40,12 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/), t
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.sh | bash
 ```
 
 **Windows** (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.ps1 | iex
 ```
 
 **LibreWolf:** add `--librewolf` to either command.
