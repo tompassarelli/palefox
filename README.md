@@ -12,7 +12,7 @@ Minimal, customizable Firefox/LibreWolf chrome — keyboard-first, no fork, no b
 >
 > **For the stable, CSS-only theme, use the [`stable-pure-css`](https://github.com/tompassarelli/palefox/tree/stable-pure-css) branch.**
 
-## Quick Install (stable)
+## Quick Install (unstable / main)
 
 > Please see [security considerations](#security) before installing
 
@@ -20,12 +20,12 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/), t
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh | bash
 ```
 
 **Windows** (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.ps1 | iex
+irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | iex
 ```
 
 **LibreWolf:** add `--librewolf` to either command.
