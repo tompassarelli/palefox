@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "tompassarelli/palefox"
-$latestUrl = "https://api.github.com/repos/$repo/releases/latest"
+$branch = "stable-pure-css"
 
 $force = $args -contains "--force" -or $args -contains "-Force"
 $noBackup = $args -contains "--no-backup"
@@ -90,24 +90,10 @@ try {
             exit 1
         }
     } else {
-        # Resolve latest release tag
+        # Download stable branch
         New-Item -ItemType Directory -Path $tmpDir | Out-Null
-        Write-Host "Fetching latest release..."
-        try {
-            $release = Invoke-RestMethod -Uri $latestUrl
-            $tag = $release.tag_name
-        } catch {
-            Write-Error "Failed to fetch latest release. Check your internet connection."
-            exit 1
-        }
-
-        if (-not $tag) {
-            Write-Error "Could not determine latest release tag."
-            exit 1
-        }
-
-        Write-Host "Downloading Palefox $tag..."
-        $archiveUrl = "https://github.com/$repo/archive/refs/tags/$tag.zip"
+        Write-Host "Downloading Palefox ($branch)..."
+        $archiveUrl = "https://github.com/$repo/archive/refs/heads/$branch.zip"
         $zipPath = Join-Path $tmpDir "palefox.zip"
         try {
             Invoke-RestMethod -Uri $archiveUrl -OutFile $zipPath

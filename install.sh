@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="tompassarelli/palefox"
-LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
+BRANCH="stable-pure-css"
 
 FORCE=false
 NO_BACKUP=false
@@ -131,25 +131,15 @@ if [ -n "${PALEFOX_LOCAL:-}" ]; then
         exit 1
     fi
 else
-    # Resolve latest release tag
+    # Download stable branch
     tmp_dir="$(mktemp -d)"
-    echo "Fetching latest release..."
-    tag="$(curl -fsSL "$LATEST_URL" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')" \
-        || { echo "Error: Failed to fetch latest release. Check your internet connection."; exit 1; }
-
-    if [ -z "$tag" ]; then
-        echo "Error: Could not determine latest release tag."
-        exit 1
-    fi
-
-    echo "Downloading Palefox $tag..."
-    archive_url="https://github.com/$REPO/archive/refs/tags/$tag.tar.gz"
+    echo "Downloading Palefox ($BRANCH)..."
+    archive_url="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
     if ! curl -fsSL "$archive_url" | tar -xz -C "$tmp_dir"; then
-        echo "Error: Failed to download release archive. Check your internet connection."
+        echo "Error: Failed to download archive. Check your internet connection."
         exit 1
     fi
 
-    # The archive extracts to palefox-<tag> (with leading 'v' stripped by GitHub)
     extracted="$(ls -d "$tmp_dir"/palefox-*/chrome 2>/dev/null | head -1)"
     if [ -z "$extracted" ] || [ ! -d "$extracted" ]; then
         echo "Error: chrome folder not found in downloaded archive."

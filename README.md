@@ -3,36 +3,16 @@
 
 # Palefox
 
-Minimal, customizable Firefox/LibreWolf setup built, bringing a Zen Browser sidebar workflow to stock Firefox or LibreWolf — no fork, no build.
+Minimal, customizable Firefox/LibreWolf chrome — keyboard-first, no fork, no build.
 
 </div>
 
-<p align="center"><strong>Default</strong></p>
-<p align="center"><img src="https://github.com/user-attachments/assets/9fc9691d-8e5e-4864-bdd8-0aa696955d86" alt="Palefox default view" /></p>
-<p align="center"><strong>Zen Mode</strong></p>
-<p align="center"><img src="https://github.com/user-attachments/assets/7db86916-8c1c-4feb-91de-0f62d5fab209" alt="Palefox zen mode" /></p>
+> **This branch (`main`) is unstable and under active development.**
+> Palefox is evolving toward heavy use of JavaScript (via [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig)) for features that CSS alone can't handle cleanly — like proper autohide state management and a keyboard-driven command palette.
+>
+> **For the stable, CSS-only theme, use the [`stable-pure-css`](https://github.com/tompassarelli/palefox/tree/stable-pure-css) branch.**
 
-## Features
-
-🧩 **Enhanced Sidebery Integration** - Urlbar in the sidebar, expands on focus; optional `sidebery.css` for native-style larger tab icons
-
-🧘 **Zen Mode** - Toggle the sidebar to hide the UI and maximize focus
-
-✨ **Minimal Chrome** - Only the essentials, coherent with a keyboard-driven UX
-
-🤝 **Built to Customize** - Clean code and detailed docs to support customization and contribution
-
-🎨 **Theme Support** - System themes (light/dark) and user-created Firefox themes supported
-
-## Why Palefox?
-
-Palefox is for people who want the Zen-style sidebar workflow while staying on stock Firefox or LibreWolf.
-
-- No browser fork — CSS + JS via [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig)
-- Update-safe customizations — your tweaks survive Palefox updates
-- Works on Firefox and LibreWolf
-
-## Quick Install
+## Quick Install (stable)
 
 > Please see [security considerations](#security) before installing
 
@@ -40,17 +20,33 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/), t
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.sh | bash
 ```
 
 **Windows** (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/tompassarelli/palefox/stable-pure-css/install.ps1 | iex
 ```
 
 **LibreWolf:** add `--librewolf` to either command.
 
 See the [full installation guide](docs/install.md) for manual install, flags, and details.
+
+## Features (stable-pure-css)
+
+- **Enhanced Sidebery Integration** — urlbar in the sidebar, expands on focus
+- **Zen Mode** — toggle sidebar to hide UI and maximize focus
+- **Minimal Chrome** — keyboard-driven, only the essentials
+- **Theme Support** — system themes (light/dark) and Firefox Color themes
+
+## What's happening on main
+
+The CSS-only approach to features like autohide pushed the stylesheet into increasingly complicated selector chains that are fragile and hard to maintain. JS support opens the door to implementing these behaviors properly — and to ideas like a keyboard-driven centered command palette rather than the current mouse-first sidebar UX.
+
+This branch includes:
+- Vendored [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) loader (v0.10.14)
+- `chrome/JS/` directory for userChrome scripts
+- Updated install scripts and Nix module with `jsLoader` option
 
 ## Docs
 
@@ -65,11 +61,9 @@ See the [full installation guide](docs/install.md) for manual install, flags, an
 - Extensions are privileged software — install only ones you trust
 - Zen Mode can hide browser security indicators; verify pages before browsing with the UI hidden
 - Review install scripts before piping them into your shell
+- The JS loader on `main` runs chrome-privileged code — review scripts in `chrome/JS/` before use
 - Palefox is a UI customization, not a security tool — use it with normal caution
 
-## Status
-
-Actively maintained with recent releases and ongoing improvements. If something isn't working, check [open issues](https://github.com/tompassarelli/palefox/issues) or file a new one.
 ## Acknowledgments
 
 Palefox draws inspiration from:
