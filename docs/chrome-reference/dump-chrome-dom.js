@@ -13,12 +13,22 @@ function dumpTree(el, depth = 0) {
   const tag = el.localName;
   const hidden = el.hidden ? " [hidden]" : "";
   const attrs = [];
-  if (el.getAttribute("style")) attrs.push("style=...");
+  if (el.getAttribute("style")) attrs.push(`style="${el.getAttribute("style").replace(/"/g, "'").substring(0, 200)}"`);
   if (el.getAttribute("hidden")) attrs.push("hidden");
   if (el.getAttribute("collapsed")) attrs.push("collapsed");
+  const cs = getComputedStyle(el);
+  const css = [];
+  if (cs.display === "none") css.push("display:none");
+  if (cs.visibility === "hidden") css.push("visibility:hidden");
+  if (cs.overflow !== "visible") css.push(`overflow:${cs.overflow}`);
+  if (cs.width !== "auto" && el.id) css.push(`w:${cs.width}`);
+  if (cs.height !== "auto" && el.id) css.push(`h:${cs.height}`);
+  if (cs.position !== "static") css.push(`pos:${cs.position}`);
+  if (cs.flexGrow !== "0") css.push(`flex:${cs.flexGrow}`);
+  const cssStr = css.length ? ` [${css.join(", ")}]` : "";
   const extra = attrs.length ? ` (${attrs.join(", ")})` : "";
-  let out = `${indent}<${tag}${id}${cls}${hidden}${extra}>\n`;
-  if (depth < 8 && tag !== "script" && tag !== "style") {
+  let out = `${indent}<${tag}${id}${cls}${hidden}${extra}${cssStr}>\n`;
+  if (tag !== "script" && tag !== "style") {
     for (const child of el.children) {
       out += dumpTree(child, depth + 1);
     }
@@ -29,4 +39,4 @@ function dumpTree(el, depth = 0) {
 const tree = dumpTree(document.documentElement);
 const path = PathUtils.join(Services.dirsvc.get("Home", Ci.nsIFile).path, "chrome-dom.txt");
 IOUtils.writeUTF8(path, tree);
-console.log(`Dumped to ${path}`);
+console.log(`Dumped to ${path} (${(tree.length / 1024).toFixed(0)} KB)`);

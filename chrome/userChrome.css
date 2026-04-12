@@ -1,8 +1,7 @@
 /* palefox — entry point
  *
  * Toggle features in about:config (type "palefox." to see all options):
- *   pfx.drawer.autohide               — auto-collapse sidebar when mouse leaves
- *   pfx.drawer.autohide.requireFocus  — only collapse when window has focus
+ *   pfx.sidebar.compact                — autohide sidebar, reveal on left-edge hover
  *   pfx.urlbar.float                   — float urlbar centered on viewport when focused
  *
  * Put your personal CSS in user.css — it won't be

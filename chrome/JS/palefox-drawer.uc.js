@@ -1,0 +1,550 @@
+// ==UserScript==
+// @name           Palefox Drawer
+// @description    Manages sidebar layout, compact mode, and toolbar positioning
+// @include        main
+// @onlyonce
+// ==/UserScript==
+
+(() => {
+  "use strict";
+
+  // --- Element references ---
+
+  const sidebarMain = document.getElementById("sidebar-main");
+  const navigatorToolbox = document.getElementById("navigator-toolbox");
+  const urlbarContainer = document.getElementById("urlbar-container");
+  const navBar = document.getElementById("nav-bar");
+  const urlbar = document.getElementById("urlbar");
+
+  if (!sidebarMain || !navigatorToolbox || !urlbarContainer || !navBar) {
+    console.error("palefox-drawer: missing required elements");
+    return;
+  }
+
+  const sidebarMainElement = sidebarMain.querySelector("sidebar-main");
+
+  // Save original DOM positions before any moves, for collapse restoration.
+  const toolboxParent = navigatorToolbox.parentNode;
+  const toolboxNext = navigatorToolbox.nextSibling;
+  const urlbarParent = urlbarContainer.parentNode;
+  const urlbarNext = urlbarContainer.nextSibling;
+
+  // --- Urlbar width sync ---
+  // Firefox (UrlbarInput.mjs) periodically sets --urlbar-width on #urlbar.
+  // We override it to account for sidebar padding. Only active when the
+  // urlbar is inside the sidebar (expanded layout).
+
+  const gap =
+    parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--pfx-gap")
+    ) || 6;
+
+  let urlbarToolbar = null;
+  let resizeObs = null;
+  let mutationObs = null;
+  let updating = false;
+
+  function syncUrlbarWidth() {
+    if (!urlbar || updating) return;
+    if (urlbar.hasAttribute("breakout-extend")) return;
+    updating = true;
+    const w = Math.max(0, sidebarMain.getBoundingClientRect().width - gap * 2);
+    urlbar.style.setProperty("--urlbar-width", w + "px");
+    updating = false;
+  }
+
+  // --- Context menu fix ---
+  // sidebar-main's LitElement intercepts contextmenu events. Only block
+  // propagation when the toolbox is actually inside the sidebar.
+  navigatorToolbox.addEventListener("contextmenu", (e) => {
+    if (navigatorToolbox.parentNode === sidebarMain) {
+      e.stopPropagation();
+    }
+  });
+
+  // --- Layout: expand (move toolbox into sidebar) ---
+
+  function expand() {
+    sidebarMain.insertBefore(navigatorToolbox, sidebarMainElement);
+
+    // The urlbar breakout requires this.closest("toolbar") to return a
+    // <toolbar> (UrlbarInput.mjs:487). Wrap it in a new toolbar.
+    urlbarToolbar = document.createXULElement("toolbar");
+    urlbarToolbar.id = "pfx-urlbar-toolbar";
+    urlbarToolbar.classList.add("browser-toolbar");
+    urlbarToolbar.appendChild(urlbarContainer);
+    navBar.after(urlbarToolbar);
+
+    if (urlbar) {
+      resizeObs = new ResizeObserver(syncUrlbarWidth);
+      resizeObs.observe(sidebarMain);
+      mutationObs = new MutationObserver(syncUrlbarWidth);
+      mutationObs.observe(urlbar, {
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    }
+  }
+
+  // --- Layout: collapse (restore toolbox to native horizontal position) ---
+
+  function collapse() {
+    if (resizeObs) {
+      resizeObs.disconnect();
+      resizeObs = null;
+    }
+    if (mutationObs) {
+      mutationObs.disconnect();
+      mutationObs = null;
+    }
+
+    // Restore urlbar-container to its original position in #nav-bar
+    if (urlbarNext && urlbarNext.parentNode === urlbarParent) {
+      urlbarParent.insertBefore(urlbarContainer, urlbarNext);
+    } else {
+      urlbarParent.appendChild(urlbarContainer);
+    }
+
+    if (urlbarToolbar) {
+      urlbarToolbar.remove();
+      urlbarToolbar = null;
+    }
+
+    // Ensure correct order: urlbar-container → spring2 → unified-extensions-button
+    const spring2 = document.getElementById("customizableui-special-spring2");
+    const extBtn = document.getElementById("unified-extensions-button");
+    if (spring2) urlbarContainer.after(spring2);
+    if (spring2 && extBtn) spring2.after(extBtn);
+
+    // Restore navigator-toolbox to its original position (before #browser)
+    if (toolboxNext && toolboxNext.parentNode === toolboxParent) {
+      toolboxParent.insertBefore(navigatorToolbox, toolboxNext);
+    } else {
+      toolboxParent.appendChild(navigatorToolbox);
+    }
+  }
+
+  // --- Initialize layout based on current sidebar state ---
+
+  if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
+    expand();
+  }
+
+  // Watch for expand/collapse attribute changes
+  new MutationObserver(() => {
+    const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
+    if (expanded && !urlbarToolbar) {
+      expand();
+    } else if (!expanded && urlbarToolbar) {
+      collapse();
+    }
+  }).observe(sidebarMain, {
+    attributes: true,
+    attributeFilter: ["sidebar-launcher-expanded"],
+  });
+
+  // === Compact Mode ===
+  //
+  // Ported from Zen Browser's ZenCompactMode.mjs, adapted for non-fork.
+  //
+  // STATE MODEL (inverted from naive show/hide):
+  //   data-pfx-compact present → sidebar hidden by CSS default
+  //   pfx-has-hover present    → sidebar visible (overrides hidden)
+  //   No pfx-has-hover         → sidebar hidden
+  //
+  // This eliminates race conditions: enabling compact mode just sets
+  // data-pfx-compact. The sidebar is immediately hidden because
+  // pfx-has-hover is absent. Nothing can "undo" a hide — showing
+  // requires explicitly ADDING pfx-has-hover.
+  //
+  // FLOW:
+  //   hover strip mouseenter → setHover(true) → sidebar slides in
+  //   sidebar mouseover      → setHover(true) + cancel any pending hide
+  //   sidebar mouseleave     → flash(300ms) → setHover(false) → slides out
+  //
+  // ZEN FEATURES WE SKIP (fork-specific, not applicable):
+  //   - zen-user-show: manual sidebar pin (we don't have this UX)
+  //   - zen-has-empty-tab: auto-show on new tab
+  //   - zen-compact-animating: animation spam guard
+  //   - floating urlbar handling (_hasHoveredUrlbar)
+  //   - macOS window button bounds checks
+  //   - supress-primary-adjustment: Zen layout engine flag
+  //   - screen edge detection (_getCrossedEdge): we use hover strip instead
+  //   - _isTabBeingDragged flag: we use querySelector in isGuarded() instead
+
+  const COMPACT_PREF = "pfx.sidebar.compact";
+
+  // How long the sidebar lingers after mouseleave before hiding.
+  // Zen uses a pref (zen.view.compact.sidebar-keep-hover.duration).
+  // We hardcode 300ms — fast enough to feel responsive, long enough
+  // to not flicker when the mouse briefly crosses the sidebar edge.
+  const KEEP_HOVER_DURATION = 300;
+
+  let hoverStrip = null;
+  let flashTimer = null;
+
+  // Set true during compactToggle() to block the hover strip's
+  // mouseenter from immediately re-showing the sidebar. When the
+  // user clicks the sidebar button, CSS sets pointer-events:none
+  // on the sidebar, which may cause a mouseenter on the hover strip
+  // as the pointer "falls through." Cleared next tick via setTimeout(0).
+  // Zen equivalent: _ignoreNextHover (ZenCompactMode.mjs:623)
+  let _ignoreNextHover = false;
+
+  // Guards: conditions that should prevent the sidebar from hiding.
+  // Zen uses ZenHasPolyfill MutationObserver for [open], [panelopen],
+  // [breakout-extend] — we use querySelector which is simpler and
+  // sufficient for our single-element case.
+  function isGuarded() {
+    // Urlbar autocomplete dropdown is open — hiding would break UX
+    if (urlbar?.hasAttribute("breakout-extend")) return true;
+    // A toolbar button menu is open (e.g. hamburger, extensions)
+    if (document.querySelector("toolbarbutton[open='true']")) return true;
+    // Tabs are being multi-selected or dragged
+    // (Zen uses _isTabBeingDragged flag set by their drag handler —
+    // we can't hook into that, so querySelector is our equivalent)
+    if (document.querySelector(".tabbrowser-tab[multiselected]")) return true;
+    return false;
+  }
+
+  // Set/remove the visibility attribute. CSS reacts to this:
+  //   [data-pfx-compact]:not([pfx-has-hover]) → hidden
+  //   [data-pfx-compact][pfx-has-hover]       → visible
+  // Zen equivalent: _setElementExpandAttribute (ZenCompactMode.mjs:693)
+  // Zen's version is generic (any element, any attribute, handles
+  // implicit hover, toolbar panel state). Ours is trivial because
+  // we have one sidebar and one attribute.
+  function setHover(value) {
+    if (value) {
+      sidebarMain.setAttribute("pfx-has-hover", "true");
+    } else {
+      sidebarMain.removeAttribute("pfx-has-hover");
+    }
+  }
+
+  // Keep sidebar visible for `duration` ms, then hide.
+  // If called again while already flashing, resets the timer without
+  // re-triggering the show (avoids visual glitch from redundant show).
+  // Zen equivalent: flashElement (ZenCompactMode.mjs:672)
+  // Zen's version is generic (any element, any attribute, keyed by ID).
+  // Ours is hardcoded to the sidebar since it's our only flashable element.
+  function flashSidebar(duration) {
+    if (flashTimer) {
+      // Already visible and flashing — just extend the timer
+      clearTimeout(flashTimer);
+    } else {
+      // Not currently visible — show first
+      requestAnimationFrame(() => setHover(true));
+    }
+    flashTimer = setTimeout(() => {
+      requestAnimationFrame(() => {
+        if (!isGuarded()) setHover(false);
+        flashTimer = null;
+      });
+    }, duration);
+  }
+
+  function clearFlash() {
+    clearTimeout(flashTimer);
+    flashTimer = null;
+  }
+
+  // Mouse enters sidebar. Verify hover is real, then show.
+  // Zen equivalent: onEnter (ZenCompactMode.mjs:762)
+  //
+  // setTimeout(0): Zen calls this HOVER_HACK_DELAY (default 0ms).
+  // Defers to next tick so we can verify :hover — on Linux/Wayland,
+  // spurious mouseover events fire during tab drags (Mozilla bug 1818517).
+  // The :hover check catches these false positives.
+  //
+  // event.target.closest("panel"): Zen check — ignore mouseover from
+  // popup panels (context menus, dropdowns) that overlap the sidebar.
+  //
+  // requestAnimationFrame: Zen batches all DOM writes to rAF to avoid
+  // layout thrashing. We follow the same pattern.
+  function onSidebarEnter(event) {
+    setTimeout(() => {
+      if (!event.target.matches(":hover")) return;
+      if (event.target.closest("panel")) return;
+      clearFlash();
+      requestAnimationFrame(() => {
+        if (_ignoreNextHover) return;
+        if (sidebarMain.hasAttribute("pfx-has-hover")) return;
+        setHover(true);
+      });
+    }, 0);
+  }
+
+  // Mouse leaves sidebar. Verify leave is real, then schedule hide.
+  // Zen equivalent: onLeave (ZenCompactMode.mjs:788)
+  //
+  // setTimeout(0) + :hover check: same false-positive guard as onEnter.
+  //
+  // flashSidebar instead of immediate hide: the sidebar lingers for
+  // KEEP_HOVER_DURATION ms. If the mouse re-enters during this window,
+  // onSidebarEnter calls clearFlash() and the hide is cancelled.
+  // This prevents flicker when the mouse briefly crosses the edge.
+  //
+  // Zen skips: macOS window button bounds check, floating urlbar check,
+  // supress-primary-adjustment, dragleave handling. All fork-specific.
+  function onSidebarLeave(event) {
+    setTimeout(() => {
+      if (event.target.matches(":hover")) return;
+      if (_ignoreNextHover) return;
+      if (isGuarded()) return;
+      flashSidebar(KEEP_HOVER_DURATION);
+    }, 0);
+  }
+
+  function compactEnable() {
+    // Setting this attribute without pfx-has-hover causes CSS to
+    // immediately hide the sidebar. No race condition possible.
+    sidebarMain.setAttribute("data-pfx-compact", "");
+
+    // The urlbar has popover="manual" which places it in the CSS top layer.
+    // Top layer elements are immune to ancestor transforms. Remove popover
+    // so the urlbar moves with the sidebar's transform. We restore it
+    // dynamically during breakout so the dropdown renders above everything.
+    if (urlbar) {
+      urlbar.removeAttribute("popover");
+      new MutationObserver(() => {
+        if (!sidebarMain.hasAttribute("data-pfx-compact")) return;
+        if (urlbar.hasAttribute("breakout-extend")) {
+          urlbar.setAttribute("popover", "manual");
+          urlbar.showPopover();
+        } else {
+          urlbar.removeAttribute("popover");
+        }
+      }).observe(urlbar, { attributes: true, attributeFilter: ["breakout-extend"] });
+    }
+
+    // Hover strip: invisible box at left edge, sits behind the sidebar
+    // (z-index 9 < sidebar's 10). When sidebar has pointer-events:none
+    // (hidden state), mouse events pass through to the strip.
+    // Zen uses screen edge detection instead (mouseleave on documentElement,
+    // _getCrossedEdge). Our approach is simpler — a physical DOM element.
+    if (!hoverStrip) {
+      hoverStrip = document.createXULElement("box");
+      hoverStrip.id = "pfx-hover-strip";
+      sidebarMain.parentNode.appendChild(hoverStrip);
+      hoverStrip.addEventListener("mouseenter", () => {
+        clearFlash();
+        requestAnimationFrame(() => {
+          if (!_ignoreNextHover) setHover(true);
+        });
+      });
+    }
+
+    sidebarMain.addEventListener("mouseover", onSidebarEnter);
+    sidebarMain.addEventListener("mouseleave", onSidebarLeave);
+  }
+
+  function compactDisable() {
+    clearFlash();
+    sidebarMain.removeAttribute("data-pfx-compact");
+    sidebarMain.removeAttribute("pfx-has-hover");
+
+    // Restore popover so the urlbar returns to the top layer
+    if (urlbar) {
+      urlbar.setAttribute("popover", "manual");
+      urlbar.showPopover();
+    }
+
+    if (hoverStrip) {
+      hoverStrip.remove();
+      hoverStrip = null;
+    }
+
+    sidebarMain.removeEventListener("mouseover", onSidebarEnter);
+    sidebarMain.removeEventListener("mouseleave", onSidebarLeave);
+  }
+
+  function compactToggle() {
+    const active = sidebarMain.hasAttribute("data-pfx-compact");
+    if (active) {
+      compactDisable();
+      Services.prefs.setBoolPref(COMPACT_PREF, false);
+    } else {
+      // Block hover strip from immediately re-showing the sidebar.
+      // When CSS sets pointer-events:none on the sidebar, the hover
+      // strip behind it may receive a mouseenter as the pointer
+      // "falls through." This flag blocks that one event.
+      // Cleared next tick — by then the pointer state has settled.
+      // Zen equivalent: _ignoreNextHover (ZenCompactMode.mjs:623)
+      _ignoreNextHover = true;
+      compactEnable();
+      Services.prefs.setBoolPref(COMPACT_PREF, true);
+      setTimeout(() => {
+        _ignoreNextHover = false;
+      }, 0);
+    }
+  }
+
+  // Initialize from pref on startup
+  if (Services.prefs.getBoolPref(COMPACT_PREF, false)) {
+    compactEnable();
+  }
+
+  // Live-toggle via about:config without restart
+  Services.prefs.addObserver(COMPACT_PREF, {
+    observe() {
+      const enabled = Services.prefs.getBoolPref(COMPACT_PREF, false);
+      const active = sidebarMain.hasAttribute("data-pfx-compact");
+      if (enabled && !active) compactEnable();
+      else if (!enabled && active) compactDisable();
+    },
+  });
+
+  // Clear stale hover when window minimizes/maximizes/restores.
+  // The mouse may no longer be over the sidebar after the state change.
+  // Zen equivalent: sizemodechange listener (ZenCompactMode.mjs:93)
+  window.addEventListener("sizemodechange", () => {
+    if (
+      sidebarMain.hasAttribute("pfx-has-hover") &&
+      !sidebarMain.matches(":hover")
+    ) {
+      setHover(false);
+      clearFlash();
+    }
+  });
+
+  // === Sidebar Button ===
+  // Left-click: toggle compact mode
+  // Right-click: context menu with "Collapse Layout"
+
+  // === Sidebar Button ===
+  // Hide the native button, create our own. Avoids fighting XUL command
+  // wiring. Our button uses the native #toolbar-context-menu (overloaded
+  // with our items) so the user gets the full original menu plus ours.
+
+  const sidebarButton = document.getElementById("sidebar-button");
+  if (sidebarButton) {
+    // Grab the icon style before hiding
+    const ogIcon = sidebarButton.querySelector(".toolbarbutton-icon");
+    const ogIconStyle = ogIcon ? getComputedStyle(ogIcon).listStyleImage : null;
+
+    sidebarButton.style.display = "none";
+
+    const pfxButton = document.createXULElement("toolbarbutton");
+    pfxButton.id = "pfx-sidebar-button";
+    pfxButton.className = sidebarButton.className;
+    pfxButton.setAttribute("tooltiptext", "Toggle sidebar");
+    pfxButton.setAttribute("context", "toolbar-context-menu");
+    // Copy CUI attributes so Firefox's popupshowing logic recognizes
+    // our button as a real toolbar widget
+    for (const attr of [
+      "cui-areatype",
+      "widget-id",
+      "widget-type",
+      "removable",
+      "overflows",
+    ]) {
+      if (sidebarButton.hasAttribute(attr)) {
+        pfxButton.setAttribute(attr, sidebarButton.getAttribute(attr));
+      }
+    }
+    if (ogIconStyle) {
+      pfxButton.style.listStyleImage = ogIconStyle;
+    }
+    sidebarButton.after(pfxButton);
+
+    // Left-click: toggle compact mode
+    pfxButton.addEventListener("click", (e) => {
+      if (e.button === 0) compactToggle();
+    });
+
+    // Overload #toolbar-context-menu with our items
+    const toolbarMenu = document.getElementById("toolbar-context-menu");
+    if (toolbarMenu) {
+      const compactItem = document.createXULElement("menuitem");
+      compactItem.id = "pfx-toggle-compact";
+      compactItem.hidden = true;
+      compactItem.addEventListener("command", () => compactToggle());
+
+      const collapseItem = document.createXULElement("menuitem");
+      collapseItem.id = "pfx-collapse-layout";
+      collapseItem.setAttribute("label", "Collapse Layout");
+      collapseItem.hidden = true;
+      collapseItem.addEventListener("command", () => {
+        sidebarButton.click();
+      });
+
+      const layoutItem = document.createXULElement("menuitem");
+      layoutItem.id = "pfx-toggle-tab-layout";
+      layoutItem.hidden = true;
+      layoutItem.addEventListener("command", () => {
+        const vertical = Services.prefs.getBoolPref(
+          "sidebar.verticalTabs",
+          true
+        );
+        Services.prefs.setBoolPref("sidebar.verticalTabs", !vertical);
+      });
+
+      const vertTabsItem = document.getElementById(
+        "toolbar-context-toggle-vertical-tabs"
+      );
+      if (vertTabsItem) {
+        vertTabsItem.after(compactItem, collapseItem, layoutItem);
+      } else {
+        toolbarMenu.append(compactItem, collapseItem, layoutItem);
+      }
+
+      // Native menu items to show/hide for our custom button
+      const customizeSidebar = document.getElementById(
+        "toolbar-context-customize-sidebar"
+      );
+      const toggleVertTabs = document.getElementById(
+        "toolbar-context-toggle-vertical-tabs"
+      );
+      const revampSep = document.getElementById("sidebarRevampSeparator");
+      const pinToOverflow = document.getElementById(
+        "toolbar-context-move-to-panel"
+      );
+      const removeFromToolbar = document.getElementById(
+        "toolbar-context-remove-from-toolbar"
+      );
+
+      // Use popupshown so we run AFTER Firefox's popupshowing logic
+      toolbarMenu.addEventListener("popupshown", () => {
+        const isPfx = !!toolbarMenu.triggerNode?.closest(
+          "#sidebar-button, #pfx-sidebar-button"
+        );
+        compactItem.hidden = !isPfx;
+        collapseItem.hidden = !isPfx;
+        layoutItem.hidden = !isPfx;
+        if (isPfx) {
+          const isCompact = sidebarMain.hasAttribute("data-pfx-compact");
+          compactItem.setAttribute(
+            "label",
+            isCompact ? "Turn Compact Off" : "Turn Compact On"
+          );
+          // Force-show native sidebar items Firefox hid for our button
+          if (customizeSidebar) customizeSidebar.hidden = false;
+          if (toggleVertTabs) toggleVertTabs.hidden = true; // replaced by layoutItem
+          if (revampSep) revampSep.hidden = true;
+          if (pinToOverflow) pinToOverflow.hidden = true;
+          if (removeFromToolbar) removeFromToolbar.hidden = true;
+
+          const vertical = Services.prefs.getBoolPref(
+            "sidebar.verticalTabs",
+            true
+          );
+          layoutItem.setAttribute(
+            "label",
+            vertical ? "Horizontal Tabs" : "Vertical Tabs"
+          );
+
+          const isExpanded = sidebarMain.hasAttribute(
+            "sidebar-launcher-expanded"
+          );
+          collapseItem.setAttribute(
+            "label",
+            isExpanded ? "Collapse Layout" : "Expand Layout"
+          );
+        }
+      });
+    }
+  }
+
+  console.log("palefox-drawer: initialized");
+})();
