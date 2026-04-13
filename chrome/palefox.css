@@ -189,7 +189,7 @@ gap: space between components, like padding/margin
   /* width of the invisible hover strip that triggers sidebar expand
      default: 12px — override via about:config boolean ladder:
      pfx.drawer.autohide.expandTriggerWidth.{2px,4px,6px,8px,10px,12px} */
-  --pfx-autohide-expand-trigger-width: 8px;
+  --pfx-autohide-expand-trigger-width: 10px;
 }
 
 /* if a theme is present (like Firefox Color), respect it fully */

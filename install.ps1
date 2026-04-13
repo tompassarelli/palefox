@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "tompassarelli/palefox"
-$branch = "stable-pure-css"
+$branch = "css-legacy"
 
 $force = $args -contains "--force" -or $args -contains "-Force"
 $noBackup = $args -contains "--no-backup"
