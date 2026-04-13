@@ -57,9 +57,9 @@ irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | i
 
 Palefox draws inspiration from:
 
+- [Nyxt](https://nyxt-browser.com/) — keyboard-driven, programmable browser philosophy
+- [qutebrowser](https://qutebrowser.org/) — keyboard-first, minimal UI ethos
 - [Zen Browser](https://zen-browser.app/) — compact mode state machine and sidebar design
 - [GWfox](https://github.com/akkva/gwfox) — CSS theming techniques
 - [FF-ULTIMA](https://github.com/soulhotel/FF-ULTIMA) — feature and layout ideas
 - [parfait](https://github.com/reizumii/parfait) — findbar and accessibility
-- [Nyxt](https://nyxt-browser.com/) — keyboard-driven, programmable browser philosophy
-- [qutebrowser](https://qutebrowser.org/) — keyboard-first, minimal UI ethos
