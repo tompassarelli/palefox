@@ -19,7 +19,9 @@ A developer-focused alternative to Zen Browser on upstream Firefox
 
 ## Quick Install
 
-> Please see [security considerations](#security) before installing
+> Palefox runs chrome-privileged JS and CSS — review scripts in `chrome/JS/` before use, and review install scripts before piping them into your shell.
+
+> **Palefox is in beta.** Stable enough for daily use — install from the latest tagged release on `main`. Features are actively evolving.
 
 **macOS / Linux:**
 ```bash
@@ -31,11 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.
 irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | iex
 ```
 
-**LibreWolf:** add `--librewolf` to either command.
-
-The installer pulls from the latest tagged release, not HEAD.
-
-See the [full installation guide](docs/install.md) for manual install, flags, and details.
+**LibreWolf:** add `--librewolf` to either command. See the [full installation guide](docs/install.md) for manual install, flags, and details.
 
 ## Features
 
@@ -54,13 +52,6 @@ See the [full installation guide](docs/install.md) for manual install, flags, an
 - [Customization](docs/customization.md)
 - [Compact mode audit (Zen Browser comparison)](docs/compact-mode-zen-audit.md)
 - [Contributing](CONTRIBUTING.md)
-
-## Security
-
-- Extensions are privileged software — install only ones you trust
-- Review install scripts before piping them into your shell
-- The JS loader runs chrome-privileged code — review scripts in `chrome/JS/` before use
-> **Palefox is in beta.** It's stable enough for daily use and recommended to install from the latest release on `main`. Features are actively evolving — expect rough edges.
 
 ## Acknowledgments
 
