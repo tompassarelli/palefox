@@ -195,13 +195,25 @@
   // Zen uses ZenHasPolyfill MutationObserver for [open], [panelopen],
   // [breakout-extend] — we use querySelector which is simpler and
   // sufficient for our single-element case.
-  // Stateless guard — checks DOM at decision time instead of tracking
-  // state with counters (which can leak if events are missed).
-  // Zen uses [panelopen] and [open] attributes via MutationObserver;
-  // we use querySelector which is simpler for our single-sidebar case.
+  // Track open popups (context menus, panels) so compact mode doesn't
+  // hide the sidebar while a menu is visible. Only count XUL popups,
+  // not HTML popovers like the urlbar's breakout.
+  let _openPopups = 0;
+  document.addEventListener("popupshown", (e) => {
+    if (e.target.localName === "menupopup" || e.target.localName === "panel") {
+      _openPopups++;
+    }
+  });
+  document.addEventListener("popuphidden", (e) => {
+    if (e.target.localName === "menupopup" || e.target.localName === "panel") {
+      _openPopups = Math.max(0, _openPopups - 1);
+    }
+  });
+
   function isGuarded() {
+    if (_openPopups > 0) return true;
     if (urlbar?.hasAttribute("breakout-extend")) return true;
-    if (document.querySelector("[panelopen='true'], [open='true']")) return true;
+    if (document.querySelector("toolbarbutton[open='true']")) return true;
     if (document.querySelector(".tabbrowser-tab[multiselected]")) return true;
     return false;
   }
