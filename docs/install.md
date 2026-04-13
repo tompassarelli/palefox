@@ -12,7 +12,7 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/) fr
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh -o /tmp/palefox-install.sh && bash /tmp/palefox-install.sh
 ```
 
 **Windows** (PowerShell):

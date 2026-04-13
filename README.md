@@ -21,7 +21,7 @@ A developer-focused alternative to Zen Browser on upstream Firefox
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/main/install.sh -o /tmp/palefox-install.sh && bash /tmp/palefox-install.sh
 ```
 
 **Windows** (PowerShell):
