@@ -181,7 +181,7 @@ gap: space between components, like padding/margin
 
   /* autohide collapse delay — bridges spurious mouseleave during drag
      (Mozilla bug 1818517) */
-  --pfx-autohide-collapse-delay: 1s;
+  --pfx-autohide-collapse-delay: 0.5s;
 
   /* fixed sidebar width for autohide overlay mode */
   --pfx-autohide-width: 240px;
@@ -304,23 +304,63 @@ body:has(#sidebar-box[hidden]) #urlbar {
  * tab drags (including Sidebery drags), so we gate on that too.
  */
 
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.1px") {
+  :root { --pfx-autohide-expand-trigger-width: 1px; }
+}
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.2px") {
   :root { --pfx-autohide-expand-trigger-width: 2px; }
+}
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.3px") {
+  :root { --pfx-autohide-expand-trigger-width: 3px; }
 }
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.4px") {
   :root { --pfx-autohide-expand-trigger-width: 4px; }
 }
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.5px") {
+  :root { --pfx-autohide-expand-trigger-width: 5px; }
+}
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.6px") {
   :root { --pfx-autohide-expand-trigger-width: 6px; }
+}
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.7px") {
+  :root { --pfx-autohide-expand-trigger-width: 7px; }
 }
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.8px") {
   :root { --pfx-autohide-expand-trigger-width: 8px; }
 }
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.9px") {
+  :root { --pfx-autohide-expand-trigger-width: 9px; }
+}
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.10px") {
   :root { --pfx-autohide-expand-trigger-width: 10px; }
 }
+@media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.11px") {
+  :root { --pfx-autohide-expand-trigger-width: 11px; }
+}
 @media -moz-pref("pfx.drawer.autohide.expandTriggerWidth.12px") {
   :root { --pfx-autohide-expand-trigger-width: 12px; }
+}
+
+/* collapse delay — how long the sidebar lingers after mouse leaves
+   default: 1s — override via about:config boolean ladder:
+   pfx.drawer.collapseDelay.{0.5s,0.6s,0.7s,0.8s,0.9s,1s} */
+@media -moz-pref("pfx.drawer.collapseDelay.0.5s") {
+  :root { --pfx-autohide-collapse-delay: 0.5s; }
+}
+@media -moz-pref("pfx.drawer.collapseDelay.0.6s") {
+  :root { --pfx-autohide-collapse-delay: 0.6s; }
+}
+@media -moz-pref("pfx.drawer.collapseDelay.0.7s") {
+  :root { --pfx-autohide-collapse-delay: 0.7s; }
+}
+@media -moz-pref("pfx.drawer.collapseDelay.0.8s") {
+  :root { --pfx-autohide-collapse-delay: 0.8s; }
+}
+@media -moz-pref("pfx.drawer.collapseDelay.0.9s") {
+  :root { --pfx-autohide-collapse-delay: 0.9s; }
+}
+@media -moz-pref("pfx.drawer.collapseDelay.1s") {
+  :root { --pfx-autohide-collapse-delay: 1s; }
 }
 
 @media -moz-pref("pfx.drawer.autohide") {
