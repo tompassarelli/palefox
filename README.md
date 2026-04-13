@@ -1,5 +1,9 @@
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/7ebd8f20-2846-4e0e-9d9f-de563a589805" alt="Palefox logo" width="96" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo.png" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo-light.png" />
+    <img src="docs/logo.png" alt="Palefox logo" width="200" />
+  </picture>
 
 # Palefox
 
