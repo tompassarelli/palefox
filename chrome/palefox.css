@@ -109,6 +109,43 @@
   overflow: visible !important;
 }
 
+/* hide page-action-buttons (bookmark star, etc.) unless urlbar is expanded */
+#urlbar:not([breakout-extend]) #page-action-buttons {
+  display: none !important;
+}
+
+/*
+FIREFOX SECURITY STATES REFERENCE
+
+Reasonably safe to customize:
+- .chromeUI          - Firefox internal pages
+- .extensionPage     - Extension pages
+- .verifiedDomain    - HTTPS with valid cert
+- .verifiedIdentity  - EV certificates
+
+Preserve these (security warnings):
+- .notSecure           - HTTP or broken HTTPS
+- .insecureLoginForms  - HTTPS page with HTTP login
+- .mixedContentBlocked - HTTPS with blocked mixed content
+- .mixedActiveContent  - HTTPS with active mixed content
+*/
+
+/* HTTP not-secure warning banner */
+body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
+  content: "🦊 Palefox - HTTP Alert: Not Secure";
+  text-align: center;
+  font-size: 24px;
+  margin-left: 0px;
+  display: block;
+  position: inherit;
+  z-index: 3;
+  width: 100%;
+  height: 46px;
+  padding-top: 8px;
+  box-sizing: border-box;
+  background-color: var(--pfx-color);
+}
+
 /* #endregion urlbar */
 
 
