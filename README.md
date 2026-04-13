@@ -3,7 +3,7 @@
 
 # Palefox
 
-Minimal, customizable Firefox/LibreWolf chrome — keyboard-first, no fork, no build.
+A developer-focused alternative to Zen Browser on upstream Firefox
 
 </div>
 
