@@ -196,22 +196,24 @@
   // [breakout-extend] — we use querySelector which is simpler and
   // sufficient for our single-element case.
   // Track open popups (context menus, panels) so compact mode doesn't
-  // hide the sidebar while a menu is visible. Legacy CSS solved this with
-  // enormous :has() selector chains; listening for popup events is cleaner.
+  // hide the sidebar while a menu is visible. Only count XUL popups,
+  // not HTML popovers like the urlbar's breakout.
   let _openPopups = 0;
-  document.addEventListener("popupshown", () => _openPopups++);
-  document.addEventListener("popuphidden", () => {
-    _openPopups = Math.max(0, _openPopups - 1);
+  document.addEventListener("popupshown", (e) => {
+    if (e.target.localName === "menupopup" || e.target.localName === "panel") {
+      _openPopups++;
+    }
+  });
+  document.addEventListener("popuphidden", (e) => {
+    if (e.target.localName === "menupopup" || e.target.localName === "panel") {
+      _openPopups = Math.max(0, _openPopups - 1);
+    }
   });
 
   function isGuarded() {
-    // A popup/context menu is open
     if (_openPopups > 0) return true;
-    // Urlbar autocomplete dropdown is open — hiding would break UX
     if (urlbar?.hasAttribute("breakout-extend")) return true;
-    // A toolbar button menu is open (e.g. hamburger, extensions)
     if (document.querySelector("toolbarbutton[open='true']")) return true;
-    // Tabs are being multi-selected or dragged
     if (document.querySelector(".tabbrowser-tab[multiselected]")) return true;
     return false;
   }
@@ -323,6 +325,12 @@
           urlbar.showPopover();
         } else {
           urlbar.removeAttribute("popover");
+          // Breakout closed — if mouse isn't over the sidebar, hide it.
+          // Fixes: click urlbar → click away → sidebar stays stuck visible
+          // (the earlier mouseleave was blocked by the breakout guard).
+          if (!sidebarMain.matches(":hover")) {
+            flashSidebar(KEEP_HOVER_DURATION);
+          }
         }
       }).observe(urlbar, { attributes: true, attributeFilter: ["breakout-extend"] });
     }
