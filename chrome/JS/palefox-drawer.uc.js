@@ -195,14 +195,23 @@
   // Zen uses ZenHasPolyfill MutationObserver for [open], [panelopen],
   // [breakout-extend] — we use querySelector which is simpler and
   // sufficient for our single-element case.
+  // Track open popups (context menus, panels) so compact mode doesn't
+  // hide the sidebar while a menu is visible. Legacy CSS solved this with
+  // enormous :has() selector chains; listening for popup events is cleaner.
+  let _openPopups = 0;
+  document.addEventListener("popupshown", () => _openPopups++);
+  document.addEventListener("popuphidden", () => {
+    _openPopups = Math.max(0, _openPopups - 1);
+  });
+
   function isGuarded() {
+    // A popup/context menu is open
+    if (_openPopups > 0) return true;
     // Urlbar autocomplete dropdown is open — hiding would break UX
     if (urlbar?.hasAttribute("breakout-extend")) return true;
     // A toolbar button menu is open (e.g. hamburger, extensions)
     if (document.querySelector("toolbarbutton[open='true']")) return true;
     // Tabs are being multi-selected or dragged
-    // (Zen uses _isTabBeingDragged flag set by their drag handler —
-    // we can't hook into that, so querySelector is our equivalent)
     if (document.querySelector(".tabbrowser-tab[multiselected]")) return true;
     return false;
   }
@@ -516,7 +525,7 @@
           const isCompact = sidebarMain.hasAttribute("data-pfx-compact");
           compactItem.setAttribute(
             "label",
-            isCompact ? "Turn Compact Off" : "Turn Compact On"
+            isCompact ? "Disable Compact" : "Enable Compact"
           );
           // Force-show native sidebar items Firefox hid for our button
           if (customizeSidebar) customizeSidebar.hidden = false;
