@@ -75,11 +75,24 @@ case "$(uname -s)" in
             xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/librewolf/librewolf"
             native_dir="$HOME/.librewolf"
         else
+            snap_dir="$HOME/snap/firefox/common/.mozilla/firefox"
             flatpak_dir="$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"
             xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/firefox"
             native_dir="$HOME/.mozilla/firefox"
         fi
-        if [ -d "$flatpak_dir" ]; then
+        # Snap Firefox mounts its app directory read-only — fx-autoconfig can't be installed
+        if [ -d "${snap_dir:-}" ]; then
+            echo "Error: Snap Firefox detected."
+            echo "Palefox requires writing to the Firefox application directory, which"
+            echo "snap packages mount as read-only. CSS-only theming is available on"
+            echo "the css-legacy branch, but the full JS experience requires native Firefox."
+            echo ""
+            echo "Switch to the Mozilla PPA:"
+            echo "  sudo add-apt-repository ppa:mozillateam/ppa"
+            echo "  sudo apt install -t 'o=LP-PPA-mozillateam' firefox"
+            exit 1
+        fi
+        if [ -d "${flatpak_dir:-}" ]; then
             profiles_dir="$flatpak_dir"
         elif [ -n "${xdg_dir:-}" ] && [ -d "$xdg_dir" ]; then
             profiles_dir="$xdg_dir"
