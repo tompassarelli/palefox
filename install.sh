@@ -215,7 +215,6 @@ set_pref "sidebar.verticalTabs" "false"
 set_pref "sidebar.revamp" "false"
 set_pref "sidebar.position_start" "true"
 set_pref "pfx.drawer.autohide" "false"
-set_pref "pfx.drawer.autohide.requireFocus" "false"
 set_pref "pfx.urlbar.float" "false"
 
 # GTK may send spurious leave events that break autohide

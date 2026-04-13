@@ -155,8 +155,8 @@ gap: space between components, like padding/margin
   --pfx-max-width: 600px;
 
   /* transition speed — set to 0s by reduced motion */
-  --pfx-ts-2: 0.1s;
-  --pfx-ts-3: 0.25s;
+  --pfx-transition-instant: 0s;
+  --pfx-transition-normal: 0.25s;
 
   /* spring easing for sidebar slide (slight overshoot, from Zen Browser) */
   --pfx-fx-sidebar: linear(
@@ -181,7 +181,7 @@ gap: space between components, like padding/margin
 
   /* autohide collapse delay — bridges spurious mouseleave during drag
      (Mozilla bug 1818517) */
-  --pfx-autohide-collapse-delay: 0.2s;
+  --pfx-autohide-collapse-delay: 1s;
 
   /* fixed sidebar width for autohide overlay mode */
   --pfx-autohide-width: 240px;
@@ -189,7 +189,7 @@ gap: space between components, like padding/margin
   /* width of the invisible hover strip that triggers sidebar expand
      default: 12px — override via about:config boolean ladder:
      pfx.drawer.autohide.expandTriggerWidth.{2px,4px,6px,8px,10px,12px} */
-  --pfx-autohide-expand-trigger-width: 12px;
+  --pfx-autohide-expand-trigger-width: 8px;
 }
 
 /* if a theme is present (like Firefox Color), respect it fully */
@@ -224,8 +224,8 @@ gap: space between components, like padding/margin
 /* accessibility: disable all animations when OS "reduce motion" is on */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --pfx-ts-2: 0s;
-    --pfx-ts-3: 0s;
+    --pfx-transition-instant: 0s;
+    --pfx-transition-normal: 0s;
   }
 }
 
@@ -257,7 +257,7 @@ body:has(#sidebar-splitter:active) * {
   overflow: hidden !important;
   padding: 0 !important;
   opacity: 0 !important;
-  transition: width var(--pfx-ts-3) ease, padding var(--pfx-ts-3) step-end, opacity var(--pfx-ts-2) ease !important;
+  transition: width var(--pfx-transition-normal) ease, padding var(--pfx-transition-normal) step-end, opacity var(--pfx-transition-instant) ease !important;
 }
 
 /* toggle the entire ui by toggling the sidebar */
@@ -266,7 +266,7 @@ body:has(#sidebar-box[hidden]:not(:hover)) #navigator-toolbox {
   overflow: hidden !important;
   pointer-events: none;
   opacity: 0 !important;
-  transition: width var(--pfx-ts-3) ease, opacity var(--pfx-ts-2) ease !important;
+  transition: width var(--pfx-transition-normal) ease, opacity var(--pfx-transition-instant) ease !important;
 }
 
 body:has(#sidebar-box[hidden]:not(:hover)) toolbaritem#urlbar-container {
@@ -281,7 +281,7 @@ body:has(#sidebar-box[hidden]) #identity-icon-box {
 
 body:has(#sidebar-box[hidden]) #urlbar {
   opacity: 0 !important;
-  transition: opacity var(--pfx-ts-2) ease !important;
+  transition: opacity var(--pfx-transition-instant) ease !important;
 }
 
 /* #endregion dynamic drawer toggle */
@@ -337,7 +337,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
     max-width: var(--pfx-autohide-width) !important;
     z-index: var(--browser-area-z-index-sidebar) !important;
     box-shadow: var(--pfx-sidebar-splitter-width) 0 0 0 var(--pfx-color) !important;
-    transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar), box-shadow 0s linear !important;
+    transition: left var(--pfx-transition-instant) var(--pfx-fx-sidebar), box-shadow 0s linear !important;
   }
 
   /* lower content so sidebar (z-index:1) overlays it */
@@ -348,7 +348,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
   /* match navigator-toolbox to fixed sidebar width */
   body #navigator-toolbox {
     width: var(--pfx-autohide-width) !important;
-    transition: margin-left var(--pfx-ts-3) var(--pfx-fx-sidebar) !important;
+    transition: margin-left var(--pfx-transition-instant) var(--pfx-fx-sidebar) !important;
   }
 
   /* urlbar width based on fixed sidebar width, not the style-attr ladder */
@@ -367,93 +367,46 @@ body:has(#sidebar-box[hidden]) #urlbar {
     z-index: var(--browser-area-z-index-sidebar) !important;
     opacity: 0 !important;
     pointer-events: auto !important;
-    transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar), width var(--pfx-ts-3) var(--pfx-fx-sidebar) !important;
+    transition: left var(--pfx-transition-instant) var(--pfx-fx-sidebar), width var(--pfx-transition-instant) var(--pfx-fx-sidebar) !important;
   }
 
-  /* collapsed state (default — collapses regardless of window focus)
-     sidebar slides fully off-screen via left (no width reflow, no opacity).
-     splitter repositions to left edge as invisible hover trigger zone. */
-  @media not -moz-pref("pfx.drawer.autohide.requireFocus") {
-    body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #sidebar-box:not([hidden]) {
-      left: calc(0px - var(--pfx-autohide-width)) !important;
-      pointer-events: none !important;
-      box-shadow: none !important;
-      transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay), box-shadow 0s linear var(--pfx-autohide-collapse-delay) !important;
-    }
-
-    body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #navigator-toolbox {
-      margin-left: calc(0px - var(--pfx-autohide-width)) !important;
-      overflow: hidden !important;
-      pointer-events: none;
-      transition: margin-left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay) !important;
-    }
-
-    body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      toolbaritem#urlbar-container {
-      width: 0px !important;
-      max-width: 0px !important;
-      pointer-events: none;
-    }
-
-    body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #identity-icon-box {
-      background-color: transparent !important;
-    }
-
-    body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #sidebar-splitter {
-      left: 0 !important;
-      width: var(--pfx-autohide-expand-trigger-width) !important;
-      opacity: 0 !important;
-      pointer-events: auto !important;
-      transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay),
-                  width 0s linear var(--pfx-autohide-collapse-delay),
-                  opacity 0s linear var(--pfx-autohide-collapse-delay) !important;
-    }
+  /* collapsed state — sidebar slides off-screen via left, splitter
+     repositions to left edge as invisible hover trigger zone. */
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
+    #sidebar-box:not([hidden]) {
+    left: calc(0px - var(--pfx-autohide-width)) !important;
+    box-shadow: none !important;
+    transition: left var(--pfx-transition-normal) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay), box-shadow 0s linear var(--pfx-autohide-collapse-delay) !important;
   }
 
-  /* collapsed state (requireFocus — only collapses when mouse is inside window) */
-  @media -moz-pref("pfx.drawer.autohide.requireFocus") {
-    body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #sidebar-box:not([hidden]) {
-      left: calc(0px - var(--pfx-autohide-width)) !important;
-      pointer-events: none !important;
-      box-shadow: none !important;
-      transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay), box-shadow 0s linear var(--pfx-autohide-collapse-delay) !important;
-    }
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
+    #navigator-toolbox {
+    margin-left: calc(0px - var(--pfx-autohide-width)) !important;
+    overflow: hidden !important;
+    transition: margin-left var(--pfx-transition-normal) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay) !important;
+  }
 
-    body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #navigator-toolbox {
-      margin-left: calc(0px - var(--pfx-autohide-width)) !important;
-      overflow: hidden !important;
-      pointer-events: none;
-      transition: margin-left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay) !important;
-    }
+  body:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
+    toolbaritem#urlbar-container {
+    width: 0px !important;
+    max-width: 0px !important;
+    pointer-events: none;
+  }
 
-    body:hover:not(:has(#urlbar:is([focused][breakout-extend]))):not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      toolbaritem#urlbar-container {
-      width: 0px !important;
-      max-width: 0px !important;
-      pointer-events: none;
-    }
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
+    #identity-icon-box {
+    background-color: transparent !important;
+  }
 
-    body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #identity-icon-box {
-      background-color: transparent !important;
-    }
-
-    body:hover:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
-      #sidebar-splitter {
-      left: 0 !important;
-      width: var(--pfx-autohide-expand-trigger-width) !important;
-      opacity: 0 !important;
-      pointer-events: auto !important;
-      transition: left var(--pfx-ts-3) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay),
-                  width 0s linear var(--pfx-autohide-collapse-delay),
-                  opacity 0s linear var(--pfx-autohide-collapse-delay) !important;
-    }
+  body:not(:has(#sidebar-box:hover)):not(:has(#navigator-toolbox:hover)):not(:has(#sidebar-splitter:hover)):not(:has(.tabbrowser-tab[multiselected])):not(:has(#tabbrowser-tabs[movingtab]))
+    #sidebar-splitter {
+    left: 0 !important;
+    width: var(--pfx-autohide-expand-trigger-width) !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    transition: left var(--pfx-transition-normal) var(--pfx-fx-sidebar) var(--pfx-autohide-collapse-delay),
+                width 0s linear var(--pfx-autohide-collapse-delay),
+                opacity 0s linear var(--pfx-autohide-collapse-delay) !important;
   }
 
   /* prevent collapse while any menu or context menu is open.
@@ -518,7 +471,7 @@ body:has(#sidebar-box[hidden]) #urlbar {
   padding-top: var(--pfx-gap-y) !important;
 /*   background-color: var(--pfx-color) !important; */
   background-color: var(--pfx-header-bg-color) !important;
-  transition: width var(--pfx-ts-3) ease, opacity var(--pfx-ts-3) ease var(--pfx-ts-2) !important;
+  transition: width var(--pfx-transition-normal) ease, opacity var(--pfx-transition-normal) ease var(--pfx-transition-instant) !important;
 }
 
 /* the thing that comes up when you hold alt, there's already settings menu */
@@ -665,7 +618,7 @@ panel#appMenu-popup {
 }
 
 #urlbar {
-  transition: opacity var(--pfx-ts-3) ease var(--pfx-ts-2) !important;
+  transition: opacity var(--pfx-transition-normal) ease var(--pfx-transition-instant) !important;
 }
 /* moz setting: "Show sidebar" active */
 body:not(:has(#sidebar-main[hidden])) #urlbar-container {
@@ -826,7 +779,7 @@ body:has(#browser > #sidebar-box[style*="; width: 600"]) #urlbar-container { wid
 
 #urlbar:is([breakout-extend]) #tracking-protection-icon-container,
 #tracking-protection-icon-container:has([open]) {
-  transition: opacity var(--pfx-ts-2) ease;
+  transition: opacity var(--pfx-transition-instant) ease;
   position: relative !important;
   left: 0px;
   top: 50%;
@@ -841,7 +794,7 @@ body:has(#browser > #sidebar-box[style*="; width: 600"]) #urlbar-container { wid
 }
 #urlbar:is([breakout-extend]) #identity-permission-box,
 #identity-permission-box:has([open]) {
-  transition: opacity var(--pfx-ts-2) ease;
+  transition: opacity var(--pfx-transition-instant) ease;
   position: relative !important;
   left: 0px;
   top: 50%;
@@ -959,13 +912,13 @@ body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
   border: 1px solid color-mix(in srgb, currentColor, transparent 87%) !important;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
-  animation: findbar-show var(--pfx-ts-2);
+  animation: findbar-show var(--pfx-transition-instant);
 }
 
 .browserContainer > findbar[hidden] {
   display: flex !important;
   bottom: -100px;
-  transition: bottom var(--pfx-ts-2) !important;
+  transition: bottom var(--pfx-transition-instant) !important;
 }
 
 .browserContainer > findbar .findbar-textbox {
@@ -1016,7 +969,7 @@ body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
   min-width: 0px !important;
   padding-left: var(--pfx-gap-x);
   background-color: var(--pfx-color) !important;
-  transition: width var(--pfx-ts-3) ease, max-width var(--pfx-ts-3) ease, margin-right var(--pfx-ts-3) ease, padding var(--pfx-ts-3) step-start, opacity var(--pfx-ts-3) ease var(--pfx-ts-2) !important;
+  transition: width var(--pfx-transition-normal) ease, max-width var(--pfx-transition-normal) ease, margin-right var(--pfx-transition-normal) ease, padding var(--pfx-transition-normal) step-start, opacity var(--pfx-transition-normal) ease var(--pfx-transition-instant) !important;
 }
 
 /* Remove the "Sidebery", "History", etc. sidepanel header  */

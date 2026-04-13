@@ -1,0 +1,2606 @@
+<html#main-window (style=...)>
+  <head>
+    <meta>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <title>
+    <script>
+    <script>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+    <link>
+  <body>
+    <stringbundleset#stringbundleset>
+      <stringbundle#bundle_brand>
+    <commandset#mainCommandSet>
+      <command#cmd_newNavigator>
+      <command#cmd_handleBackspace>
+      <command#cmd_handleShiftBackspace>
+      <command#cmd_newNavigatorTab>
+      <command#cmd_newNavigatorTabNoEvent>
+      <command#Browser:OpenFile>
+      <command#Browser:SavePage>
+      <command#Browser:SendLink>
+      <command#cmd_pageSetup>
+      <command#cmd_print>
+      <command#cmd_printPreviewToggle>
+      <command#cmd_file_importFromAnotherBrowser>
+      <command#cmd_help_importFromAnotherBrowser>
+      <command#cmd_close>
+      <command#cmd_closeWindow>
+      <command#cmd_returnToOpener>
+      <command#cmd_minimizeWindow>
+      <command#cmd_maximizeWindow>
+      <command#cmd_restoreWindow>
+      <command#cmd_toggleMute>
+      <command#cmd_CustomizeToolbars>
+      <command#cmd_toggleOfflineStatus>
+      <command#cmd_quitApplication>
+      <command#View:AboutProcesses>
+      <command#View:PageSource>
+      <command#View:PageInfo>
+      <command#View:FullScreen>
+      <command#View:ReaderView>
+      <command#View:PictureInPicture>
+      <command#cmd_find>
+      <command#cmd_findAgain>
+      <command#cmd_findPrevious>
+      <command#cmd_reportBrokenSite>
+      <command#cmd_translate>
+      <command#Browser:AddBookmarkAs>
+      <command#Browser:SearchBookmarks>
+      <command#Browser:BookmarkAllTabs>
+      <command#Browser:Back>
+      <command#Browser:BackOrBackDuplicate>
+        <observes>
+      <command#Browser:Forward>
+      <command#Browser:ForwardOrForwardDuplicate>
+        <observes>
+      <command#Browser:Stop>
+      <command#Browser:Reload>
+      <command#Browser:ReloadOrDuplicate>
+        <observes>
+      <command#Browser:ReloadSkipCache>
+        <observes>
+      <command#Profiles:CreateProfile>
+      <command#Profiles:ManageProfiles>
+      <command#Profiles:LaunchProfile>
+      <command#Profiles:MoveTabsToProfile>
+      <command#Browser:NextTab>
+      <command#Browser:PrevTab>
+      <command#Browser:ShowAllTabs>
+      <command#cmd_fullZoomReduce>
+      <command#cmd_fullZoomEnlarge>
+      <command#cmd_fullZoomReset>
+      <command#cmd_fullZoomToggle>
+      <command#cmd_gestureRotateLeft>
+      <command#cmd_gestureRotateRight>
+      <command#cmd_gestureRotateEnd>
+      <command#Browser:OpenLocation>
+      <command#Browser:RestoreLastSession>
+      <command#Browser:NewUserContextTab>
+      <command#Browser:OpenAboutContainers>
+      <command#Tools:Search>
+      <command#Tools:Downloads>
+      <command#Tools:Addons>
+      <command#cmd_openUnifiedExtensionsPanel>
+      <command#Tools:AIWindow>
+      <command#Tools:ChatsHistory>
+      <command#Tools:ClassicWindow>
+      <command#Tools:Sanitize>
+      <command#Tools:PrivateBrowsing>
+      <command#Browser:Screenshot>
+      <command#History:UndoCloseTab>
+      <command#History:UndoCloseWindow>
+      <command#History:RestoreLastClosedTabOrWindowOrSession>
+      <command#History:SearchHistory>
+      <command#wrCaptureCmd>
+      <command#wrToggleCaptureSequenceCmd>
+      <commandset#editMenuCommands>
+        <commandset#editMenuCommandSetAll>
+        <commandset#editMenuCommandSetUndo>
+        <commandset#editMenuCommandSetPaste>
+        <command#cmd_undo>
+        <command#cmd_redo>
+        <command#cmd_cut>
+        <command#cmd_copy>
+        <command#cmd_paste>
+        <command#cmd_pasteNoFormatting>
+        <command#cmd_delete>
+        <command#cmd_selectAll>
+        <command#cmd_switchTextDirection>
+    <commandset#placesCommands>
+      <script>
+      <command#Browser:ShowAllBookmarks>
+      <command#Browser:ShowAllHistory>
+      <command#placesCmd_open>
+      <command#placesCmd_open:window>
+      <command#placesCmd_open:privatewindow>
+      <command#placesCmd_open:tab>
+      <command#placesCmd_new:bookmark>
+      <command#placesCmd_new:folder>
+      <command#placesCmd_new:separator>
+      <command#placesCmd_show:info>
+      <command#placesCmd_sortBy:name>
+      <command#placesCmd_deleteDataHost>
+      <command#placesCmd_createBookmark>
+      <command#placesCmd_cut>
+      <command#placesCmd_copy>
+      <command#placesCmd_paste>
+      <command#placesCmd_delete>
+      <command#placesCmd_showInFolder>
+    <commandset#splitViewCommands>
+      <command#splitViewCmd_separateTabs>
+      <command#splitViewCmd_reverseTabs>
+      <command#splitViewCmd_closeTabs>
+    <keyset#devtoolsKeyset>
+      <key#key_toggleToolbox>
+      <key#key_toggleToolboxF12>
+      <key#key_browserToolbox>
+      <key#key_browserConsole>
+      <key#key_responsiveDesignMode>
+      <key#key_inspector>
+      <key#key_webconsole>
+      <key#key_jsdebugger>
+      <key#key_netmonitor>
+      <key#key_styleeditor>
+      <key#key_performance>
+      <key#key_storage>
+      <key#key_dom>
+      <key#key_accessibility>
+    <keyset#mainKeyset>
+      <key#key_newNavigator>
+      <key#key_newNavigatorTab>
+      <key#focusURLBar>
+      <key#focusURLBar2>
+      <key#key_search>
+      <key#key_search2>
+      <key#key_openDownloads>
+      <key#key_openAddons>
+      <key#openFileKb>
+      <key#key_savePage>
+      <key#printKb>
+      <key#key_close>
+      <key#key_closeWindow>
+      <key#key_toggleMute>
+      <key#key_undo>
+      <key#key_redo>
+      <key#key_cut>
+      <key#key_copy>
+      <key#key_paste>
+      <key#key_delete>
+      <key#key_selectAll>
+      <key>
+      <key>
+      <key#goBackKb>
+      <key#goForwardKb>
+      <key#goBackKb2>
+      <key#goForwardKb2>
+      <key#goHome>
+      <key#key_reload2>
+      <key#showAllHistoryKb>
+      <key#key_reload_skip_cache2>
+      <key#key_enterFullScreen>
+      <key#key_exitFullScreen>
+      <key#key_toggleReaderMode>
+      <key#key_togglePictureInPicture>
+      <key>
+      <key#key_reload>
+      <key#key_reload_skip_cache>
+      <key#key_aboutProcesses>
+      <key#key_viewSource>
+      <key#key_viewInfo>
+      <key#key_find>
+      <key#key_findAgain>
+      <key#key_findPrevious>
+      <key>
+      <key>
+      <key#addBookmarkAsKb>
+      <key#bookmarkAllTabsKb>
+      <key#manBookmarkKb>
+      <key#viewBookmarksSidebarKb>
+      <key#viewBookmarksToolbarKb>
+      <key#key_stop>
+      <key#viewGenaiChatSidebarKb>
+      <key#toggleSidebarKb>
+      <key#key_gotoHistory>
+      <key#key_fullZoomReduce>
+      <key>
+      <key>
+      <key#key_fullZoomEnlarge>
+      <key>
+      <key>
+      <key#key_fullZoomReset>
+      <key>
+      <key#key_showAllTabs>
+      <key#key_switchTextDirection>
+      <key#key_privatebrowsing>
+      <key#key_screenshot>
+      <key#key_sanitize>
+      <key#key_quitApplication>
+      <key#key_restoreLastClosedTabOrWindowOrSession>
+      <key#key_undoCloseWindow>
+      <key#key_selectTab1>
+      <key#key_selectTab2>
+      <key#key_selectTab3>
+      <key#key_selectTab4>
+      <key#key_selectTab5>
+      <key#key_selectTab6>
+      <key#key_selectTab7>
+      <key#key_selectTab8>
+      <key#key_selectLastTab>
+      <key#key_wrCaptureCmd>
+      <key#key_wrToggleCaptureSequenceCmd>
+    <popupset#mainPopupSet>
+      <script>
+      <menupopup#tabContextMenu>
+        <menuitem#context_openANewTab>
+        <menuitem#context_moveTabToNewGroup [hidden] (hidden)>
+        <menuitem#context_moveSplitViewToNewGroup [hidden] (hidden)>
+        <menu#context_moveTabToGroup [hidden] (hidden)>
+          <menupopup#context_moveTabToGroupPopupMenu>
+            <menuitem#context_moveTabToGroupNewGroup>
+            <menuseparator#open-tab-groups-separator-upper>
+            <menuseparator#open-tab-groups-separator-lower>
+            <menu#context_moveTabToSavedGroup>
+              <menupopup#context_moveTabToSavedGroupPopupMenu>
+        <menuitem#context_ungroupTab [hidden] (hidden)>
+        <menuitem#context_ungroupSplitView [hidden] (hidden)>
+        <menuitem#context_moveTabToSplitView [hidden] (hidden)>
+        <menuitem#context_separateSplitView [hidden] (hidden)>
+        <menuseparator>
+        <menuitem#context_reloadTab>
+        <menuitem#context_reloadSelectedTabs [hidden] (hidden)>
+        <menuitem#context_playTab [hidden] (hidden)>
+        <menuitem#context_playSelectedTabs [hidden] (hidden)>
+        <menuitem#context_toggleMuteTab>
+        <menuitem#context_toggleMuteSelectedTabs [hidden] (hidden)>
+        <menuitem#context_pinTab>
+        <menuitem#context_unpinTab [hidden] (hidden)>
+        <menuitem#context_pinSelectedTabs [hidden] (hidden)>
+        <menuitem#context_unpinSelectedTabs [hidden] (hidden)>
+        <menuitem#context_unloadTab>
+        <menuitem#context_duplicateTab>
+        <menuitem#context_duplicateTabs>
+        <menuseparator>
+        <menu#context_askChat>
+        <menuseparator>
+        <menuitem#context_bookmarkSelectedTabs [hidden] (hidden)>
+        <menuitem#context_bookmarkTab>
+        <menuitem#context_addNote [hidden] (hidden)>
+        <menu#context_updateNote [hidden] (hidden)>
+          <menupopup#tabUpdateOptionsMenu>
+            <menuitem#context_editNote>
+            <menuitem#context_deleteNote>
+        <menu#context_moveTabOptions>
+          <menupopup#moveTabOptionsMenu>
+            <menuitem#context_moveToStart>
+            <menuitem#context_moveToEnd>
+            <menuitem#context_openTabInWindow>
+            <menuseparator#moveTabSeparator [hidden] (hidden)>
+        <menu#context_reopenInContainer [hidden] (hidden)>
+          <menupopup#context_reopenInContainerPopupMenu>
+        <menuitem#context_selectAllTabs>
+        <menuseparator>
+        <menu#context_sendTabToDevice.sync-ui-item>
+          <menupopup#context_sendTabToDevicePopupMenu.sync-ui-item>
+        <menuseparator#context_sendTabToDeviceSeparator.sync-ui-item>
+        <menuitem#context_closeTab>
+        <menuitem#context_closeDuplicateTabs>
+        <menu#context_closeTabOptions>
+          <menupopup#closeTabOptions>
+            <menuitem#context_closeTabsToTheStart>
+            <menuitem#context_closeTabsToTheEnd>
+            <menuitem#context_closeOtherTabs>
+        <menuitem#context_undoCloseTab>
+        <menuseparator>
+        <menuitem#context_fullscreenAutohide.fullscreen-context-autohide>
+        <menuitem#context_fullscreenExit>
+      <menupopup#open-tab-group-context-menu>
+        <menuitem#open-tab-group-context-menu_moveToThisWindow>
+        <menuitem#open-tab-group-context-menu_moveToNewWindow>
+        <menuitem#open-tab-group-context-menu_delete>
+      <menupopup#saved-tab-group-context-menu>
+        <menuitem#saved-tab-group-context-menu_openInThisWindow>
+        <menuitem#saved-tab-group-context-menu_openInNewWindow>
+        <menuitem#saved-tab-group-context-menu_delete>
+      <menupopup#backForwardMenu>
+      <tooltip#aHTMLTooltip>
+        <description.tooltip-label>
+      <tooltip#remoteBrowserTooltip (style=...)>
+        <description.tooltip-label>
+      <menupopup#new-tab-button-popup>
+      <tabgroup-menu#tab-group-editor>
+        <panel.tab-group-editor-panel>
+          <div#tab-group-default-header>
+            <div.panel-header>
+              <h1#tab-group-editor-title-create.tab-group-create-mode-only>
+              <h1#tab-group-editor-title-edit.tab-group-edit-mode-only>
+          <div#tab-group-suggestions-heading [hidden] (hidden)>
+            <div.panel-header>
+              <h1>
+          <toolbarseparator>
+          <div.panel-body.tab-group-editor-name>
+            <label>
+            <input#tab-group-name>
+          <div#tab-group-main>
+            <div.panel-body.tab-group-editor-swatches>
+              <input#tab-group-editor-swatch-blue>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-purple>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-cyan>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-orange>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-yellow>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-pink>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-green>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-gray>
+              <label.tab-group-editor-swatch (style=...)>
+              <input#tab-group-editor-swatch-red>
+              <label.tab-group-editor-swatch (style=...)>
+            <toolbarseparator.tab-group-edit-mode-only>
+            <div.panel-body.tab-group-edit-actions.tab-group-edit-mode-only>
+              <toolbarbutton#tabGroupEditor_addNewTabInGroup.subviewbutton>
+              <toolbarbutton#tabGroupEditor_moveGroupToNewWindow.subviewbutton>
+              <toolbarbutton#tabGroupEditor_saveAndCloseGroup.subviewbutton>
+              <toolbarbutton#tabGroupEditor_ungroupTabs.subviewbutton>
+            <toolbarseparator.tab-group-edit-mode-only>
+            <div.tab-group-edit-mode-only.panel-body.tab-group-delete>
+              <toolbarbutton#tabGroupEditor_deleteGroup.subviewbutton>
+            <toolbarseparator#tab-group-suggestions-separator [hidden] (hidden)>
+            <moz-button#tab-group-suggestion-button [hidden] (hidden)>
+            <div#tab-group-suggestions-message-container [hidden] (hidden)>
+              <moz-button#tab-group-suggestions-message>
+              <p>
+            <moz-button-group#tab-group-default-actions.tab-group-create-actions.tab-group-create-mode-only>
+              <moz-button#tab-group-editor-button-cancel>
+              <moz-button#tab-group-editor-button-create>
+          <div#tab-group-suggestions-loading [hidden] (hidden)>
+            <div.tab-group-suggestions-loading-header>
+            <div.tab-group-suggestions-loading-block>
+            <div.tab-group-suggestions-loading-block>
+            <div.tab-group-suggestions-loading-block>
+          <moz-button-group#tab-group-suggestions-load-actions [hidden] (hidden)>
+            <moz-button#tab-group-suggestions-load-cancel>
+          <div#tab-group-suggestions-container [hidden] (hidden)>
+            <moz-checkbox#tab-group-select-checkbox>
+            <div#tab-group-suggestions>
+            <p>
+            <moz-button-group.panel-body.tab-group-create-actions>
+              <moz-button#tab-group-cancel-suggestions-button>
+              <moz-button#tab-group-create-suggestions-button>
+          <div#tab-group-suggestions-optin-container>
+      <tabnote-menu#tab-note-menu>
+        <panel#tabNotePanel.tab-note-editor-panel.panel-no-padding>
+          <div.panel-header>
+            <h1#tab-note-editor-title>
+          <toolbarseparator>
+          <div.panel-subview-body.tab-note-editor-name>
+            <textarea#tab-note-text>
+          <div.panel-action-row.panel-footer>
+            <div#tab-note-overflow-indicator>
+            <moz-button-group#tab-note-default-actions.tab-note-create-actions.tab-note-create-mode-only>
+              <moz-button#tab-note-editor-button-cancel>
+              <moz-button#tab-note-editor-button-save>
+      <panel#sidebar-tools-overflow.panel-no-padding>
+        <button-group#tools-overflow-list.tools-and-extensions.actions-list.overflow-list>
+      <panel#PopupAutoComplete (style=...)>
+        <richlistbox.autocomplete-richlistbox (style=...)>
+          <richlistitem.autocomplete-richlistitem>
+            <image.ac-type-icon>
+            <image.ac-site-icon>
+            <hbox.ac-title>
+              <description.ac-text-overflow-container>
+                <description.ac-title-text>
+            <hbox.ac-separator>
+              <description.ac-separator-text>
+            <hbox.ac-url>
+              <description.ac-text-overflow-container>
+                <description.ac-url-text>
+          <richlistitem.autocomplete-richlistitem>
+            <image.ac-type-icon>
+            <image.ac-site-icon>
+            <hbox.ac-title>
+              <description.ac-text-overflow-container>
+                <description.ac-title-text>
+            <hbox.ac-separator>
+              <description.ac-separator-text>
+            <hbox.ac-url>
+              <description.ac-text-overflow-container>
+                <description.ac-url-text>
+          <richlistitem.autocomplete-richlistitem>
+            <image.ac-type-icon>
+            <image.ac-site-icon>
+            <hbox.ac-title>
+              <description.ac-text-overflow-container>
+                <description.ac-title-text>
+            <hbox.ac-separator>
+              <description.ac-separator-text>
+            <hbox.ac-url>
+              <description.ac-text-overflow-container>
+                <description.ac-url-text>
+          <richlistitem.autocomplete-richlistitem>
+            <image.ac-type-icon>
+            <image.ac-site-icon>
+            <hbox.ac-title>
+              <description.ac-text-overflow-container>
+                <description.ac-title-text>
+            <hbox.ac-separator>
+              <description.ac-separator-text>
+            <hbox.ac-url>
+              <description.ac-text-overflow-container>
+                <description.ac-url-text>
+      <panel#PopupSearchAutoComplete [hidden] (hidden)>
+      <panel#selection-shortcut-action-panel.panel-no-padding>
+        <hbox.panel-subview-body>
+          <moz-button#ai-action-button>
+      <panel#chat-shortcuts-options-panel.panel-no-padding>
+        <vbox.panel-subview-body>
+      <template#screenshotsPagePanelTemplate>
+      <template#invalidFormTemplate>
+      <panel#editBookmarkPanel.panel-no-padding>
+        <box.panel-header>
+          <h1>
+            <span#editBookmarkPanelTitle>
+        <toolbarseparator#editBookmarkHeaderSeparator>
+        <vbox.panel-subview-body>
+          <div#editBookmarkPanelContent>
+            <label#editBMPanel_itemsCountText.editBMPanel_selectionCount [hidden]>
+            <label.editBMPanel_nameRow.hideable>
+            <input#editBMPanel_namePicker.editBMPanel_nameRow.hideable>
+            <label.editBMPanel_locationRow.hideable [hidden]>
+            <input#editBMPanel_locationField.editBMPanel_locationRow.uri-element.hideable [hidden]>
+            <label.editBMPanel_folderRow.hideable>
+            <hbox.editBMPanel_folderRow.hideable>
+              <menulist#editBMPanel_folderMenuList.folder-icon>
+                <menupopup.in-menulist>
+              <button#editBMPanel_foldersExpander.expander-down.panel-button>
+                <hbox.box-inherit.button-box>
+            <vbox#editBMPanel_folderTreeRow.hideable [hidden] (hidden)>
+              <hbox#editBMPanel_newFolderBox>
+                <button#editBMPanel_newFolderButton>
+            <label.editBMPanel_tagsRow.hideable>
+            <hbox.editBMPanel_tagsRow.hideable>
+              <input#editBMPanel_tagsField (style=...)>
+              <popupset>
+                <panel#editBMPanel_tagsAutocomplete [hidden] (hidden)>
+              <button#editBMPanel_tagsSelectorExpander.expander-down.panel-button>
+                <hbox.box-inherit.button-box>
+            <div#tags-field-info.editBMPanel_tagsRow.caption-label.hideable>
+            <div#editBMPanel_tagsSelectorRow.hideable [hidden] (hidden)>
+              <richlistbox#editBMPanel_tagsSelector>
+            <label.editBMPanel_keywordRow.hideable [hidden]>
+            <input#editBMPanel_keywordField.editBMPanel_keywordRow.hideable [hidden]>
+            <div#keyword-field-info.editBMPanel_keywordRow.caption-label.hideable [hidden]>
+          <vbox#editBookmarkPanelBottomContent>
+            <checkbox#editBookmarkPanel_showForNewBookmarks>
+              <image.checkbox-check>
+              <hbox.checkbox-label-box>
+                <image.checkbox-icon>
+                <label.checkbox-label>
+          <moz-button-group.panel-footer (style=...)>
+            <button#editBookmarkPanelRemoveButton.footer-button>
+              <hbox.box-inherit.button-box>
+                <image.button-icon>
+                <label.button-text>
+            <button#editBookmarkPanelDoneButton.footer-button>
+              <hbox.box-inherit.button-box>
+                <image.button-icon>
+                <label.button-text>
+      <template#UITourTooltipTemplate>
+      <template#UITourHighlightTemplate>
+      <template#dialogStackTemplate>
+      <menupopup#sidebarMenu-popup.toolbar-menupopup [hidden] (hidden)>
+        <menuitem#sidebar-switcher-bookmarks>
+        <menuitem#sidebar-switcher-history>
+        <menuitem#sidebar-switcher-tabs.sync-ui-item>
+        <menuitem#sidebar-switcher-genai-chat>
+        <menuitem#sidebar-switcher-megalist>
+        <menuseparator>
+        <menuitem#sidebarswitcher_menu__3c078156-979c-498b-8990-85f7987dd929_-sidebar-action.menuitem-iconic.webextension-menuitem (style=...)>
+        <menuitem#sidebarswitcher_menu__446900e4-71c2-419f-a6a7-df9c091e268b_-sidebar-action.menuitem-iconic.webextension-menuitem (style=...)>
+        <menuseparator#sidebar-extensions-separator>
+        <menuitem#sidebar-reverse-position>
+        <menuseparator>
+        <menuitem#sidebar-menu-close>
+      <menupopup#sidebar-context-menu>
+        <menuitem#sidebar-context-menu-manage-extension>
+        <menuitem#sidebar-context-menu-remove-extension>
+        <menuitem#sidebar-context-menu-report-extension>
+        <menuseparator>
+        <menuitem#sidebar-context-menu-unpin-extension>
+        <menuitem#sidebar-context-menu-hide-sidebar>
+        <menuitem#sidebar-context-menu-customize-sidebar>
+        <menuitem#sidebar-context-menu-enable-vertical-tabs>
+      <menupopup#sidebar-history-menu>
+        <menucaption#sidebar-history-sort-by-heading>
+          <label.menu-text>
+        <menuitem#sidebar-history-sort-by-date>
+        <menuitem#sidebar-history-sort-by-site>
+        <menuitem#sidebar-history-sort-by-date-and-site>
+        <menuitem#sidebar-history-sort-by-last-visited>
+        <menuseparator>
+        <menuitem#sidebar-history-clear>
+      <menupopup#sidebar-history-context-menu>
+        <menuitem#sidebar-history-context-open-in-tab>
+        <menu#sidebar-history-context-menu-container-tab>
+          <menupopup#sidebar-history-context-menu-container-popup>
+        <menuitem#sidebar-history-context-open-in-window>
+        <menuitem#sidebar-history-context-open-in-private-window>
+        <menuseparator>
+        <menuitem#sidebar-history-context-delete-page>
+        <menuitem#sidebar-history-context-forget-site>
+        <menuseparator>
+        <menuitem#sidebar-history-context-copy-link>
+        <menuseparator>
+        <menuitem#sidebar-history-context-bookmark-page>
+        <menuitem#sidebar-history-context-delete-pages.sidebar-history-multiselect-command>
+      <menupopup#sidebar-synced-tabs-context-menu>
+        <menuitem#sidebar-synced-tabs-context-open-in-window>
+        <menuitem#sidebar-synced-tabs-context-open-in-private-window>
+        <menuseparator>
+        <menuitem#sidebar-context-menu-close-remote-tab>
+        <menuseparator>
+        <menuitem#sidebar-synced-tabs-context-bookmark-tab>
+        <menuitem#sidebar-synced-tabs-context-copy-link>
+      <menupopup#split-view-menu>
+        <menuitem>
+        <menuitem>
+        <menuseparator>
+        <menuitem>
+      <menupopup#toolbar-context-menu>
+        <menuitem#toolbar-context-manage-extension.customize-context-manageExtension [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-remove-extension.customize-context-removeExtension [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-report-extension.customize-context-reportExtension [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator [hidden]>
+        <menuitem#toolbar-context-openANewTab [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#toolbarNavigatorItemsMenuSeparator [hidden]>
+        <menuitem#toolbar-context-reloadSelectedTab [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-reloadSelectedTabs [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-bookmarkSelectedTab [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-bookmarkSelectedTabs [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-selectAllTabs [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-undoCloseTab [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#tabbarItemsMenuSeparator [hidden]>
+        <menuitem#toolbar-context-customize-sidebar [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#toolbar-context-toggle-vertical-tabs [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuseparator#sidebarRevampSeparator [hidden]>
+        <menuitem#toolbar-context-move-to-panel.customize-context-moveToPanel [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-autohide-downloads-button [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-always-show-extensions-button [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-remove-from-toolbar.customize-context-removeFromToolbar [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-pin-to-toolbar.customize-context-pinToToolbar [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#toolbarDownloadsAnchorMenuSeparator [hidden]>
+        <menuitem#toolbar-context-always-open-downloads-panel [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#customizationMenuSeparator [hidden]>
+        <menuitem#toggle_toolbar-menubar>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#toggle_PersonalToolbar>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup>
+            <menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+        <menuseparator#viewToolbarsMenuSeparator>
+        <menuitem#toolbar-context-customize.viewCustomizeToolbar>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator [hidden]>
+        <menuitem#toolbar-context-full-screen-autohide.fullscreen-context-autohide [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#toolbar-context-full-screen-exit [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+      <menupopup#blockedPopupOptions>
+        <menuitem#blockedPopupAllowSite>
+        <menuitem#blockedPopupEdit>
+        <menuitem#blockedPopupDontShowMessage>
+        <menuseparator#blockedRedirectSeparator>
+        <menuseparator#blockedPopupsSeparator>
+      <menupopup#contentAreaContextMenu>
+        <script [hidden] (hidden)>
+        <menugroup#context-navigation [hidden]>
+          <menuitem#context-back.menuitem-iconic>
+            <img.menu-icon>
+            <label.menu-text>
+            <label.menu-highlightable-text>
+            <label.menu-accel>
+          <menuitem#context-forward.menuitem-iconic>
+            <img.menu-icon>
+            <label.menu-text>
+            <label.menu-highlightable-text>
+            <label.menu-accel>
+          <menuitem#context-reload.menuitem-iconic [hidden]>
+            <img.menu-icon>
+            <label.menu-text>
+            <label.menu-highlightable-text>
+            <label.menu-accel>
+          <menuitem#context-stop.menuitem-iconic [hidden]>
+            <img.menu-icon>
+            <label.menu-text>
+            <label.menu-highlightable-text>
+            <label.menu-accel>
+          <menuitem#context-bookmarkpage.menuitem-iconic [hidden]>
+            <img.menu-icon>
+            <label.menu-text>
+            <label.menu-highlightable-text>
+            <label.menu-accel>
+        <menuseparator#context-sep-navigation [hidden]>
+        <menuitem#context-viewsource-goToLine [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-viewsource-wrapLongLines [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-viewsource-highlightSyntax [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuseparator#context-sep-viewsource-commands [hidden]>
+        <menuitem#spell-no-suggestions [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#spell-add-to-dictionary [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#spell-undo-add-to-dictionary [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#spell-suggestions-separator [hidden]>
+        <menuitem#context-openlinkincurrent.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-openlinkincontainertab.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-openlinkintab.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#context-openlinkinusercontext-menu.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup#context-openlinkinusercontext-popup>
+        <menuitem#context-openlink.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-openlinkprivate.context-menu-open-link [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-previewlink [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span>
+              <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-open [hidden]>
+        <menuitem#context-bookmarklink [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-savelink [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyemail [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyphone [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copylink [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-stripOnShareLink [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span>
+              <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-copylink [hidden]>
+        <menu#context-sendlinktodevice.sync-ui-item [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup#context-sendlinktodevice-popup>
+        <menuseparator#context-sep-sendlinktodevice.sync-ui-item [hidden]>
+        <menuitem#context-media-play [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-media-pause [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-media-mute [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-media-unmute [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#context-media-playbackrate [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup>
+            <menuitem#context-media-playbackrate-050x>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+              <label.menu-accel>
+            <menuitem#context-media-playbackrate-100x>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+              <label.menu-accel>
+            <menuitem#context-media-playbackrate-125x>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+              <label.menu-accel>
+            <menuitem#context-media-playbackrate-150x>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+              <label.menu-accel>
+            <menuitem#context-media-playbackrate-200x>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+              <label.menu-accel>
+        <menuitem#context-media-loop [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-leave-dom-fullscreen [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-video-fullscreen [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-media-hidecontrols [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-media-showcontrols [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-media-sep-video-commands [hidden]>
+        <menuitem#context-viewvideo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-video-pictureinpicture [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-media-sep-commands [hidden]>
+        <menuitem#context-reloadimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-viewimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-saveimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-video-saveimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-savevideo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-saveaudio [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyimage-contents [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyvideourl [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copyaudiourl [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-sendimage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-sendvideo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-sendaudio [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-imagetext [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-viewimageinfo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-viewimagedesc [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-visual-search [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuseparator#context-sep-setbackground [hidden]>
+        <menuitem#context-setDesktopBackground [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-sharing [hidden]>
+        <menuitem#context-savepage [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#fill-login [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup#fill-login-popup>
+        <menuitem#fill-login-generated-password [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#use-relay-mask [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#manage-saved-logins [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#passwordmgr-items-separator [hidden]>
+        <menuitem#context-undo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-redo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-redo [hidden]>
+        <menuitem#context-cut [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-copy>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-paste [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-paste-no-formatting [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-delete [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-selectall>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-comment-selection [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-highlight-selection [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-reveal-password [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-print-selection>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-selectall>
+        <menuitem#context-copy-link-to-highlight>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-copy-clean-link-to-highlight>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-remove-highlight [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuseparator#context-sep-highlights>
+        <menuitem#context-pdfjs-undo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-redo [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-pdfjs-redo [hidden]>
+        <menuitem#context-pdfjs-cut [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-copy [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-paste [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-delete [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-pdfjs-selectall [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-pdfjs-selectall [hidden]>
+        <menuitem#context-take-screenshot>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-screenshots>
+        <menuitem#context-add-engine [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-searchselect>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-searchselect-private [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-translate-selection>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#context-ask-chat>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup>
+            <menuitem>
+            <menuitem>
+            <menuitem>
+            <menuitem>
+            <menuseparator>
+            <menuitem>
+        <menuseparator#frame-sep>
+        <menu#frame [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup>
+            <menuitem#context-showonlythisframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#context-openframeintab>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#context-openframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuseparator#open-frame-sep>
+            <menuitem#context-reloadframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuseparator>
+            <menuitem#context-bookmarkframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#context-saveframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuseparator>
+            <menuitem#context-printframe>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuseparator#print-frame-sep>
+            <menuitem#context-viewframesource>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#context-viewframeinfo>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+        <menuseparator#spell-separator [hidden]>
+        <menuitem#spell-check-enabled [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#spell-add-dictionaries-main [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menu#spell-dictionaries [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup#spell-dictionaries-menu>
+            <menuseparator#spell-language-separator>
+            <menuitem#spell-add-dictionaries>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+        <menuseparator#context-sep-bidi [hidden]>
+        <menuitem#context-bidi-text-direction-toggle [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-bidi-page-direction-toggle [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#inspect-separator [hidden]>
+        <menuitem#context-viewpartialsource-selection>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-viewsource [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+        <menuitem#context-inspect-a11y>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+          <label.menu-accel>
+        <menuitem#context-inspect>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span>
+              <span.accesskey>
+          <label.menu-accel>
+        <menuseparator#context-sep-sendpagetodevice.sync-ui-item>
+        <menu#context-sendpagetodevice.sync-ui-item [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-accel>
+          <menupopup#context-sendpagetodevice-popup>
+        <menuseparator#context-media-eme-separator [hidden]>
+        <menuitem#context-media-eme-learnmore.menuitem-iconic [hidden]>
+          <img.menu-icon>
+          <label.menu-text>
+          <label.menu-highlightable-text>
+            <span.accesskey>
+          <label.menu-accel>
+      <menupopup#pictureInPictureToggleContextMenu>
+        <menuitem#context_HidePictureInPictureToggle>
+        <menuitem#context_MovePictureInPictureToggle>
+      <menupopup#placesContext>
+        <script>
+        <menuitem#placesContext_open>
+        <menuitem#placesContext_openBookmarkContainer:tabs>
+        <menuitem#placesContext_openBookmarkLinks:tabs>
+        <menuitem#placesContext_open:newtab>
+        <menu#placesContext_open:newcontainertab>
+          <menupopup#placesContext_open_newcontainertab_popup>
+        <menuitem#placesContext_openContainer:tabs>
+        <menuitem#placesContext_openLinks:tabs>
+        <menuitem#placesContext_open:newwindow>
+        <menuitem#placesContext_open:newprivatewindow>
+        <menuitem#placesContext_showInFolder>
+        <menuseparator#placesContext_openSeparator>
+        <menuitem#placesContext_show_bookmark:info>
+        <menuitem#placesContext_show:info>
+        <menuitem#placesContext_show_folder:info>
+        <menuitem#placesContext_deleteBookmark>
+        <menuitem#placesContext_removeTag>
+        <menuitem#placesContext_deleteFolder>
+        <menuitem#placesContext_delete>
+        <menuitem#placesContext_delete_history>
+        <menuitem#placesContext_deleteHost>
+        <menuitem#placesContext_sortBy:name>
+        <menuseparator#placesContext_deleteSeparator>
+        <menuitem#placesContext_cut>
+        <menuitem#placesContext_copy>
+        <menuitem#placesContext_paste_group>
+        <menuseparator#placesContext_editSeparator>
+        <menuitem#placesContext_new:bookmark>
+        <menuitem#placesContext_new:folder>
+        <menuitem#placesContext_new:separator>
+        <menuseparator#placesContext_newSeparator>
+        <menuitem#placesContext_paste>
+        <menuseparator#placesContext_pasteSeparator>
+        <menuitem#placesContext_createBookmark>
+        <menuitem#placesContext_showAllBookmarks [hidden] (hidden)>
+      <panel#ctrlTab-panel [hidden] (hidden)>
+        <hbox#ctrlTab-previews>
+        <hbox#ctrlTab-showAll-container>
+      <panel#tab-preview-panel>
+        <div.tab-preview-content-interactive>
+        <div.tab-preview-content-main>
+          <div.tab-preview-thumbnail-container>
+          <div.tab-preview-text-container>
+            <div.tab-preview-title>
+            <div.tab-preview-uri>
+            <div.tab-preview-pid-activeness>
+              <div.tab-preview-pid>
+              <div.tab-preview-activeness>
+      <template#tabPreviewPanelTemplate>
+      <panel#tab-note-preview-panel>
+        <div.tab-note-preview-container>
+          <div.tab-note-preview-text>
+          <div.tab-note-preview-expand>
+      <panel#tabgroup-preview-panel.toolbar-menupopup.animatable-menupopup>
+        <arrowscrollbox#tabgroup-panel-content.menupopup-arrowscrollbox>
+      <template#pageActionPanelTemplate>
+      <template#confirmation-hint-wrapper>
+      <menupopup#pageActionContextMenu>
+        <menuitem#pageActionContextMenuManageExtension.pageActionContextMenuItem.extensionPinned.extensionUnpinned.manageExtensionItem>
+        <menuitem#pageActionContextMenuRemoveExtension.pageActionContextMenuItem.extensionPinned.extensionUnpinned.removeExtensionItem>
+      <tooltip#bhTooltip.places-tooltip>
+        <description.tooltip-label>
+        <box.places-tooltip-box>
+          <description.tooltip-label.places-tooltip-title>
+          <description.tooltip-label.places-tooltip-uri.uri-element>
+      <tooltip#tabbrowser-tab-tooltip.places-tooltip>
+        <description.tooltip-label>
+        <box.places-tooltip-box>
+          <description.tooltip-label.places-tooltip-title>
+          <hbox>
+            <image#places-tooltip-insecure-icon>
+            <description.tooltip-label.places-tooltip-uri.uri-element>
+      <tooltip#back-button-tooltip>
+        <description.tooltip-label>
+        <description#back-button-tooltip-description.tooltip-label>
+        <description.tooltip-label>
+      <tooltip#forward-button-tooltip>
+        <description.tooltip-label>
+        <description#forward-button-tooltip-description.tooltip-label>
+        <description.tooltip-label>
+      <panel#notification-popup.popup-notification-panel.panel-no-padding [hidden] (hidden)>
+      <popupnotification#webRTC-shareDevices-notification [hidden] (hidden)>
+        <popupnotificationcontent#webRTC-selectCamera>
+          <label#webRTC-selectCamera-label>
+          <div.webRTC-selectDevice-selector-container>
+            <image#webRTC-selectCamera-icon.webRTC-selectDevice-icon>
+            <menulist#webRTC-selectCamera-menulist>
+              <menupopup#webRTC-selectCamera-menupopup.in-menulist>
+            <label#webRTC-selectCamera-single-device-label.webRTC-selectDevice-label>
+        <popupnotificationcontent#webRTC-selectWindowOrScreen>
+          <label#webRTC-selectWindow-label>
+          <menulist#webRTC-selectWindow-menulist>
+            <menupopup#webRTC-selectWindow-menupopup.in-menulist>
+          <description#webRTC-all-windows-shared [hidden] (hidden)>
+        <popupnotificationcontent#webRTC-preview-section>
+          <vbox#webRTC-previewWarningBox>
+            <description#webRTC-previewWarning>
+            <hbox>
+              <a#webRTC-previewWarning-learnMore.popup-notification-learnmore-link>
+        <popupnotificationcontent#webRTC-selectMicrophone>
+          <label#webRTC-selectMicrophone-label>
+          <div.webRTC-selectDevice-selector-container>
+            <image#webRTC-selectMicrophone-icon.webRTC-selectDevice-icon>
+            <menulist#webRTC-selectMicrophone-menulist>
+              <menupopup#webRTC-selectMicrophone-menupopup.in-menulist>
+            <label#webRTC-selectMicrophone-single-device-label.webRTC-selectDevice-label>
+        <popupnotificationcontent#webRTC-selectSpeaker>
+          <div.webRTC-selectDevice-selector-container>
+            <image#webRTC-selectSpeaker-icon.webRTC-selectDevice-icon>
+            <richlistbox#webRTC-selectSpeaker-richlistbox>
+            <label#webRTC-selectSpeaker-single-device-label.webRTC-selectDevice-label>
+      <popupnotification#servicesInstall-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+      <popupnotification#password-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <label.password-notification-label>
+          <stack>
+            <input#password-notification-username.ac-has-end-icon>
+            <dropmarker#password-notification-username-dropmarker.ac-dropmarker>
+          <label.password-notification-label>
+          <stack>
+            <input#password-notification-password>
+            <dropmarker#password-notification-password-dropmarker.ac-dropmarker [hidden] (hidden)>
+      <popupnotification#addon-progress-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <progress#addon-progress-notification-progressmeter>
+          <label#addon-progress-notification-progresstext>
+      <popupnotification#addon-install-confirmation-notification [hidden] (hidden)>
+        <popupnotificationcontent#addon-install-confirmation-content>
+      <popupnotification#addon-webext-permissions-notification [hidden] (hidden)>
+        <popupnotificationcontent.addon-webext-perm-notification-content>
+          <description#addon-webext-perm-text.addon-webext-perm-text>
+          <label#addon-webext-perm-intro.addon-webext-perm-text>
+          <h2#addon-webext-perm-title-required>
+          <ul#addon-webext-perm-list-required.addon-webext-perm-list>
+          <h2#addon-webext-perm-title-data-collection>
+          <ul#addon-webext-perm-list-data-collection.addon-webext-perm-list>
+          <h2#addon-webext-perm-title-optional>
+          <ul#addon-webext-perm-list-optional.addon-webext-perm-list>
+      <popupnotification#addon-install-blocked-notification [hidden] (hidden)>
+        <popupnotificationcontent#addon-install-blocked-content>
+          <description#addon-install-blocked-message.popup-notification-description>
+          <hbox>
+            <a#addon-install-blocked-info.popup-notification-learnmore-link>
+      <popupnotification#addon-install-failed-blocklist-notification [hidden] (hidden)>
+        <popupnotificationcontent#addon-install-failed-blocklist-content>
+          <a#addon-install-failed-blocklist-info.popup-notification-learnmore-link>
+      <popupnotification#canvas-permissions-prompt-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <description.popup-notification-description>
+          <label#canvas-permissions-prompt-warning>
+      <popupnotification#contextual-feature-recommendation-notification [hidden] (hidden)>
+        <popupnotificationheader#cfr-notification-header>
+          <stack#cfr-notification-header-stack>
+            <description#cfr-notification-header-label>
+            <label#cfr-notification-header-link.text-link>
+              <image#cfr-notification-header-image>
+        <popupnotificationcontent>
+          <hbox>
+            <description#cfr-notification-author>
+            <hbox#cfr-notification-footer-addon-info>
+              <hbox#cfr-notification-footer-filled-stars>
+              <hbox#cfr-notification-footer-empty-stars>
+              <label#cfr-notification-footer-users>
+        <popupnotificationfooter#cfr-notification-footer>
+          <vbox#cfr-notification-footer-text-and-addon-info>
+            <description#cfr-notification-footer-text>
+            <label#cfr-notification-footer-learn-more-link.text-link>
+      <popupnotification#credential-chooser-notification [hidden] (hidden)>
+        <popupnotificationheader#credential-chooser-header>
+          <div#credential-chooser-header-container>
+            <span#credential-chooser-header-text>
+        <popupnotificationcontent#credential-chooser-entry>
+          <div#credential-chooser-entry-selector-container>
+          <template#template-credential-entry-list-item>
+      <popupnotification#identity-credential-notification [hidden] (hidden)>
+        <popupnotificationheader#identity-credential-header [hidden] (hidden)>
+          <div#identity-credential-header-container>
+            <img.identity-credential-header-icon>
+            <span#identity-credential-header-text>
+        <popupnotificationcontent#identity-credential-provider>
+          <div#identity-credential-provider-selector-container>
+          <template#template-credential-provider-list-item>
+        <popupnotificationcontent#identity-credential-policy>
+          <description#identity-credential-policy-explanation>
+            <label#identity-credential-privacy-policy.text-link>
+            <label#identity-credential-terms-of-service.text-link>
+        <popupnotificationcontent#identity-credential-account [hidden] (hidden)>
+          <div#identity-credential-account-selector-container>
+          <template#template-credential-account-list-item>
+      <popupnotification#relay-integration-offer-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p>
+              <label.firefox-relay-learn-more-url.text-link>
+              <label.firefox-fxa-and-relay-offer-domain>
+            <p#firefox-relay-offer-what-relay-provides>
+              <strong>
+            <p#firefox-relay-offer-legal-notice>
+              <label.firefox-fxa-and-relay-offer-tos-url.text-link>
+              <label.firefox-fxa-and-relay-offer-privacy-url.text-link>
+      <popupnotification#fxa-and-relay-integration-offer-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p>
+            <p.firefox-relay-offer-what-fxa-and-relay-provides>
+            <p#firefox-fxa-and-relay-offer-legal-notice>
+              <label.firefox-fxa-and-relay-offer-tos-url.text-link>
+              <label.firefox-fxa-and-relay-offer-privacy-url.text-link>
+      <popupnotification#fxa-and-relay-integration-offer-basic-info-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p>
+              <label.firefox-relay-learn-more-url.text-link>
+              <label.firefox-fxa-and-relay-offer-domain>
+            <p.firefox-relay-offer-what-fxa-and-relay-provides>
+      <popupnotification#fxa-and-relay-integration-offer-with-domain-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p>
+              <label.firefox-relay-learn-more-url.text-link>
+              <label.firefox-fxa-and-relay-offer-domain>
+            <p.firefox-relay-offer-what-fxa-and-relay-provides>
+      <popupnotification#fxa-and-relay-integration-offer-with-domain-and-value-prop-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p>
+              <label.firefox-relay-learn-more-url.text-link>
+              <label.firefox-fxa-and-relay-offer-domain>
+            <p.firefox-relay-offer-what-fxa-and-relay-provides>
+      <popupnotification#relay-integration-reuse-masks-notification [hidden] (hidden)>
+        <popupnotificationcontent>
+          <div>
+            <p.error-message>
+            <div.reusable-relay-masks>
+      <template#firefox-relay-header>
+        <div.relay-integration-header>
+          <div>
+          <div>
+            <span>
+            <span>
+      <template#firefox-relay-header-basic-info>
+        <div.relay-integration-header-variation>
+          <p>
+      <template#firefox-relay-header-with-domain>
+        <div.relay-integration-header-variation>
+          <p>
+      <template#firefox-relay-header-with-domain-and-value-prop>
+        <div.relay-integration-header-variation>
+          <p>
+      <popupnotification#credit-card-save-update-notification.credit-card-capture-notification [hidden] (hidden)>
+        <popupnotificationcontent.credit-card-save-update-notification-content>
+          <div.credit-card-capture-content>
+      <popupnotification#address-save-update-notification.address-capture-notification [hidden] (hidden)>
+        <popupnotificationcontent.address-save-update-notification-content>
+          <div.address-capture-header>
+            <h1>
+          <div.address-capture-description>
+            <p>
+          <div.address-capture-content>
+      <popupnotification#address-edit-notification.address-capture-notification [hidden] (hidden)>
+        <popupnotificationcontent.address-edit-notification-content>
+          <div.address-capture-header>
+            <h1>
+          <div.address-capture-content>
+      <panel#widget-overflow.panel-no-padding [hidden] (hidden)>
+        <panelmultiview>
+          <panelview#widget-overflow-mainView>
+            <vbox.panel-subview-body>
+              <vbox#widget-overflow-list.widget-overflow-list>
+              <toolbarseparator#widget-overflow-fixed-separator>
+              <vbox#widget-overflow-fixed-list.widget-overflow-list.customization-target>
+                <toolbarbutton#fxa-toolbar-menu-button.toolbarbutton-1.chromeclass-toolbar-additional.subviewbutton-nav>
+            <toolbarseparator>
+            <toolbarbutton#overflowMenu-customize-button.subviewbutton.panel-subview-footer-button>
+        <menupopup#customizationPanelItemContextMenu>
+          <menuitem#customizationPanelItemContextMenuManageExtension.customize-context-manageExtension>
+          <menuitem#customizationPanelItemContextMenuRemoveExtension.customize-context-removeExtension>
+          <menuitem#customizationPanelItemContextMenuReportExtension.customize-context-reportExtension>
+          <menuseparator>
+          <menuitem#customizationPanelItemContextMenuPin.customize-context-moveToPanel>
+          <menuitem#customizationPanelItemContextMenuUnpin.customize-context-moveToToolbar>
+          <menuitem#customizationPanelItemContextMenuRemove.customize-context-removeFromPanel>
+          <menuseparator>
+          <menuitem.viewCustomizeToolbar>
+      <template#unified-extensions-panel-template>
+      <template#panicButtonNotificationTemplate>
+      <template#appMenuNotificationTemplate>
+      <menupopup#customizationPaletteItemContextMenu>
+        <menuitem#customizationPaletteItemContextMenuAddToToolbar.customize-context-addToToolbar>
+        <menuitem#customizationPaletteItemContextMenuAddToPanel.customize-context-addToPanel>
+      <panel#downloads-button-autohide-panel>
+        <checkbox#downloads-button-autohide-checkbox>
+          <image.checkbox-check>
+          <hbox.checkbox-label-box>
+            <image.checkbox-icon>
+            <label.checkbox-label>
+      <panel#appMenu-popup.cui-widget-panel.panel-no-padding>
+        <panelmultiview#appMenu-multiView>
+          <box.panel-viewcontainer>
+            <box.panel-viewstack>
+              <panelview#appMenu-mainView.PanelUI-subView>
+                <vbox.panel-subview-body>
+          <box.panel-viewcontainer.offscreen>
+            <box.panel-viewstack>
+      <panel#extension-notification-panel.popup-notification-panel.panel-no-padding>
+        <popupnotification#extension-new-tab-notification.extension-controlled-notification [hidden]>
+          <hbox.popup-notification-header-container>
+          <hbox.popup-notification-body-container>
+            <image.popup-notification-icon>
+            <vbox.popup-notification-body>
+              <label.popup-notification-origin.header>
+              <description.popup-notification-description>
+                <span>
+                <b.popup-notification-description-name>
+                <span>
+                <b>
+                <span>
+              <description.popup-notification-hint-text>
+              <popupnotificationcontent>
+                <description#extension-new-tab-notification-description>
+              <vbox.popup-notification-bottom-content>
+                <label.popup-notification-learnmore-link.text-link>
+                <checkbox.popup-notification-checkbox [hidden]>
+                <description.popup-notification-warning>
+            <toolbarbutton.messageCloseButton.close-icon.popup-notification-closebutton.tabbable [hidden] (hidden)>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+          <hbox.popup-notification-footer-container>
+          <moz-button-group.panel-footer>
+            <button.popup-notification-secondary-button.footer-button>
+              <hbox.box-inherit.button-box>
+                <image.button-icon>
+                <label.button-text>
+            <button.popup-notification-dropmarker.footer-button [hidden] (hidden)>
+              <menupopup>
+              <hbox.box-inherit.button-box>
+                <hbox.box-inherit>
+                <dropmarker.button-menu-dropmarker>
+            <button.popup-notification-primary-button.primary.footer-button>
+              <hbox.box-inherit.button-box>
+                <image.button-icon>
+                <label.button-text>
+        <popupnotification#extension-homepage-notification.extension-controlled-notification [hidden] (hidden)>
+          <popupnotificationcontent>
+            <description#extension-homepage-notification-description>
+        <popupnotification#extension-tab-hide-notification.extension-controlled-notification [hidden] (hidden)>
+          <popupnotificationcontent>
+            <description#extension-tab-hide-notification-description>
+      <template#template-identity-popup>
+      <template#template-permission-popup>
+      <panel#trustpanel-popup.panel-no-padding.site-information-popup>
+        <panelmultiview#trustpanel-popup-multiView>
+          <box.panel-viewcontainer>
+            <box.panel-viewstack>
+              <panelview#trustpanel-popup-mainView.PanelUI-subView>
+                <vbox#trustpanel-header-section>
+          <box.panel-viewcontainer.offscreen>
+            <box.panel-viewstack>
+          <panelview#trustpanel-securityInformationView.PanelUI-subView>
+            <vbox.panel-subview-body>
+              <hbox.identity-popup-security-connection.identity-popup-section>
+                <image.identity-popup-security-connection-icon>
+                <description.identity-popup-connection-not-secure.security-view>
+                <description.identity-popup-connection-secure.security-view>
+                <box.only-trustpanel>
+              <vbox#identity-popup-securityView-extended-info.identity-popup-section>
+                <description#identity-popup-content-owner-label>
+                <description#identity-popup-content-owner.header>
+                <description#identity-popup-content-supplemental>
+                <description#identity-popup-content-verifier>
+                <description#identity-popup-content-etsi>
+                <description#identity-popup-content-verifier-unknown.identity-popup-warning-box.identity-popup-warning-gray>
+                <button#identity-popup-remove-cert-exception.panel-button>
+                <description>
+                <description>
+                <description.identity-popup-warning-box.identity-popup-warning-yellow>
+                <description.identity-popup-warning-box.identity-popup-warning-gray>
+                <description>
+                <description.identity-popup-warning-box.identity-popup-warning-yellow>
+                <description>
+                <description.identity-popup-warning-box.identity-popup-warning-yellow>
+                <description>
+                <description>
+                <hbox>
+                <vbox#trustpanel-popup-security-httpsonlymode.only-trustpanel>
+            <toolbarseparator>
+            <a#trustpanel-siteinformation-morelink.trustpanel-section.panel-subview-footer-button>
+          <panelview#trustpanel-blockerView.PanelUI-subView>
+            <toolbarseparator>
+            <moz-message-bar#trustpanel-smartblock-section [hidden]>
+              <div>
+                <vbox>
+            <vbox#trustpanel-blocked.trustpanel-blocker-section [hidden]>
+              <label#trustpanel-blocked-header.trustpanel-header>
+              <vbox.trustpanel-blocker-buttons>
+                <moz-button.moz-button-subviewbutton-nav>
+            <toolbarseparator>
+            <vbox#trustpanel-detected.trustpanel-blocker-section [hidden]>
+              <label#trustpanel-tracking-header.trustpanel-header>
+              <label#trustpanel-tracking-description>
+              <vbox.trustpanel-blocker-buttons>
+                <moz-button.moz-button-subviewbutton-nav>
+          <panelview#trustpanel-blockerDetailsView.PanelUI-subView>
+            <toolbarseparator>
+            <vbox.trustpanel-blocker-section>
+              <label#trustpanel-blocker-details-header.trustpanel-header>
+              <label#trustpanel-blocker-details-content>
+              <toolbarseparator>
+              <label#trustpanel-blocker-details-list-header.trustpanel-header>
+              <vbox#trustpanel-blocker-items.trustpanel-blocker-section.panel-subview-body>
+          <panelview#trustpanel-clearcookiesView.PanelUI-subView>
+            <toolbarseparator>
+            <vbox.trustpanel-section>
+              <label>
+              <moz-button-group>
+                <moz-button#trustpanel-clear-cookie-cancel>
+                <moz-button#trustpanel-clear-cookie-clear>
+      <template#template-protections-popup>
+      <commandset#downloadPanelCommands>
+        <command#downloadsCmd_doDefault>
+        <command#downloadsCmd_pauseResume>
+        <command#downloadsCmd_cancel>
+        <command#downloadsCmd_unblock>
+        <command#downloadsCmd_chooseUnblock>
+        <command#downloadsCmd_unblockAndOpen>
+        <command#downloadsCmd_unblockAndSave>
+        <command#downloadsCmd_confirmBlock>
+        <command#downloadsCmd_open>
+        <command#downloadsCmd_open:current>
+        <command#downloadsCmd_open:tab>
+        <command#downloadsCmd_open:tabshifted>
+        <command#downloadsCmd_open:window>
+        <command#downloadsCmd_show>
+        <command#downloadsCmd_retry>
+        <command#downloadsCmd_openReferrer>
+        <command#downloadsCmd_copyLocation>
+        <command#downloadsCmd_clearList>
+        <command#downloadsCmd_openInSystemViewer>
+        <command#downloadsCmd_alwaysOpenInSystemViewer>
+        <command#downloadsCmd_alwaysOpenSimilarFiles>
+        <command#downloadsCmd_deleteFile>
+        <command#downloadsCmd_deletePrivate>
+        <command#downloadsCmd_dismissDeletePrivate>
+      <panel#downloadsPanel.cui-widget-panel.panel-no-padding [hidden] (hidden)>
+        <linkset>
+          <link>
+        <menupopup#downloadsContextMenu.download-state>
+          <menuitem.downloadPauseMenuItem>
+          <menuitem.downloadResumeMenuItem>
+          <menuitem.downloadUnblockMenuItem>
+          <menuitem.downloadUseSystemDefaultMenuItem>
+          <menuitem.downloadAlwaysUseSystemDefaultMenuItem>
+          <menuitem.downloadAlwaysOpenSimilarFilesMenuItem>
+          <menuitem.downloadShowMenuItem>
+          <menuseparator.downloadCommandsSeparator>
+          <menuitem.downloadOpenReferrerMenuItem>
+          <menuitem.downloadCopyLocationMenuItem>
+          <menuseparator>
+          <menuitem.downloadDeleteFileMenuItem>
+          <menuitem.downloadRemoveFromHistoryMenuItem>
+          <menuitem>
+          <menuitem [hidden] (hidden)>
+        <panelmultiview#downloadsPanel-multiView>
+          <panelview#downloadsPanel-mainView>
+            <vbox.panel-view-body-unscrollable>
+              <richlistbox#downloadsListBox (style=...)>
+              <description#emptyDownloads>
+            <vbox#downloadsFooter>
+              <stack>
+                <hbox#downloadsSummary>
+                <vbox#downloadsFooterButtons>
+          <panelview#downloadsPanel-blockedSubview.PanelUI-subView>
+            <vbox.panel-view-body-unscrollable>
+              <hbox.downloadsPanel-blockedSubview-title-box>
+                <description#downloadsPanel-blockedSubview-title>
+                <image.downloadsPanel-blockedSubview-image>
+              <description#downloadsPanel-blockedSubview-details1>
+              <description#downloadsPanel-blockedSubview-details2>
+            <moz-button-group#downloadsPanel-blockedSubview-buttons.panel-footer>
+              <button#downloadsPanel-blockedSubview-unblockButton.footer-button>
+                <hbox.box-inherit.button-box>
+              <button#downloadsPanel-blockedSubview-deleteButton.footer-button>
+                <hbox.box-inherit.button-box>
+          <panelview#downloadsPanel-privateBrowsing.PanelUI-subview>
+            <box.panel-header.panel-header-with-additional-element>
+              <h1>
+                <span>
+            <vbox.panel-view-body-unscrollable>
+              <description>
+            <moz-button-group.panel-footer>
+              <button.footer-button.secondary>
+                <hbox.box-inherit.button-box>
+              <button.footer-button.primary>
+                <hbox.box-inherit.button-box>
+      <template#template-select-translations-panel>
+      <template#template-translations-panel>
+      <template#allTabsMenu-container>
+      <tooltip#dynamic-shortcut-tooltip>
+        <description.tooltip-label>
+      <menupopup#SyncedTabsSidebarContext>
+        <menuitem#syncedTabsOpenSelected>
+        <menuitem#syncedTabsOpenSelectedInTab>
+        <menu#syncedTabsOpenSelectedInContainerTab [hidden] (hidden)>
+          <menupopup#SyncedTabsOpenSelectedInContainerTabMenu>
+        <menuitem#syncedTabsOpenSelectedInWindow>
+        <menuitem#syncedTabsOpenSelectedInPrivateWindow>
+        <menuseparator>
+        <menuitem#syncedTabsBookmarkSelected>
+        <menuitem#syncedTabsCopySelected>
+        <menuseparator>
+        <menuitem#syncedTabsOpenAllInTabs>
+        <menuitem#syncedTabsManageDevices>
+        <menuitem#syncedTabsRefresh>
+      <menupopup#SyncedTabsSidebarTabsFilterContext.textbox-contextmenu>
+        <menuitem>
+        <menuseparator>
+        <menuitem>
+        <menuitem>
+        <menuitem>
+        <menuitem>
+        <menuseparator>
+        <menuitem>
+        <menuseparator>
+        <menuitem#syncedTabsRefreshFilter>
+      <hbox [hidden] (hidden)>
+        <svg#swipe-nav-icon.swipe-nav-icon>
+          <circle.swipe-nav-icon-circle-outline>
+          <circle.swipe-nav-icon-circle>
+          <path.swipe-nav-icon-arrow>
+      <template#sharing-tabs-warning-panel-template>
+      <template#PictureInPicturePanelTemplate>
+      <menupopup#unified-extensions-context-menu>
+        <menuitem#unified-extensions-context-menu-pin-to-toolbar.unified-extensions-context-menu-pin-to-toolbar>
+        <menuitem#unified-extensions-context-menu-move-widget-up.unified-extensions-context-menu-move-widget-up>
+        <menuitem#unified-extensions-context-menu-move-widget-down.unified-extensions-context-menu-move-widget-down>
+        <menuseparator.unified-extensions-context-menu-management-separator>
+        <menuitem#unified-extensions-context-menu-manage-extension.unified-extensions-context-menu-manage-extension>
+        <menuitem#unified-extensions-context-menu-remove-extension.unified-extensions-context-menu-remove-extension>
+        <menuitem#unified-extensions-context-menu-report-extension.unified-extensions-context-menu-report-extension>
+      <menupopup#full-page-translations-panel-settings-menupopup>
+        <menuitem#translations-panel-settings-always-offer-translation.always-offer-translations-menuitem>
+        <menuitem#translations-panel-settings-always-translate.always-translate-language-menuitem>
+        <menuitem#translations-panel-settings-never-translate.never-translate-language-menuitem>
+        <menuseparator>
+        <menuitem#translations-panel-settings-never-translate-site.never-translate-site-menuitem>
+        <menuseparator>
+        <menuitem#translations-panel-manage-languages.manage-languages-menuitem>
+        <menuitem#translations-panel-about>
+      <menupopup#select-translations-panel-settings-menupopup>
+        <menuitem#select-translations-panel-open-settings-page-menuitem.manage-languages-menuitem>
+        <menuitem#select-translations-panel-about-translations-menuitem>
+      <panel#link-preview-panel.panel-no-padding (style=...)>
+        <link-preview-card (style=...)>
+    <template#appMenu-viewCache>
+      <panelview#PanelUI-webext-jid1-bofifl9vbdl2zq_jetpack-BAV>
+      <panelview#PanelUI-webext-addon_darkreader_org-BAV>
+      <panelview#PanelUI-webext-_d07ccf11-c0cd-4938-a265-2a4d6ad01189_-BAV>
+      <panelview#PanelUI-webext-ublock0_raymondhill_net-BAV>
+      <panelview#PanelUI-webext-_contain-facebook-BAV>
+      <panelview#PanelUI-webext-_446900e4-71c2-419f-a6a7-df9c091e268b_-BAV>
+      <panelview#PanelUI-webext-firefoxcolor_mozilla_com-BAV>
+      <panelview#PanelUI-webext-clearcache_michel_de_almeida-BAV>
+      <panelview#PanelUI-webext-newtaboverride_agenedia_com-BAV>
+      <panelview#PanelUI-webext-_3c078156-979c-498b-8990-85f7987dd929_-BAV>
+      <panelview#PanelUI-webext-_9a41dee2-b924-4161-a971-7fb35c053a4a_-BAV>
+      <panelview#PanelUI-webext-firefox-extension_zerobounce_net-BAV>
+      <panelview#PanelUI-webext-_d7742d87-e61d-4b78-b8a1-b469842139fa_-BAV>
+    <template#unified-extensions-item-template>
+    <div#titlestrings [hidden]>
+      <span#mainWindowTitle>
+      <span#privateWindowTitle>
+      <span#privateWindowSuffixForContent>
+    <dialog#window-modal-dialog (style=...)>
+    <template#window-modal-dialog-template>
+    <toolbox#navigator-toolbox.browser-toolbox-background>
+      <script>
+      <toolbar#toolbar-menubar.browser-toolbar.chromeclass-menubar.browser-titlebar.customization-target>
+        <toolbaritem#menubar-items>
+          <menubar#main-menubar>
+            <script>
+            <menu#file-menu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_FilePopup>
+                <menuitem#menu_newNavigatorTab>
+                <menu#menu_newUserContext [hidden] (hidden)>
+                <menuitem#menu_newNavigator>
+                <menuitem#menu_newAIWindow>
+                <menuitem#menu_newClassicWindow>
+                <menuitem#menu_newPrivateWindow>
+                <menuitem#menu_openLocation [hidden] (hidden)>
+                <menuitem#menu_openFile>
+                <menuitem#menu_close.show-only-for-keyboard>
+                <menuitem#menu_closeWindow.show-only-for-keyboard>
+                <menuseparator>
+                <menuitem#menu_savePage>
+                <menuitem#menu_sendLink>
+                <menuseparator>
+                <menuitem#menu_print>
+                <menuseparator>
+                <menuitem#menu_importFromAnotherBrowser>
+                <menuseparator>
+                <menuitem#goOfflineMenuitem>
+                <menuitem#menu_FileQuitItem>
+            <menu#edit-menu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_EditPopup>
+                <menuitem#menu_undo>
+                <menuitem#menu_redo>
+                <menuseparator>
+                <menuitem#menu_cut>
+                <menuitem#menu_copy>
+                <menuitem#menu_paste>
+                <menuitem#menu_delete>
+                <menuseparator>
+                <menuitem#menu_selectAll>
+                <menuseparator>
+                <menuitem#menu_find>
+                <menuitem#menu_findAgain.show-only-for-keyboard>
+                <menuseparator#textfieldDirection-separator [hidden] (hidden)>
+                <menuitem#textfieldDirection-swap [hidden] (hidden)>
+                <menuseparator>
+                <menuitem#menu_preferences>
+            <menu#view-menu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_viewPopup>
+                <menu#viewToolbarsMenu>
+                <menu#viewSidebarMenuMenu>
+                <menuseparator>
+                <menu#viewFullZoomMenu>
+                <menu#pageStyleMenu>
+                <menuitem#repair-text-encoding>
+                <menuseparator>
+                <menuitem#fullScreenItem>
+                <menuitem#menu_readerModeItem [hidden]>
+                <menuitem#menu_showAllTabs [hidden] (hidden)>
+                <menuseparator#documentDirection-separator [hidden] (hidden)>
+                <menuitem#documentDirection-swap [hidden] (hidden)>
+            <menu#history-menu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#historyMenuPopup>
+                <menuitem#menu_showAllHistory>
+                <menuitem#chatsHistoryMenu.chats-history-menuitem [hidden] (hidden)>
+                <menuitem#sanitizeItem>
+                <menuseparator#sanitizeSeparator>
+                <menuitem#sync-tabs-menuitem [hidden] (hidden)>
+                <menuitem#historyRestoreLastSession>
+                <menuitem#hiddenTabsMenu [hidden] (hidden)>
+                <menuitem#menu_searchHistory>
+                <menu#historyUndoMenu>
+                <menu#historyUndoWindowMenu>
+                <menuseparator#startChatHistorySeparator [hidden] (hidden)>
+                <menuitem#recentChatsHeader.recent-chats-header [hidden] (hidden)>
+                <menuseparator#startHistorySeparator.hide-if-empty-places-result>
+            <menu#bookmarksMenu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#bookmarksMenuPopup>
+                <menuitem#bookmarksShowAll>
+                <menuseparator#organizeBookmarksSeparator>
+                <menuitem#menu_bookmarkThisPage>
+                <menuitem#menu_searchBookmarks>
+                <menuitem#menu_bookmarkAllTabs.show-only-for-keyboard>
+                <menuseparator#bookmarksToolbarSeparator>
+                <menu#bookmarksToolbarFolderMenu.menu-iconic.bookmark-item>
+                <menu#menu_unsortedBookmarks.menu-iconic.bookmark-item>
+                <menu#menu_mobileBookmarks.menu-iconic.bookmark-item [hidden] (hidden)>
+                <menuseparator#bookmarksMenuItemsSeparator>
+            <menu#profiles-menu [hidden]>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_ProfilesPopup>
+                <menuitem#menu_newProfile.menuitem-iconic>
+                <menuseparator#profilesSeparator>
+                <menuitem#menu_manageProfiles>
+            <menu#tools-menu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_ToolsPopup>
+                <menuitem#menu_openDownloads>
+                <menuitem#menu_openAddons>
+                <menuitem#sync-setup.sync-ui-item [hidden]>
+                <menuitem#sync-enable.sync-ui-item [hidden]>
+                <menuitem#sync-unverifieditem.sync-ui-item [hidden]>
+                <menuitem#sync-syncnowitem.sync-ui-item>
+                <menuitem#sync-reauthitem.sync-ui-item [hidden]>
+                <menuitem#menu_openFirefoxView>
+                <menuseparator#devToolsSeparator>
+                <menu#browserToolsMenu>
+                <menuitem#menu_pageInfo>
+            <menu#helpMenu>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-accel>
+              <menupopup#menu_HelpPopup>
+                <menuitem#menu_openHelp>
+                <menuitem#help_reportBrokenSite>
+                <menuitem#feedbackPage>
+                <menuitem#helpSafeMode>
+                <menuitem#troubleShooting>
+                <menuitem#menu_HelpPopup_reportPhishingtoolmenu [hidden] (hidden)>
+                <menuitem#menu_HelpPopup_reportPhishingErrortoolmenu [hidden] (hidden)>
+                <menuitem#helpSwitchDevice>
+                <menuseparator#aboutSeparator>
+                <menuitem#aboutName>
+                <menuseparator#helpPolicySeparator [hidden] (hidden)>
+                <menuitem#helpPolicySupport [hidden] (hidden)>
+        <spacer (style=...)>
+        <hbox.titlebar-buttonbox-container>
+          <hbox.titlebar-buttonbox>
+            <toolbarbutton.titlebar-button.titlebar-min>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-max>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-restore>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-close>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+      <toolbar#TabsToolbar.browser-toolbar.browser-titlebar>
+        <hbox.titlebar-spacer>
+        <hbox.toolbar-items>
+          <toolbartabstop>
+          <hbox#TabsToolbar-customization-target.customization-target>
+            <toolbarbutton#firefox-view-button.toolbarbutton-1.chromeclass-toolbar-additional>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <tabs#tabbrowser-tabs (style=...)>
+              <div#pinned-drop-indicator>
+                <img#pinned-drop-indicator-icon>
+                <span#pinned-drop-indicator-text>
+              <sidebar-pins-promo#drag-to-pin-promo-card>
+              <arrowscrollbox#pinned-tabs-container>
+              <splitter#vertical-pinned-tabs-splitter [hidden]>
+              <hbox.tab-drop-indicator [hidden] (hidden)>
+              <arrowscrollbox#tabbrowser-arrowscrollbox>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <tab.tabbrowser-tab>
+                <hbox#tabbrowser-arrowscrollbox-periphery>
+              <toolbarbutton#vertical-tabs-newtab-button.toolbarbutton-1>
+                <menupopup.new-tab-popup>
+                <image.toolbarbutton-icon>
+                <label.toolbarbutton-text>
+              <span#tabbrowser-tab-a11y-desc [hidden] (hidden)>
+            <toolbarbutton#new-tab-button.toolbarbutton-1.chromeclass-toolbar-additional>
+              <menupopup.new-tab-popup>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton#alltabs-button.toolbarbutton-1.chromeclass-toolbar-additional.tabs-alltabs-button>
+              <stack.toolbarbutton-badge-stack>
+                <image.toolbarbutton-icon>
+                <label.toolbarbutton-badge>
+              <label.toolbarbutton-text>
+        <hbox.titlebar-spacer>
+        <hbox.private-browsing-indicator-with-label>
+          <image.private-browsing-indicator-icon>
+          <label.private-browsing-indicator-label>
+        <toolbarbutton.content-analysis-indicator.toolbarbutton-1.content-analysis-indicator-icon>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <toolbarbutton#ai-window-toggle.toolbarbutton-1.chromeclass-toolbar-additional [hidden]>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <hbox.titlebar-buttonbox-container>
+          <hbox.titlebar-buttonbox>
+            <toolbarbutton.titlebar-button.titlebar-min>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-max>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-restore>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-close>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+      <toolbar#nav-bar.browser-toolbar.chromeclass-location>
+        <img#taskbar-tabs-favicon>
+        <hbox.titlebar-spacer>
+        <toolbartabstop>
+        <hbox#nav-bar-customization-target.customization-target>
+          <toolbarbutton#sidebar-button.toolbarbutton-1.chromeclass-toolbar-additional>
+            <observes>
+            <observes>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <toolbarbutton#back-button.toolbarbutton-1.chromeclass-toolbar-additional>
+            <menupopup [hidden]>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <toolbarbutton#forward-button.toolbarbutton-1.chromeclass-toolbar-additional>
+            <menupopup>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <toolbaritem#stop-reload-button.chromeclass-toolbar-additional>
+            <toolbarbutton#reload-button.toolbarbutton-1>
+              <image.toolbarbutton-icon>
+              <box.toolbarbutton-animatable-box>
+                <image.toolbarbutton-animatable-image>
+              <label.toolbarbutton-text>
+            <toolbarbutton#stop-button.toolbarbutton-1>
+              <image.toolbarbutton-icon>
+              <box.toolbarbutton-animatable-box>
+                <image.toolbarbutton-animatable-image>
+              <label.toolbarbutton-text>
+          <toolbarbutton#home-button.toolbarbutton-1.chromeclass-toolbar-additional>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <toolbarspring#customizableui-special-spring1.chromeclass-toolbar-additional>
+          <toolbarspring#vertical-spacer.chromeclass-toolbar-additional.titlebar-spacer>
+          <toolbaritem#urlbar-container.urlbar-container (style=...)>
+            <toolbartabstop>
+            <moz-urlbar#urlbar.urlbar (style=...)>
+              <hbox.urlbar-background>
+              <hbox.urlbar-input-container>
+                <box#remote-control-box (collapsed)>
+                <toolbarbutton#urlbar-searchmode-switcher.searchmode-switcher.chromeclass-toolbar-additional>
+                <box#trust-icon-container.secure.chickletShown>
+                <box#tracking-protection-icon-container.chromeUI [hidden]>
+                <box#identity-box.chromeUI>
+                <box#urlbar-label-box>
+                <div#urlbar-search-mode-indicator>
+                <moz-input-box.urlbar-input-box>
+                <hbox#urlbar-revert-button-container>
+                <image.urlbar-icon.urlbar-go-button>
+                <hbox#page-action-buttons>
+              <vbox.urlbarView>
+                <div.urlbarView-body-outer>
+                <menupopup.urlbarView-result-menu>
+                <hbox.search-one-offs (style=...)>
+            <toolbartabstop>
+          <toolbarspring#customizableui-special-spring2.chromeclass-toolbar-additional>
+          <toolbarbutton#downloads-button.toolbarbutton-1.chromeclass-toolbar-additional [hidden]>
+            <stack.toolbarbutton-badge-stack>
+              <box#downloads-indicator-anchor>
+                <image#downloads-indicator-icon>
+              <box#downloads-indicator-progress-outer.toolbarbutton-animatable-box>
+                <box#downloads-indicator-progress-inner (style=...)>
+              <box#downloads-indicator-start-box.toolbarbutton-animatable-box>
+                <image#downloads-indicator-start-image.toolbarbutton-animatable-image>
+              <box#downloads-indicator-finish-box.toolbarbutton-animatable-box>
+                <image#downloads-indicator-finish-image.toolbarbutton-animatable-image>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-badge>
+            <label.toolbarbutton-text>
+          <toolbarbutton#unified-extensions-button.toolbarbutton-1.chromeclass-toolbar-additional>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+        <toolbarbutton#document-pip-return-to-opener-button.toolbarbutton-1>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <toolbarbutton#taskbar-tabs-audio.toolbarbutton-1.chromeclass-toolbar-additional>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <toolbarbutton#smartwindow-ask-button.toolbarbutton-1.chromeclass-toolbar-additional [hidden]>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <toolbarbutton#nav-bar-overflow-button.toolbarbutton-1.chromeclass-toolbar-additional>
+          <image.toolbarbutton-icon>
+          <box.toolbarbutton-animatable-box>
+            <image.toolbarbutton-animatable-image>
+          <label.toolbarbutton-text>
+        <toolbaritem#PanelUI-button>
+          <toolbarbutton#PanelUI-menu-button.toolbarbutton-1>
+            <stack.toolbarbutton-badge-stack>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-badge>
+            <label.toolbarbutton-text>
+        <hbox.titlebar-spacer>
+        <hbox.private-browsing-indicator-with-label>
+          <image.private-browsing-indicator-icon>
+          <label.private-browsing-indicator-label>
+        <toolbarbutton.content-analysis-indicator.toolbarbutton-1.content-analysis-indicator-icon>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <hbox.titlebar-buttonbox-container>
+          <hbox.titlebar-buttonbox>
+            <toolbarbutton.titlebar-button.titlebar-min>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-max>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-restore>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+            <toolbarbutton.titlebar-button.titlebar-close>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+      <toolbar#PersonalToolbar.browser-toolbar.chromeclass-directories.customization-target>
+        <toolbartabstop>
+        <hbox#personal-toolbar-empty [hidden]>
+          <description#personal-toolbar-empty-description>
+            <a.text-link>
+        <toolbarbutton#import-button.chromeclass-toolbar-additional.bookmark-item>
+          <image.toolbarbutton-icon>
+          <label.toolbarbutton-text>
+        <toolbaritem#personal-bookmarks>
+          <toolbarbutton#bookmarks-toolbar-placeholder.bookmark-item>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <toolbarbutton#bookmarks-toolbar-button.toolbarbutton-1>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+          <hbox#PlacesToolbar>
+            <hbox#PlacesToolbarDropIndicatorHolder (collapsed)>
+              <image#PlacesToolbarDropIndicator (collapsed)>
+            <scrollbox#PlacesToolbarItems>
+            <toolbarbutton#PlacesChevron.toolbarbutton-1 (collapsed)>
+              <menupopup#PlacesChevronPopup.toolbar-menupopup>
+              <image.toolbarbutton-icon>
+              <label.toolbarbutton-text>
+      <toolbar#notifications-toolbar.browser-toolbar>
+        <vbox.notificationbox-stack.global-notificationbox>
+        <template#tab-notification-deck-template>
+      <template#BrowserToolbarPalette>
+    <hbox#browser>
+      <box#sidebar-main [hidden] (style=...)>
+        <sidebar-main>
+          <box#vertical-tabs.customization-target>
+      <splitter#sidebar-launcher-splitter.chromeclass-extrachrome.sidebar-splitter [hidden] (style=...)>
+      <vbox#sidebar-box.chromeclass-extrachrome (style=...)>
+        <box#sidebar-header>
+          <toolbarbutton#sidebar-switcher-target.tabbable (style=...)>
+            <image#sidebar-icon>
+            <label#sidebar-title>
+            <image#sidebar-switcher-arrow>
+          <image#sidebar-throbber>
+          <spacer#sidebar-spacer>
+          <toolbarbutton#sidebar-close.close-icon.tabbable>
+            <image.toolbarbutton-icon>
+            <label.toolbarbutton-text>
+        <stack.sidebar-browser-stack>
+          <browser#sidebar>
+      <splitter#sidebar-splitter.chromeclass-extrachrome.sidebar-splitter (style=...)>
+      <tabbox#tabbrowser-tabbox (style=...)>
+        <tabpanels#tabbrowser-tabpanels>
+          <hbox#panel-1-1.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack.exclude-letterboxing>
+                <browser>
+          <hbox#panel-1-4.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-5.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-30.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-32.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-36.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-41.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-44.browserSidebarContainer>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+          <hbox#panel-1-45.browserSidebarContainer.deck-selected>
+            <vbox.browserContainer>
+              <stack.browserStack>
+                <browser>
+                <hbox#statuspanel [hidden]>
+      <splitter#ai-window-splitter.chromeclass-extrachrome.sidebar-splitter [hidden] (style=..., hidden)>
+      <vbox#ai-window-box.chromeclass-extrachrome.ai-window-right-sidebar [hidden] (style=..., hidden)>
+        <stack.ai-window-browser-stack>
+    <box#customization-container [hidden] (hidden)>
+      <box#customization-content-container>
+        <box#customization-palette-container>
+          <label#customization-header>
+          <vbox#customization-palette [hidden] (hidden)>
+          <div#customization-pong-arena [hidden] (hidden)>
+          <spacer#customization-spacer>
+        <vbox#customization-panel-container>
+          <vbox#customization-panelWrapper>
+            <box.panel-arrowbox>
+              <image.panel-arrow>
+            <box.panel-arrowcontent>
+              <vbox#customization-panelHolder>
+                <description#customization-panelHeader>
+                <description#customization-panelDescription>
+              <box.panel-inner-arrowcontentfooter [hidden] (hidden)>
+      <hbox#customization-footer>
+        <checkbox#customization-titlebar-visibility-checkbox.customization-checkbox>
+          <image.checkbox-check>
+          <hbox.checkbox-label-box>
+            <image.checkbox-icon>
+            <label.checkbox-label>
+        <button#customization-toolbar-visibility-button.footer-button>
+          <menupopup#customization-toolbar-menu>
+          <hbox.box-inherit.button-box>
+            <hbox.box-inherit>
+              <image.button-icon>
+              <label.button-text>
+            <dropmarker.button-menu-dropmarker>
+        <button#customization-uidensity-button.footer-button [hidden] (hidden)>
+          <panel#customization-uidensity-menu>
+            <menuitem#customization-uidensity-menuitem-compact.menuitem-iconic.customization-uidensity-menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#customization-uidensity-menuitem-normal.menuitem-iconic.customization-uidensity-menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <menuitem#customization-uidensity-menuitem-touch.menuitem-iconic.customization-uidensity-menuitem>
+              <img.menu-icon>
+              <label.menu-text>
+              <label.menu-highlightable-text>
+                <span.accesskey>
+              <label.menu-accel>
+            <spacer#customization-uidensity-touch-spacer [hidden] (hidden)>
+            <checkbox#customization-uidensity-autotouchmode-checkbox [hidden] (hidden)>
+              <image.checkbox-check>
+              <hbox.checkbox-label-box>
+                <image.checkbox-icon>
+                <label.checkbox-label>
+          <hbox.box-inherit.button-box>
+            <hbox.box-inherit>
+              <image.button-icon>
+              <label.button-text>
+            <dropmarker.button-menu-dropmarker>
+        <label#customization-lwtheme-link.customization-link.text-link>
+        <button#whimsy-button.footer-button [hidden] (hidden)>
+          <hbox.box-inherit.button-box>
+            <image.button-icon>
+            <label.button-text>
+        <spacer#customization-footer-spacer>
+        <button#customization-undo-reset-button.footer-button [hidden] (hidden)>
+          <hbox.box-inherit.button-box>
+            <image.button-icon>
+            <label.button-text>
+        <button#customization-reset-button.footer-button>
+          <hbox.box-inherit.button-box>
+            <image.button-icon>
+            <label.button-text>
+        <button#customization-done-button.footer-button>
+          <hbox.box-inherit.button-box>
+            <image.button-icon>
+            <label.button-text>
+    <div#fullscreen-warning.pointerlockfswarning [hidden]>
+      <div.pointerlockfswarning-domain-text>
+        <span.pointerlockfswarning-domain>
+      <div.pointerlockfswarning-generic-text>
+      <button#fullscreen-exit-button>
+    <div#pointerlock-warning.pointerlockfswarning [hidden]>
+      <div.pointerlockfswarning-domain-text>
+        <span.pointerlockfswarning-domain>
+      <div.pointerlockfswarning-generic-text>
+    <div#a11y-announcement>
+    <div#fullscr-toggler [hidden]>
+  <keyset#ext-keyset-id-addon_darkreader_org>
+    <key>
+    <key>
+  <keyset#ext-keyset-id-clearcache_michel_de_almeida>
+    <key>
+  <keyset#ext-keyset-id-newtaboverride_agenedia_com>
+    <key>
+  <keyset#ext-keyset-id-ublock0_raymondhill_net>
+  <keyset#ext-keyset-id-_3c078156-979c-498b-8990-85f7987dd929_>
+    <key#ext-key-id-_3c078156-979c-498b-8990-85f7987dd929_-sidebar-action>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+    <key>
+  <keyset#ext-keyset-id-_446900e4-71c2-419f-a6a7-df9c091e268b_>
+    <key>
+    <key#ext-key-id-_446900e4-71c2-419f-a6a7-df9c091e268b_-sidebar-action>
+    <key>
+    <key>
+    <key>
