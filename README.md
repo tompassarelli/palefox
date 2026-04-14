@@ -1,9 +1,4 @@
 <div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo.png" />
-    <source media="(prefers-color-scheme: light)" srcset="docs/logo-light.png" />
-    <img src="docs/logo.png" alt="Palefox logo" width="200" />
-  </picture>
 
 # Palefox
 
