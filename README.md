@@ -11,11 +11,21 @@ A developer-focused alternative to Zen Browser on upstream Firefox
 
 </div>
 
-![Default mode — vertical tabs, expanded layout](https://github.com/user-attachments/assets/9d89d845-e5c4-4fb4-ae9a-eb36da9ddde8)
+<figure>
+  <img src="https://github.com/user-attachments/assets/8a9e2552-6c91-412f-ad2b-e41274e2e2ac" alt="Tiled in compact (zen) mode" />
+  <figcaption>Tiled in compact (zen) mode</figcaption>
+</figure>
 
-![Vertical tabs — collapsed layout](https://github.com/user-attachments/assets/a5e4bc4c-f239-4b8d-8435-3150d4e7252e)
+<figure>
+  <img src="https://github.com/user-attachments/assets/9d89d845-e5c4-4fb4-ae9a-eb36da9ddde8" alt="Default mode — vertical tabs, expanded layout" />
+  <figcaption>Vertical tabs, expanded layout</figcaption>
+</figure>
 
-![Tiled in compact (zen) mode](https://github.com/user-attachments/assets/8a9e2552-6c91-412f-ad2b-e41274e2e2ac)
+<figure>
+  <img src="https://github.com/user-attachments/assets/a5e4bc4c-f239-4b8d-8435-3150d4e7252e" alt="Vertical tabs — collapsed layout" />
+  <figcaption>Vertical tabs, collapsed layout</figcaption>
+</figure>
+
 
 ## Quick Install
 
