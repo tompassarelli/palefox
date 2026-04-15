@@ -39,7 +39,7 @@ Install [Sideberry](https://addons.mozilla.org/en-US/firefox/addon/sidebery/), t
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/css-legacy/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/tompassarelli/palefox/css-legacy/install.sh)
 ```
 
 **Windows** (PowerShell):
