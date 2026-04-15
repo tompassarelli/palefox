@@ -338,6 +338,7 @@
     if (urlbar?.hasAttribute("breakout-extend")) return true;
     if (document.querySelector("toolbarbutton[open='true']")) return true;
     if (document.querySelector(".tabbrowser-tab[multiselected]")) return true;
+    if (document.querySelector("[pfx-dragging]")) return true;
     return false;
   }
 
