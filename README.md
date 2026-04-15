@@ -41,10 +41,13 @@ irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 | i
 
 ## Features
 
+- **Tree-style tabs** — custom tab panel with deep nesting, groups, drag-and-drop reordering, and multi-select
+- **Vim keybindings** — navigate, refile, search, and manipulate tabs without leaving the keyboard
 - **Compact mode** — sidebar autohides off-screen, revealed on left-edge hover with spring animation
 - **Collapse layout** — sidebar shrinks to icons-only strip, toolbox returns to horizontal bar
 - **Sidebar button** — left-click toggles compact mode, right-click opens layout options (compact, collapse, tab orientation)
 - **Urlbar breakout** — expands past the sidebar when focused
+- **HTTP warning** — delayed insecure-page banner (avoids false alarms on redirects)
 - **Draggable sidebar** — drag the window from empty sidebar space (floating/stacking WMs)
 - **Theme-respecting** — uses Firefox's native CSS variables, works with any theme
 - Powered by [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) for chrome JS

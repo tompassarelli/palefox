@@ -304,10 +304,14 @@ set_pref() {
 }
 
 set_pref "toolkit.legacyUserProfileCustomizations.stylesheets" "true"
-set_pref "sidebar.verticalTabs" "false"
-set_pref "sidebar.revamp" "false"
+set_pref "sidebar.verticalTabs" "true"
+set_pref "sidebar.revamp" "true"
 set_pref "sidebar.position_start" "true"
 set_pref "browser.toolbars.bookmarks.visibility" "\"never\""
+set_pref "pfx.sidebar.width" 300
+
+# Default toolbar layout: core buttons in nav-bar, extras in overflow menu
+set_pref "browser.uiCustomization.state" "'{\"placements\":{\"widget-overflow-fixed-list\":[\"fxa-toolbar-menu-button\",\"home-button\",\"alltabs-button\",\"firefox-view-button\"],\"unified-extensions-area\":[],\"nav-bar\":[\"sidebar-button\",\"back-button\",\"forward-button\",\"stop-reload-button\",\"customizableui-special-spring1\",\"vertical-spacer\",\"urlbar-container\",\"customizableui-special-spring2\",\"downloads-button\",\"unified-extensions-button\"],\"toolbar-menubar\":[\"menubar-items\"],\"TabsToolbar\":[\"tabbrowser-tabs\",\"new-tab-button\"],\"vertical-tabs\":[],\"PersonalToolbar\":[\"import-button\",\"personal-bookmarks\"]},\"seen\":[],\"dirtyAreaCache\":[],\"currentVersion\":23,\"newElementCount\":0}'"
 
 # GTK may send spurious leave events that break autohide
 if [ "$(uname -s)" = "Linux" ]; then

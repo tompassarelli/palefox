@@ -12,6 +12,7 @@
 
 :root {
   --pfx-gap: 6px;
+  --pfx-sidebar-inset: 10px;
   /* --pfx-color: var(--toolbar-bgcolor, light-dark(#fafafb, #36363a)); */
   --pfx-compact-trigger-width: 12px;
   --pfx-transition-duration: 0.25s;
@@ -50,7 +51,9 @@
 #sidebar-main > sidebar-main {
   flex: 1 !important;
   min-height: 0 !important;
+  transform: translateX(-2px) !important;
 }
+
 
 /* #endregion sidebar-main */
 
@@ -60,12 +63,45 @@
 #navigator-toolbox {
   flex: none !important;
   background-color: var(--sidebar-background-color, var(--toolbar-bgcolor)) !important;
+  position: relative !important;
+  z-index: 3 !important;
 }
 
 #nav-bar {
   border: none !important;
   margin: 6px 0 !important;
-  padding: 0 12px !important;
+}
+
+/* -1px compensates for XUL toolbarbutton internal padding we can't override.
+ * Applied on the sidebar side only; flips with sidebar position. */
+@media -moz-pref("sidebar.position_start") {
+  #nav-bar {
+    padding: 0 var(--pfx-sidebar-inset) 0 calc(var(--pfx-sidebar-inset) - 1px) !important;
+  }
+}
+@media not -moz-pref("sidebar.position_start") {
+  #nav-bar {
+    padding: 0 calc(var(--pfx-sidebar-inset) - 1px) 0 var(--pfx-sidebar-inset) !important;
+  }
+}
+
+
+/* Prevent nav-bar icons from drifting as sidebar resizes.
+ * The customization target is flex:1 inside nav-bar, and springs
+ * inside it distribute extra space. Cap the springs to 0 width
+ * so buttons stay packed together. */
+#sidebar-main #nav-bar {
+  transform: translateY(6px) !important;
+}
+
+#sidebar-main #nav-bar-customization-target > toolbarspring {
+  flex: 0 0 0 !important;
+}
+
+#sidebar-main #nav-bar-customization-target > :is(toolbarbutton, toolbaritem) {
+  --toolbarbutton-outer-padding: 0 !important;
+  padding-inline: 1px !important;
+  margin-inline: 0 !important;
 }
 
 #PanelUI-menu-button {
@@ -93,7 +129,7 @@
 #pfx-urlbar-toolbar {
   flex: none !important;
   overflow: hidden !important;
-  margin: 12px 0 !important;
+  margin: var(--pfx-sidebar-inset) 0 !important;
 }
 
 #pfx-urlbar-toolbar #urlbar-container {
@@ -102,11 +138,11 @@
 }
 
 @media -moz-pref("sidebar.position_start") {
-  #sidebar-main #pfx-urlbar-toolbar #urlbar { left: 12px !important; }
+  #sidebar-main #pfx-urlbar-toolbar #urlbar { left: var(--pfx-sidebar-inset) !important; }
 }
 
 @media not -moz-pref("sidebar.position_start") {
-  #sidebar-main #pfx-urlbar-toolbar #urlbar { right: 12px !important; }
+  #sidebar-main #pfx-urlbar-toolbar #urlbar { right: var(--pfx-sidebar-inset) !important; }
 }
 
 /* breakout: let the urlbar expand past the sidebar when focused.
@@ -145,20 +181,16 @@ Preserve these (security warnings):
 - .mixedActiveContent  - HTTPS with active mixed content
 */
 
-/* HTTP not-secure warning banner */
-body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
-  content: "🦊 Palefox - HTTP Alert: Not Secure";
+/* HTTP not-secure warning banner — injected by palefox-drawer.uc.js
+ * after 2s delay to avoid flashing on redirects */
+#pfx-insecure-banner {
   text-align: center;
   font-size: 24px;
-  margin-left: 0px;
-  display: block;
-  position: inherit;
-  z-index: 3;
+  display: flex;
   width: 100%;
   height: 46px;
-  padding-top: 8px;
   box-sizing: border-box;
-  background-color: var(--pfx-color);
+  background-color: var(--sidebar-background-color, var(--toolbar-bgcolor));
 }
 
 /* #endregion urlbar */
@@ -213,12 +245,14 @@ body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
  * JS (palefox-drawer.uc.js) manages data-pfx-compact and
  * data-pfx-compact-hidden attributes on #sidebar-main. */
 
-/* Default state: hidden off-screen */
+/* Default state: hidden off-screen.
+ * --pfx-toolbox-height is set by JS when the toolbox is above the sidebar
+ * (collapsed vertical or horizontal layout), so compact mode doesn't overlap it. */
 #sidebar-main[data-pfx-compact] {
   position: fixed !important;
   left: 0 !important;
-  top: 0 !important;
-  height: 100vh !important;
+  top: var(--pfx-toolbox-height, 0px) !important;
+  height: calc(100vh - var(--pfx-toolbox-height, 0px)) !important;
   z-index: 10 !important;
   transform: translateX(-100%) !important;
   pointer-events: none !important;
@@ -245,9 +279,9 @@ body:has(#sidebar-box[hidden]):has(#identity-box.notSecure)::before {
 #pfx-hover-strip {
   position: fixed !important;
   left: 0 !important;
-  top: 0 !important;
+  top: var(--pfx-toolbox-height, 0px) !important;
   width: var(--pfx-compact-trigger-width) !important;
-  height: 100vh !important;
+  height: calc(100vh - var(--pfx-toolbox-height, 0px)) !important;
   z-index: 9 !important;
   background: transparent !important;
 }

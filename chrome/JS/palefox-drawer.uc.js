@@ -22,6 +22,19 @@
 
   const sidebarMainElement = sidebarMain.querySelector("sidebar-main");
 
+  // Hide the resize splitter inside sidebar-main's shadow DOM.
+  // Shadow root may not exist yet — poll briefly until it does.
+  function hideSidebarSplitter() {
+    const sr = sidebarMainElement?.shadowRoot;
+    if (!sr) return setTimeout(hideSidebarSplitter, 100);
+    const s = new CSSStyleSheet();
+    s.replaceSync(`
+      #sidebar-tools-and-extensions-splitter { display: none !important; }
+    `);
+    sr.adoptedStyleSheets.push(s);
+  }
+  hideSidebarSplitter();
+
   // Save original DOM positions before any moves, for collapse restoration.
   const toolboxParent = navigatorToolbox.parentNode;
   const toolboxNext = navigatorToolbox.nextSibling;
@@ -47,8 +60,10 @@
     if (!urlbar || updating) return;
     if (urlbar.hasAttribute("breakout-extend")) return;
     updating = true;
-    // 12px margin per side to match vertical tab inset
-    const w = Math.max(0, sidebarMain.getBoundingClientRect().width - 24);
+    const inset = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--pfx-sidebar-inset")
+    ) || 10;
+    const w = Math.max(0, sidebarMain.getBoundingClientRect().width - inset * 2);
     urlbar.style.setProperty("--urlbar-width", w + "px");
     updating = false;
   }
@@ -202,6 +217,23 @@
     },
   });
 
+  // --- Sidebar width preference ---
+
+  const WIDTH_PREF = "pfx.sidebar.width";
+  const defaultWidth = Services.prefs.getIntPref(WIDTH_PREF, 300);
+
+  // Apply saved width on startup
+  if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
+    sidebarMain.style.width = defaultWidth + "px";
+  }
+
+  // Save width when the user resizes the sidebar
+  new ResizeObserver(() => {
+    if (!sidebarMain.hasAttribute("sidebar-launcher-expanded")) return;
+    const w = Math.round(sidebarMain.getBoundingClientRect().width);
+    if (w > 0) Services.prefs.setIntPref(WIDTH_PREF, w);
+  }).observe(sidebarMain);
+
   // --- Initialize layout based on current sidebar state ---
 
   if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
@@ -268,6 +300,14 @@
   // as the pointer "falls through." Cleared next tick via setTimeout(0).
   // Zen equivalent: _ignoreNextHover (ZenCompactMode.mjs:623)
   let _ignoreNextHover = false;
+
+  // Other scripts can dismiss the sidebar by dispatching "pfx-dismiss"
+  sidebarMain.addEventListener("pfx-dismiss", () => {
+    _ignoreNextHover = true;
+    setHover(false);
+    clearFlash();
+    setTimeout(() => { _ignoreNextHover = false; }, KEEP_HOVER_DURATION + 100);
+  });
 
   // Guards: conditions that should prevent the sidebar from hiding.
   // Zen uses ZenHasPolyfill MutationObserver for [open], [panelopen],
@@ -639,11 +679,61 @@
           );
           collapseItem.setAttribute(
             "label",
-            isExpanded ? "Collapse Layout" : "Expand Layout"
+            (isExpanded || !vertical) ? "Collapse Layout" : "Expand Layout"
           );
         }
       });
     }
+  }
+
+  // === HTTP Not-Secure Warning ===
+  // Shows a banner after 2s on insecure pages. Hides immediately
+  // when the page becomes secure (e.g. redirect to HTTPS).
+
+  const identityBox = document.getElementById("identity-box");
+  let insecureTimer = null;
+  let insecureBanner = null;
+
+  function showInsecureBanner() {
+    if (insecureBanner) return;
+    insecureBanner = document.createXULElement("hbox");
+    insecureBanner.id = "pfx-insecure-banner";
+    insecureBanner.setAttribute("align", "center");
+    insecureBanner.setAttribute("pack", "center");
+    insecureBanner.textContent = "\uD83E\uDD8A Palefox - HTTP Alert: Not Secure";
+    const browser = document.getElementById("browser");
+    browser.parentNode.insertBefore(insecureBanner, browser);
+  }
+
+  function hideInsecureBanner() {
+    clearTimeout(insecureTimer);
+    insecureTimer = null;
+    if (insecureBanner) {
+      insecureBanner.remove();
+      insecureBanner = null;
+    }
+  }
+
+  function checkInsecure() {
+    const uri = gBrowser.selectedBrowser?.currentURI?.spec || "";
+    const isInternal = uri.startsWith("about:") || uri.startsWith("chrome:");
+    const isCustomizing = document.documentElement.hasAttribute("customizing");
+    const isInsecure = identityBox?.classList.contains("notSecure")
+      && !isInternal && !isCustomizing;
+    if (isInsecure && !insecureTimer && !insecureBanner) {
+      insecureTimer = setTimeout(showInsecureBanner, 2000);
+    } else if (!isInsecure) {
+      hideInsecureBanner();
+    }
+  }
+
+  if (identityBox) {
+    new MutationObserver(checkInsecure).observe(identityBox, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    // Also check on tab switch
+    gBrowser.tabContainer.addEventListener("TabSelect", checkInsecure);
   }
 
   console.log("palefox-drawer: initialized");
