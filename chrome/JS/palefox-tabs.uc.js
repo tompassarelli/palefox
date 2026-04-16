@@ -11,7 +11,6 @@
 
   const INDENT = 14;                // px per nesting level
   const SAVE_FILE = "palefox-tab-tree.json";
-  const SAVE_DELAY = 1000;          // ms debounce
   const CHORD_TIMEOUT = 500;        // ms to complete a chord (dd, gg)
 
   // --- DOM references ---
@@ -19,13 +18,29 @@
   const sidebarMain = document.getElementById("sidebar-main");
   if (!sidebarMain) return;
 
+  // Explicit import — in some chrome-script contexts SessionStore is not
+  // exposed as a global, and try/catch around every call would silently
+  // swallow the ReferenceError and turn our id-pinning into a no-op.
+  const SS = (() => {
+    try {
+      if (typeof SessionStore !== "undefined") return SessionStore;
+    } catch {}
+    try {
+      return ChromeUtils.importESModule(
+        "resource:///modules/sessionstore/SessionStore.sys.mjs"
+      ).SessionStore;
+    } catch (e) {
+      console.error("palefox-tabs: SessionStore unavailable", e);
+      return null;
+    }
+  })();
+
   // --- State ---
 
   const treeOf = new WeakMap();     // native tab → { level, name, state, collapsed }
   const rowOf  = new WeakMap();     // native tab → row element
   const hzDisplay = new WeakMap();  // row → tab whose visuals to show (horizontal collapse)
   let panel, spacer, contextTab;
-  let saveTimer = 0;
   let groupCounter = 0;
 
   // Vim mode
@@ -37,11 +52,80 @@
   // Multi-select
   const selection = new Set();      // rows in the current selection
 
+  // Recently-closed tab memory, for restoring hierarchy on Ctrl+Shift+T.
+  // Matched by URL on reopen; parent is looked up by id.
+  const CLOSED_MEMORY = 32;
+  const closedTabs = [];            // [{ url, id, parentId, name, state, collapsed }]
+
+  // Saved tab state from last session's tree file, indexed by URL.
+  // Consulted by onTabRestoring when a tab URL shows up that wasn't live at init
+  // (e.g. Firefox undoCloseWindow / late session restore of an entire window).
+  const savedTabState = new Map();  // url → [saved node, ...]
+
+  let nextTabId = 1;
+
+  // Pin a tab's palefox id via SessionStore so it survives browser restart /
+  // undoCloseTab / undoCloseWindow. Lets us match live tabs → saved state
+  // exactly by id, bypassing URL-comparison fragility for pending tabs.
+  // SessionStore.setTabValue/getTabValue aren't exposed on the SessionStore
+  // object we can reach from chrome scripts in this Firefox build. Pin via
+  // a DOM attribute instead — Firefox's SessionStore tracks a small set of
+  // tab attributes via persistTabAttribute. If we can register ours there we
+  // get free cross-session persistence; otherwise this is a no-op and we
+  // rely on URL matching.
+  const PIN_ATTR = "pfx-id";
+  let pinAttrRegistered = false;
+  function tryRegisterPinAttr() {
+    if (pinAttrRegistered || !SS?.persistTabAttribute) return;
+    try { SS.persistTabAttribute(PIN_ATTR); pinAttrRegistered = true; }
+    catch (e) { console.error("palefox-tabs: persistTabAttribute failed", e); }
+  }
+  function pinTabId(tab, id) {
+    try { tab.setAttribute(PIN_ATTR, String(id)); } catch {}
+  }
+  function readPinnedId(tab) {
+    try {
+      const v = tab.getAttribute?.(PIN_ATTR);
+      if (v) { const n = Number(v); if (n) return n; }
+    } catch {}
+    return 0;
+  }
+
   function treeData(tab) {
     if (!treeOf.has(tab)) {
-      treeOf.set(tab, { level: 0, name: null, state: null, collapsed: false });
+      let id = readPinnedId(tab);
+      if (id) {
+        // Tab already has an id pinned from a prior session — keep it.
+        if (id >= nextTabId) nextTabId = id + 1;
+      } else {
+        id = nextTabId++;
+        pinTabId(tab, id);
+      }
+      treeOf.set(tab, { id, level: 0, name: null, state: null, collapsed: false });
     }
     return treeOf.get(tab);
+  }
+
+  function tabById(id) {
+    if (!id) return null;
+    for (const t of gBrowser.tabs) {
+      if (treeOf.get(t)?.id === id) return t;
+    }
+    return null;
+  }
+
+  // Find a tab's current parent in the tree: nearest preceding tab at a lower level.
+  function parentOfTab(tab) {
+    const row = rowOf.get(tab);
+    if (!row) return null;
+    const myLevel = treeData(tab).level;
+    if (myLevel <= 0) return null;
+    let r = row.previousElementSibling;
+    while (r) {
+      if (r._tab && treeData(r._tab).level < myLevel) return r._tab;
+      r = r.previousElementSibling;
+    }
+    return null;
   }
 
   // Unified data access — works for both tab rows and group rows
@@ -330,25 +414,145 @@
 
   // --- Tab events ---
 
+  // Resolve a tab's URL, including pending/lazy-restored tabs whose
+  // linkedBrowser.currentURI is still about:blank because Firefox hasn't
+  // actually navigated them yet (session restore defers load until activation).
+  function tabUrl(tab) {
+    if (!tab) return "";
+    const spec = tab.linkedBrowser?.currentURI?.spec;
+    if (spec && spec !== "about:blank") return spec;
+    if (SS) {
+      try {
+        const raw = SS.getTabState(tab);
+        if (raw) {
+          const state = JSON.parse(raw);
+          const entries = state.entries;
+          if (Array.isArray(entries) && entries.length) {
+            const idx = Math.max(
+              0, Math.min(entries.length - 1, (state.index || 1) - 1)
+            );
+            const entryUrl = entries[idx]?.url;
+            if (entryUrl) return entryUrl;
+          }
+        }
+      } catch (e) {
+        console.error("palefox-tabs: getTabState failed", e);
+      }
+    }
+    return spec || "";
+  }
+
+  // Pop the most-recent closed-tab entry matching this URL (LIFO).
+  function popClosedEntry(url) {
+    if (!url) return null;
+    for (let i = closedTabs.length - 1; i >= 0; i--) {
+      if (closedTabs[i].url === url) return closedTabs.splice(i, 1)[0];
+    }
+    return null;
+  }
+
+  // Try to resolve a just-opened tab's URL from any available source.
+  // Pending (unloaded) session-restore tabs have currentURI=about:blank; the
+  // real URL is tucked away in a few internal slots set by SessionStore.
+  function resolveOpeningUrl(tab) {
+    const u = tabUrl(tab);
+    if (u && u !== "about:blank") return u;
+    // Internal SessionStore data directly on the browser element.
+    const ssData = tab.linkedBrowser?.__SS_data;
+    if (ssData?.entries?.length) {
+      const i = Math.max(0, Math.min(ssData.entries.length - 1, (ssData.index || 1) - 1));
+      const direct = ssData.entries[i]?.url;
+      if (direct) return direct;
+    }
+    // lazyBrowserURI (set by addTrustedTab with createLazyBrowser).
+    const lazySpec = tab.linkedBrowser?.lazyBrowserURI?.spec;
+    if (lazySpec) return lazySpec;
+    // Tab label — for pending tabs without a title, Firefox uses the URL.
+    const lbl = tab.getAttribute?.("label") || tab.label || "";
+    if (/^[a-z]+:/i.test(lbl)) return lbl;
+    return u || "";
+  }
+
+  // Apply a saved-state entry to a tab's treeData and re-sync its row.
+  // Used by both the immediate onTabOpen match and the deferred match below.
+  function applySavedToTab(tab, prior) {
+    const td = treeData(tab);
+    td.id = prior.id || td.id;
+    td.level = prior.level || 0;
+    td.name = prior.name || null;
+    td.state = prior.state || null;
+    td.collapsed = !!prior.collapsed;
+    pinTabId(tab, td.id);
+    if (rowOf.get(tab)) syncTabRow(tab);
+  }
+
   function onTabOpen(e) {
     const tab = e.target;
     const td = treeData(tab);
 
-    if (tab.owner) {
-      td.level = treeData(tab.owner).level + 1;
-    } else if (gBrowser.selectedTab && gBrowser.selectedTab !== tab) {
-      td.level = treeData(gBrowser.selectedTab).level;
+    // Session-restore path: the tab matches something we saved last run.
+    // This covers pending/unloaded tabs brought back by session auto-restore
+    // or undoCloseWindow, which don't fire SSTabRestoring until activated.
+    const openUrl = resolveOpeningUrl(tab);
+    const prior = openUrl ? popSavedState(openUrl) : null;
+    if (prior) {
+      applySavedToTab(tab, prior);
+      const row = createTabRow(tab);
+      panel.insertBefore(row, spacer);    // append in arrival order
+      if (pendingCursorMove) { pendingCursorMove = false; setCursor(row); }
+      updateVisibility();
+      scheduleSave();
+      return;
     }
+
+    // URL wasn't resolvable at TabOpen time (pending/lazy session-restored
+    // tab). SessionStore populates state at various points depending on
+    // restore timing; retry a few times with increasing delay. Also retry
+    // on TabAttrModified in case Firefox mutates label/URL later.
+    if (savedTabState.size) {
+      const tryMatch = () => {
+        if (!tab.isConnected || !rowOf.get(tab)) return false;
+        const later = resolveOpeningUrl(tab);
+        console.log(`palefox-tabs: deferred match tab url=${later || "(empty)"} stateSize=${savedTabState.size}`);
+        if (!later || later === "about:blank") return false;
+        const match = popSavedState(later);
+        if (!match) return false;
+        applySavedToTab(tab, match);
+        scheduleSave();
+        return true;
+      };
+      Promise.resolve().then(tryMatch);
+      setTimeout(tryMatch, 50);
+      setTimeout(tryMatch, 250);
+      setTimeout(tryMatch, 1000);
+    }
+
+    // "root" (default) → level 0, appended at end
+    // "child"  → child of opener, or child of selected
+    // "sibling"→ sibling of opener, or sibling of selected
+    const position = Services.prefs.getCharPref("pfx.tabs.newTabPosition", "root");
+    const anchor = tab.owner || (gBrowser.selectedTab !== tab ? gBrowser.selectedTab : null);
+
+    if (position === "child" && anchor) {
+      td.level = treeData(anchor).level + 1;
+    } else if (position === "sibling" && anchor) {
+      td.level = treeData(anchor).level;
+    }
+    // "root" leaves level at 0
 
     const row = createTabRow(tab);
 
-    // Insert after cursor if vim is active, otherwise after selected tab's row
-    const ref = cursor || rowOf.get(gBrowser.selectedTab);
+    let ref = null;
+    if (position !== "root") {
+      // Insert after cursor if vim is active, otherwise after selected tab's row
+      ref = cursor || rowOf.get(gBrowser.selectedTab);
+    }
     if (ref) {
       // Insert after ref's subtree
       const st = subtreeRows(ref);
       st[st.length - 1].after(row);
     } else {
+      // Root mode, or no anchor: append at end of panel
       panel.insertBefore(row, spacer);
     }
     if (pendingCursorMove) {
@@ -363,9 +567,13 @@
     const tab = e.target;
     const row = rowOf.get(tab);
 
-    // Promote orphaned children one level up
     if (row) {
       const td = dataOf(row);
+
+      // Snapshot identity + parent before we mutate the panel, so we can restore on reopen.
+      rememberClosedTab(tab, td);
+
+      // Promote orphaned children one level up
       let next = row.nextElementSibling;
       while (next && next !== spacer) {
         const nd = dataOf(next);
@@ -382,6 +590,166 @@
     rowOf.delete(tab);
     updateVisibility();
     scheduleSave();
+  }
+
+  // Pop the first saved-state entry matching this URL (leftover from last session).
+  function popSavedState(url) {
+    if (!url) return null;
+    const list = savedTabState.get(url);
+    if (!list || !list.length) return null;
+    const entry = list.shift();
+    if (!list.length) savedTabState.delete(url);
+    return entry;
+  }
+
+  // Fires when SessionStore is about to restore a tab (e.g. Ctrl+Shift+T,
+  // undoCloseWindow, late session restore). URL is committed by this point.
+  //
+  // Two cases:
+  //  - Tab was closed this session → matched via closedTabs (full restore:
+  //    position relative to prev sibling, descendants re-demoted).
+  //  - Tab was saved last session but never live this session → matched via
+  //    savedTabState (partial restore: id + level + metadata, DOM position
+  //    follows session-restore order).
+  function onTabRestoring(e) {
+    const tab = e.target;
+    const url = tabUrl(tab);
+
+    const entry = popClosedEntry(url);
+    if (!entry) {
+      // Fallback: saved state from last session's tree file.
+      const prior = popSavedState(url);
+      if (prior) {
+        const td = treeData(tab);
+        td.id = prior.id || td.id;
+        td.level = prior.level || 0;
+        td.name = prior.name || null;
+        td.state = prior.state || null;
+        td.collapsed = !!prior.collapsed;
+        pinTabId(tab, td.id);
+        if (rowOf.get(tab)) syncTabRow(tab);
+        scheduleSave();
+      }
+      return;
+    }
+
+    const td = treeData(tab);
+    td.id = entry.id;              // carry id forward so descendants can still find this tab
+    td.name = entry.name;
+    td.state = entry.state;
+    td.collapsed = entry.collapsed;
+    pinTabId(tab, td.id);
+
+    const parent = tabById(entry.parentId);
+    td.level = parent ? treeData(parent).level + 1 : 0;
+
+    // Move this tab's row to its restored position.
+    const row = rowOf.get(tab);
+    if (row) {
+      placeRestoredRow(row, parent, entry.prevSiblingId);
+      syncTabRow(tab);
+      // Re-demote any contiguous ex-descendants that onTabClose had promoted.
+      // Stop at the first row that isn't a known descendant — anything moved
+      // elsewhere by the user is left alone.
+      if (entry.descendantIds?.length) {
+        const expected = new Set(entry.descendantIds);
+        let n = row.nextElementSibling;
+        while (n && n !== spacer) {
+          if (!n._tab) break;
+          const id = treeData(n._tab).id;
+          if (!expected.has(id)) break;
+          treeData(n._tab).level += 1;
+          syncTabRow(n._tab);
+          n = n.nextElementSibling;
+        }
+      }
+    }
+    updateVisibility();
+    scheduleSave();
+  }
+
+  // Position a restored row: after its original prev sibling (if that sibling
+  // still exists under the same parent), else as first child of the parent /
+  // top of the root, else at end of the parent's subtree / end of the panel.
+  function placeRestoredRow(row, parent, prevSiblingId) {
+    const parentRow = parent ? rowOf.get(parent) : null;
+
+    if (prevSiblingId) {
+      const sib = tabById(prevSiblingId);
+      const sibRow = sib ? rowOf.get(sib) : null;
+      const sibParent = sib ? parentOfTab(sib) : null;
+      const sameParent =
+        (!parent && !sibParent) ||
+        (parent && sibParent && treeData(parent).id === treeData(sibParent).id);
+      if (sibRow && sameParent) {
+        const st = subtreeRows(sibRow);
+        st[st.length - 1].after(row);
+        return;
+      }
+      // prev sibling gone — fall through to subtree-end fallback
+    } else {
+      // Was the first child / first root: insert at the top of its level
+      if (parentRow) { parentRow.after(row); return; }
+      panel.insertBefore(row, panel.firstChild);
+      return;
+    }
+
+    // Fallback: append to end of parent's subtree, or end of panel
+    if (parentRow) {
+      const st = subtreeRows(parentRow);
+      st[st.length - 1].after(row);
+    } else {
+      panel.insertBefore(row, spacer);
+    }
+  }
+
+  // Snapshot a closing tab's identity, position, and descendants so
+  // onTabRestoring can put it back in the same slot with children re-nested.
+  function rememberClosedTab(tab, td) {
+    const url = tabUrl(tab);
+    if (!url || url === "about:blank") return;
+    const row = rowOf.get(tab);
+    if (!row) return;
+
+    const parent = parentOfTab(tab);
+    const myLevel = td?.level || 0;
+
+    // Walk backwards for previous sibling.
+    let prevSiblingId = null;
+    let r = row.previousElementSibling;
+    while (r) {
+      if (r._tab) {
+        const lvl = treeData(r._tab).level;
+        if (lvl < myLevel) break;
+        if (lvl === myLevel) { prevSiblingId = treeData(r._tab).id; break; }
+      }
+      r = r.previousElementSibling;
+    }
+
+    // Walk forwards for descendants (anything below us with a higher level).
+    // onTabClose promotes these one level up; we'll re-demote on restore.
+    const descendantIds = [];
+    let n = row.nextElementSibling;
+    while (n && n !== spacer) {
+      if (n._tab) {
+        const lvl = treeData(n._tab).level;
+        if (lvl <= myLevel) break;
+        descendantIds.push(treeData(n._tab).id);
+      }
+      n = n.nextElementSibling;
+    }
+
+    closedTabs.push({
+      url,
+      id: td?.id || 0,
+      parentId: parent ? treeData(parent).id : null,
+      prevSiblingId,
+      descendantIds,
+      name: td?.name || null,
+      state: td?.state || null,
+      collapsed: !!td?.collapsed,
+    });
+    if (closedTabs.length > CLOSED_MEMORY) closedTabs.shift();
   }
 
   function onTabSelect() {
@@ -1584,9 +1952,21 @@
 
   // --- Persistence ---
 
+  // Write-on-every-change: capture state at the moment of call and fire an
+  // async write. If a write is already in flight, queue one more so the
+  // latest state always reaches disk. No debounce, no reliance on unload —
+  // quitting/crashing at any moment leaves disk consistent with the latest
+  // committed change.
+  let saveInFlight = false;
+  let savePending = false;
   function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(writeToDisk, SAVE_DELAY);
+    if (saveInFlight) { savePending = true; return; }
+    saveInFlight = true;
+    (async () => {
+      try { await writeToDisk(); } catch (e) { console.error("palefox-tabs: save chain", e); }
+      saveInFlight = false;
+      if (savePending) { savePending = false; scheduleSave(); }
+    })();
   }
 
   async function writeToDisk() {
@@ -1599,70 +1979,129 @@
       }
       return {
         type: "tab",
-        url: row._tab?.linkedBrowser?.currentURI?.spec || "",
+        id: d.id,
+        url: tabUrl(row._tab),
         level: d.level, name: d.name,
         state: d.state, collapsed: d.collapsed,
       };
     }).filter(Boolean);
+
+    // Preserve unconsumed saved-state entries (tabs saved last session that
+    // haven't been brought back yet). Otherwise periodic saves during a
+    // nearly-empty session would clobber them before SSTabRestoring can claim.
+    for (const [, list] of savedTabState) {
+      for (const s of list) out.push({ ...s, type: "tab" });
+    }
+
     try {
       const path = PathUtils.join(
         Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE
       );
-      await IOUtils.writeUTF8(path, JSON.stringify({ v: 2, nodes: out }));
+      await IOUtils.writeUTF8(path, JSON.stringify({
+        nodes: out,
+        closedTabs,
+        nextTabId,
+      }));
     } catch (e) {
       console.error("palefox-tabs: save failed", e);
     }
   }
 
   async function loadFromDisk() {
+    const path = PathUtils.join(
+      Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE
+    );
+    let saved;
     try {
-      const path = PathUtils.join(
-        Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE
-      );
-      const saved = JSON.parse(await IOUtils.readUTF8(path));
-
-      // v1 compat
-      if (saved.v === 1 && saved.tabs) {
-        saved.v = 2;
-        saved.nodes = saved.tabs.map(t => ({ type: "tab", ...t }));
+      saved = JSON.parse(await IOUtils.readUTF8(path));
+    } catch (e) {
+      console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
+      return;
+    }
+    try {
+      if (!saved || !Array.isArray(saved.nodes)) {
+        console.log("palefox-tabs: save file exists but has no nodes array");
+        return;
       }
-      if (saved.v !== 2) return;
+
+      if (Number.isInteger(saved.nextTabId)) nextTabId = saved.nextTabId;
+      if (Array.isArray(saved.closedTabs)) {
+        closedTabs.length = 0;
+        closedTabs.push(...saved.closedTabs.slice(-CLOSED_MEMORY));
+      }
 
       const tabs = allTabs();
       const used = new Set();
 
-      // Groups are stored separately; we'll insert them during buildPanel
-      loadedGroups = [];
+      // Reviver: apply saved tree data (preserving id) to a live tab.
+      const applied = new Set();
+      const apply = (tab, s, i) => {
+        const id = s.id || nextTabId++;
+        treeOf.set(tab, {
+          id, level: s.level || 0, name: s.name || null,
+          state: s.state || null, collapsed: !!s.collapsed,
+        });
+        pinTabId(tab, id);
+        applied.add(i);
+      };
 
-      // Match tabs by position+URL then URL
       const tabNodes = saved.nodes.filter(n => n.type === "tab");
-      tabNodes.forEach((s, i) => {
-        if (i < tabs.length &&
-            tabs[i].linkedBrowser?.currentURI?.spec === s.url) {
-          treeOf.set(tabs[i], {
-            level: s.level || 0, name: s.name || null,
-            state: s.state || null, collapsed: !!s.collapsed,
-          });
+
+      // 1. Primary: match by SessionStore-pinned id. Exact, survives session
+      //    restore including lazy/pending tabs (no URL comparison needed).
+      tabs.forEach((tab, i) => {
+        if (used.has(i)) return;
+        const pid = readPinnedId(tab);
+        if (!pid) return;
+        const j = tabNodes.findIndex((s, k) => !applied.has(k) && s.id === pid);
+        if (j >= 0) {
+          apply(tab, tabNodes[j], j);
           used.add(i);
         }
       });
-      for (const s of tabNodes) {
-        const j = tabs.findIndex((t, i) =>
-          !used.has(i) && t.linkedBrowser?.currentURI?.spec === s.url
-        );
+
+      // 2. Fallback: URL matching (position-first, then by URL). Covers first
+      //    run after upgrade, and tabs opened outside palefox.
+      const liveUrls = tabs.map(tabUrl);
+      tabNodes.forEach((s, i) => {
+        if (applied.has(i)) return;
+        if (i < tabs.length && !used.has(i) && liveUrls[i] === s.url) {
+          apply(tabs[i], s, i);
+          used.add(i);
+        }
+      });
+      tabNodes.forEach((s, i) => {
+        if (applied.has(i)) return;
+        const j = liveUrls.findIndex((u, k) => !used.has(k) && u === s.url);
         if (j >= 0) {
-          treeOf.set(tabs[j], {
-            level: s.level || 0, name: s.name || null,
-            state: s.state || null, collapsed: !!s.collapsed,
-          });
+          apply(tabs[j], s, i);
           used.add(j);
         }
-      }
+      });
+
+      // Diagnostic: how much of the saved tree did we manage to pin to live tabs?
+      console.log(
+        `palefox-tabs: loaded ${tabNodes.length} saved tab nodes, ` +
+        `matched ${applied.size} to live tabs (of ${tabs.length}). ` +
+        `Sample live URL[0]="${liveUrls[0] || ""}", ` +
+        `saved URL[0]="${tabNodes[0]?.url || ""}".`
+      );
+
+      // Leftover nodes — tabs saved last session but not live right now.
+      // Keyed by URL so SSTabRestoring can pick them up if the session/window
+      // gets restored later (e.g. via undoCloseWindow).
+      savedTabState.clear();
+      tabNodes.forEach((s, i) => {
+        if (applied.has(i)) return;
+        const list = savedTabState.get(s.url) || [];
+        list.push(s);
+        savedTabState.set(s.url, list);
+      });
 
       // Store full node list for buildPanel to reconstruct groups + order
       loadedNodes = saved.nodes;
-    } catch {
-      // First run — no save file
+    } catch (e) {
+      console.error("palefox-tabs: loadFromDisk parse/apply error", e);
     }
   }
 
@@ -1676,6 +2115,10 @@
 
     while (panel.firstChild !== spacer) panel.firstChild.remove();
 
+    // Build id + URL lookup tables for matching saved nodes to live tabs.
+    // Id matching (from SessionStore-pinned values) is primary; URL is fallback.
+    const liveIds = tabs.map(readPinnedId);
+    const liveUrls = tabs.map(tabUrl);
     for (const node of loadedNodes) {
       if (node.type === "group") {
         const row = createGroupRow(node.name, node.level || 0);
@@ -1684,13 +2127,16 @@
         syncGroupRow(row);
         panel.insertBefore(row, spacer);
       } else {
-        // Find matching tab
-        const tab = tabs.find((t, i) =>
-          !usedTabs.has(i) && t.linkedBrowser?.currentURI?.spec === node.url
-        );
-        if (tab) {
-          usedTabs.add(tabs.indexOf(tab));
-          panel.insertBefore(createTabRow(tab), spacer);
+        let i = -1;
+        if (node.id) {
+          i = liveIds.findIndex((id, k) => !usedTabs.has(k) && id && id === node.id);
+        }
+        if (i < 0) {
+          i = liveUrls.findIndex((u, k) => !usedTabs.has(k) && u === node.url);
+        }
+        if (i >= 0) {
+          usedTabs.add(i);
+          panel.insertBefore(createTabRow(tabs[i]), spacer);
         }
       }
     }
@@ -2036,6 +2482,7 @@
 
   async function init() {
     injectCSS();
+    tryRegisterPinAttr();
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
 
@@ -2075,6 +2522,7 @@
     tc.addEventListener("TabSelect", onTabSelect);
     tc.addEventListener("TabAttrModified", onTabAttrModified);
     tc.addEventListener("TabMove", onTabMove);
+    tc.addEventListener("SSTabRestoring", onTabRestoring);
 
     // Click on spacer activates vim with last row
     spacer.addEventListener("click", () => {
@@ -2083,11 +2531,6 @@
     });
 
     // Clicking content area blurs the panel naturally via the blur listener.
-
-    window.addEventListener("unload", () => {
-      clearTimeout(saveTimer);
-      writeToDisk();
-    });
 
     console.log("palefox-tabs: initialized");
   }

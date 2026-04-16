@@ -108,6 +108,7 @@ When browsing an insecure HTTP page, a warning banner appears after a 2-second d
 | `pfx.sidebar.menuBar` | `false` | Show the menu bar |
 | `pfx.sidebar.newTab` | `false` | Show the new tab button in the sidebar |
 | `pfx.sidebar.width` | `300` | Sidebar width in pixels (saved automatically on resize) |
+| `pfx.tabs.newTabPosition` | `"root"` | Where new tabs appear in the tree: `"root"` (top level, end of list), `"child"` (child of opener / selected tab), `"sibling"` (sibling of opener / selected tab). Reopened tabs (Ctrl+Shift+T) ignore this and return to their prior position. |
 | `pfx.view.draggable-sidebar` | `true` | Drag the window from empty sidebar space |
 
 ## Accessibility

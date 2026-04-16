@@ -2,7 +2,7 @@
 
 # Palefox
 
-A developer-focused alternative to Zen Browser on upstream Firefox
+Firefox, unfenced
 
 <img src="docs/demo.gif" alt="Palefox demo" />
 
