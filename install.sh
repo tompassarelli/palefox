@@ -102,7 +102,7 @@ case "$(uname -s)" in
             fi
         done
         if [ -z "$profiles_dir" ]; then
-            echo "Error: No $BROWSER_NAME profile directory found."
+            echo "Error: No $BROWSER_NAME profile directory found. Make sure you've launched $BROWSER_NAME at least once."
             exit 1
         fi
         ;;
@@ -126,7 +126,7 @@ if [ ${#profiles[@]} -eq 0 ]; then
 fi
 
 if [ ${#profiles[@]} -eq 0 ]; then
-    echo "Error: No $BROWSER_NAME profiles found in $profiles_dir"
+    echo "Error: No $BROWSER_NAME profiles found in $profiles_dir. Make sure you've launched $BROWSER_NAME at least once."
     exit 1
 fi
 

@@ -51,7 +51,7 @@ try {
         $profilesDir = Join-Path $env:APPDATA "Mozilla\Firefox\Profiles"
     }
     if (-not (Test-Path $profilesDir)) {
-        Write-Error "No $browserName profile directory found at $profilesDir"
+        Write-Error "No $browserName profile directory found at $profilesDir. Make sure you've launched $browserName at least once."
         exit 1
     }
 
@@ -61,7 +61,7 @@ try {
         $profiles = Get-ChildItem -Path $profilesDir -Directory -Filter "*.*" 2>$null
     }
     if (-not $profiles) {
-        Write-Error "No $browserName profiles found in $profilesDir"
+        Write-Error "No $browserName profiles found in $profilesDir. Make sure you've launched $browserName at least once."
         exit 1
     }
 
