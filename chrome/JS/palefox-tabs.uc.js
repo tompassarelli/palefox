@@ -1820,6 +1820,12 @@
         pinnedContainer.hidden = false;
         pinnedContainer.setAttribute("pfx-empty-zone", "true");
       }
+      // Symmetric: dragging a pinned tab and the tree panel has no rows —
+      // reveal a "drop to unpin" zone in the panel.
+      if (panel && row._tab?.pinned
+          && !panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
+        panel.setAttribute("pfx-empty-zone", "true");
+      }
     });
 
     row.addEventListener("dragend", () => {
@@ -1833,6 +1839,7 @@
           pinnedContainer.hidden = true;
         }
       }
+      panel?.removeAttribute("pfx-empty-zone");
     });
 
     row.addEventListener("dragover", (e) => {
@@ -1908,6 +1915,45 @@
       if (dropTarget === container) {
         // Empty pinned container: just pin. onTabPinned moves the row.
         gBrowser.pinTab(tab);
+      } else if (dropTarget?._tab) {
+        executeDrop(dragSource, dropTarget, dropPosition);
+      }
+      clearDropIndicator();
+    });
+  }
+
+  // Symmetric drop handler on the tree panel — lets users drag a pinned tab
+  // into the panel area to unpin it. Activates when:
+  //   1. The panel has no tab rows (only the spacer): unpin → row appears here.
+  //   2. The drop lands on whitespace after the last row: unpin and append.
+  function setupPanelDrop(p) {
+    p.addEventListener("dragover", (e) => {
+      if (!dragSource || !dragSource._tab?.pinned) return;
+      // Only handle if the dragover landed on the panel itself or the spacer
+      // (rows handle their own dragover).
+      if (e.target !== p && e.target !== spacer) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const lastRow = p.querySelector(".pfx-tab-row:last-of-type, .pfx-group-row:last-of-type");
+      if (lastRow) {
+        dropTarget = lastRow;
+        dropPosition = "after";
+        showDropIndicator(lastRow, "after");
+      } else {
+        dropTarget = p;
+        dropPosition = "into-empty-panel";
+      }
+    });
+
+    p.addEventListener("drop", (e) => {
+      if (!dragSource || !dragSource._tab?.pinned) return;
+      if (e.target !== p && e.target !== spacer && dropTarget !== p) return;
+      e.preventDefault();
+      const tab = dragSource._tab;
+      if (!tab) return;
+      if (dropTarget === p) {
+        // Empty panel: just unpin. onTabUnpinned moves the row in.
+        gBrowser.unpinTab(tab);
       } else if (dropTarget?._tab) {
         executeDrop(dragSource, dropTarget, dropPosition);
       }
@@ -2812,6 +2858,27 @@
         opacity: 0.6;
         align-self: center;
       }
+
+      /* Symmetric drop zone in the tree panel — shown when dragging
+       * a pinned tab and the panel has no rows. */
+      #pfx-tab-panel[pfx-empty-zone] {
+        border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent);
+        border-radius: 4px;
+        margin: 4px var(--pfx-sidebar-inset);
+        min-height: 60px;
+        position: relative;
+      }
+      #pfx-tab-panel[pfx-empty-zone]::before {
+        content: "drop to unpin";
+        position: absolute;
+        top: 8px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 11px;
+        opacity: 0.6;
+        pointer-events: none;
+      }
       #pfx-pinned-container .pfx-tab-row {
         width: 32px;
         height: 32px;
@@ -3187,6 +3254,7 @@
     spacer.id = "pfx-tab-spacer";
     spacer.setAttribute("flex", "1");
     panel.appendChild(spacer);
+    setupPanelDrop(panel);
 
     positionPanel();
 
