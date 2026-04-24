@@ -1,11 +1,16 @@
-/* palefox.css — core theme
+/* palefox.css — core theme + entry point for sub-files
  *
  * This file is overwritten on update.
  * Put your customizations in user.css instead.
  *
  * Requires: palefox-drawer.uc.js (DOM restructuring)
  * Target: Firefox with native vertical tabs enabled
- */
+ *
+ * Sub-files load via @import below — userChrome.css only ever needs
+ * to point at this single entry, so adding more palefox-*.css files
+ * doesn't require touching the user-facing entry point. */
+
+@import url("palefox-tabs.css");
 
 
 /* #region vars */
