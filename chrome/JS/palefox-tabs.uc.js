@@ -50,11 +50,15 @@
     };
   }
 
-  // src/tabs/index.ts
-  var pfxLog = createLogger("tabs");
+  // src/tabs/constants.ts
   var INDENT = 14;
   var SAVE_FILE = "palefox-tab-tree.json";
   var CHORD_TIMEOUT = 500;
+  var CLOSED_MEMORY = 32;
+  var PIN_ATTR = "pfx-id";
+
+  // src/tabs/index.ts
+  var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
   if (!sidebarMain)
     return;
@@ -84,13 +88,11 @@
   var pendingCursorMove = false;
   var selection = new Set;
   var movingTabs = new Set;
-  var CLOSED_MEMORY = 32;
   var closedTabs = [];
   var savedTabQueue = [];
   var _lastLoadedNodes = [];
   var _inSessionRestore = true;
   var nextTabId = 1;
-  var PIN_ATTR = "pfx-id";
   var pinAttrRegistered = false;
   function tryRegisterPinAttr() {
     if (pinAttrRegistered || !SS?.persistTabAttribute)

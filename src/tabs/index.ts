@@ -6,14 +6,11 @@
 // nested functions.
 
 import { createLogger } from "./log.ts";
+import { INDENT, SAVE_FILE, CHORD_TIMEOUT, CLOSED_MEMORY, PIN_ATTR } from "./constants.ts";
 
 const pfxLog = createLogger("tabs");
 
-  // --- Constants ---
-
-  const INDENT = 14;                // px per nesting level
-  const SAVE_FILE = "palefox-tab-tree.json";
-  const CHORD_TIMEOUT = 500;        // ms to complete a chord (dd, gg)
+  // (constants moved to ./constants.ts)
 
   // --- DOM references ---
 
@@ -65,8 +62,7 @@ const pfxLog = createLogger("tabs");
   const movingTabs = new Set();
 
   // Recently-closed tab memory, for restoring hierarchy on Ctrl+Shift+T.
-  // Matched by URL on reopen; parent is looked up by id.
-  const CLOSED_MEMORY = 32;
+  // Matched by URL on reopen; parent is looked up by id. (CLOSED_MEMORY in ./constants.ts)
   const closedTabs = [];            // [{ url, id, parentId, name, state, collapsed }]
 
   // Ordered queue of saved-tab nodes left over from last session's tree file
@@ -87,8 +83,7 @@ const pfxLog = createLogger("tabs");
   // a DOM attribute instead — Firefox's SessionStore tracks a small set of
   // tab attributes via persistTabAttribute. If we can register ours there we
   // get free cross-session persistence; otherwise this is a no-op and we
-  // rely on URL matching.
-  const PIN_ATTR = "pfx-id";
+  // rely on URL matching. (PIN_ATTR in ./constants.ts)
   let pinAttrRegistered = false;
   function tryRegisterPinAttr() {
     if (pinAttrRegistered || !SS?.persistTabAttribute) return;
