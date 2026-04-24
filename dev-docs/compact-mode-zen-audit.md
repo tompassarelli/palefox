@@ -17,10 +17,19 @@ Zen uses `position: fixed` on the sidebar. We do the same.
 ## What We Ported
 
 ### `_ignoreNextHover` (ZenCompactMode.mjs:623)
-**Ported.** When enabling compact mode via button click, the mouse is over the
-sidebar. CSS applies `pointer-events: none`, which may cause a `mouseenter` on
-the hover strip as the pointer "falls through." This flag blocks that one event.
-Cleared next tick via `setTimeout(0)`.
+**Ported.** When enabling compact mode, CSS applies `pointer-events: none`
+immediately (not after the animation), which fires a synthetic `mouseleave` on
+the sidebar and then `mouseenter` on the hover strip — even though the mouse
+didn't move. This flag blocks hover-triggered show during and after toggle.
+
+Cleared via `transitionend` on the `transform` property (~250ms), with a 400ms
+safety timeout for reduced-motion environments where the transition doesn't fire.
+(Earlier approach used `mouseleave` but that fired too early — triggered by the
+CSS `pointer-events` change, not physical mouse movement.)
+
+`setHover()` also actively force-hides when `_ignoreNextHover` is set as a
+defensive catch for any show path that bypasses the per-caller guard
+(Zen's `animateCompactMode:455` pattern).
 
 ### `flashElement` pattern (ZenCompactMode.mjs:672)
 **Ported as `flashSidebar`.** On mouseleave, the sidebar lingers for 300ms before

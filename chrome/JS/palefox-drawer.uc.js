@@ -207,7 +207,7 @@
     draggableEnable();
   }
 
-  Services.prefs.addObserver(DRAGGABLE_PREF, {
+  const draggableObserver = {
     observe() {
       if (Services.prefs.getBoolPref(DRAGGABLE_PREF, true)) {
         draggableEnable();
@@ -215,7 +215,8 @@
         draggableDisable();
       }
     },
-  });
+  };
+  Services.prefs.addObserver(DRAGGABLE_PREF, draggableObserver);
 
   // --- Sidebar width preference ---
 
@@ -283,6 +284,7 @@
   //   - _isTabBeingDragged flag: we use querySelector in isGuarded() instead
 
   const COMPACT_PREF = "pfx.sidebar.compact";
+  const DEBUG_PREF   = "pfx.debug";
 
   // How long the sidebar lingers after mouseleave before hiding.
   // Zen uses a pref (zen.view.compact.sidebar-keep-hover.duration).
@@ -290,14 +292,24 @@
   // to not flicker when the mouse briefly crosses the sidebar edge.
   const KEEP_HOVER_DURATION = 300;
 
+  function dbg(event, data = {}) {
+    if (!Services.prefs.getBoolPref(DEBUG_PREF, false)) return;
+    console.log("[PFX:drawer]", event, {
+      compact:      sidebarMain.hasAttribute("data-pfx-compact"),
+      hover:        sidebarMain.hasAttribute("pfx-has-hover"),
+      openPopups:   _openPopups,
+      flashPending: flashTimer !== null,
+      guarded:      isGuarded(),
+      ...data,
+    });
+  }
+
   let hoverStrip = null;
   let flashTimer = null;
+  let urlbarCompactObserver = null;
 
-  // Set true during compactToggle() to block the hover strip's
-  // mouseenter from immediately re-showing the sidebar. When the
-  // user clicks the sidebar button, CSS sets pointer-events:none
-  // on the sidebar, which may cause a mouseenter on the hover strip
-  // as the pointer "falls through." Cleared next tick via setTimeout(0).
+  // Blocks hover-triggered show during and immediately after compactToggle().
+  // Held until the sidebar's CSS transform transition completes (~250ms).
   // Zen equivalent: _ignoreNextHover (ZenCompactMode.mjs:623)
   let _ignoreNextHover = false;
 
@@ -310,27 +322,23 @@
   });
 
   // Guards: conditions that should prevent the sidebar from hiding.
-  // Zen uses ZenHasPolyfill MutationObserver for [open], [panelopen],
-  // [breakout-extend] — we use querySelector which is simpler and
-  // sufficient for our single-element case.
-  // Popup guard counter — same pattern as Firefox's browser-sidebar.js
-  // (_hoverBlockerCount). Prevents hiding while menus/panels are open.
-  // Uses composedTarget to cross shadow DOM boundaries, excludes
-  // tooltips which fire constantly and would inflate the counter.
-  // Popup guard counter — same pattern as Firefox's browser-sidebar.js.
-  // Exclude tooltips and tab-preview-panel (fires mismatched events).
+  // Popup counter mirrors Firefox's browser-sidebar.js _hoverBlockerCount.
+  // Uses composedPath()[0] to pierce shadow DOM. Excludes tooltips (fire
+  // constantly) and tab-preview-panel (fires mismatched events).
   let _openPopups = 0;
   function _isIgnoredPopup(e) {
-    const el = e.composedTarget || e.target;
-    return el.tagName === "tooltip" || el.id === "tab-preview-panel";
+    const el = e.composedPath?.()[0] ?? e.target;
+    return el.localName === "tooltip" || el.id === "tab-preview-panel";
   }
   document.addEventListener("popupshown", (e) => {
     if (_isIgnoredPopup(e)) return;
     _openPopups++;
+    dbg("popupshown", { id: e.target.id, tag: e.target.localName, _openPopups });
   });
   document.addEventListener("popuphidden", (e) => {
     if (_isIgnoredPopup(e)) return;
     _openPopups = Math.max(0, _openPopups - 1);
+    dbg("popuphidden", { id: e.target.id, tag: e.target.localName, _openPopups });
   });
 
   function isGuarded() {
@@ -350,6 +358,14 @@
   // implicit hover, toolbar panel state). Ours is trivial because
   // we have one sidebar and one attribute.
   function setHover(value) {
+    dbg("setHover", { value });
+    if (value && _ignoreNextHover) {
+      // Zen pattern (animateCompactMode:455): actively force-hide when
+      // _ignoreNextHover is set, rather than just early-returning from callers.
+      // Defensive catch for any show path that bypasses per-caller guards.
+      sidebarMain.removeAttribute("pfx-has-hover");
+      return;
+    }
     if (value) {
       sidebarMain.setAttribute("pfx-has-hover", "true");
     } else {
@@ -365,15 +381,19 @@
   // Ours is hardcoded to the sidebar since it's our only flashable element.
   function flashSidebar(duration) {
     if (flashTimer) {
-      // Already visible and flashing — just extend the timer
       clearTimeout(flashTimer);
+      dbg("flashSidebar:extend", { duration });
     } else {
-      // Not currently visible — show first
+      dbg("flashSidebar:show", { duration });
       requestAnimationFrame(() => setHover(true));
     }
     flashTimer = setTimeout(() => {
       requestAnimationFrame(() => {
-        if (!isGuarded()) setHover(false);
+        if (isGuarded()) {
+          dbg("flashSidebar:hide-blocked");
+        } else {
+          setHover(false);
+        }
         flashTimer = null;
       });
     }, duration);
@@ -432,6 +452,7 @@
   }
 
   function compactEnable() {
+    dbg("compactEnable");
     // Setting this attribute without pfx-has-hover causes CSS to
     // immediately hide the sidebar. No race condition possible.
     sidebarMain.setAttribute("data-pfx-compact", "");
@@ -440,14 +461,16 @@
     // Top layer elements are immune to ancestor transforms. Remove popover
     // so the urlbar moves with the sidebar's transform. We restore it
     // dynamically during breakout so the dropdown renders above everything.
-    if (urlbar) {
+    if (urlbar && !urlbarCompactObserver) {
       urlbar.removeAttribute("popover");
-      new MutationObserver(() => {
+      urlbarCompactObserver = new MutationObserver(() => {
         if (!sidebarMain.hasAttribute("data-pfx-compact")) return;
         if (urlbar.hasAttribute("breakout-extend")) {
+          dbg("urlbar:breakout-open");
           urlbar.setAttribute("popover", "manual");
-          urlbar.showPopover();
+          if (!urlbar.matches(":popover-open")) urlbar.showPopover();
         } else {
+          dbg("urlbar:breakout-close");
           urlbar.removeAttribute("popover");
           // Breakout closed — if mouse isn't over the sidebar, hide it.
           // Fixes: click urlbar → click away → sidebar stays stuck visible
@@ -456,7 +479,8 @@
             flashSidebar(KEEP_HOVER_DURATION);
           }
         }
-      }).observe(urlbar, { attributes: true, attributeFilter: ["breakout-extend"] });
+      });
+      urlbarCompactObserver.observe(urlbar, { attributes: true, attributeFilter: ["breakout-extend"] });
     }
 
     // Hover strip: invisible box at left edge, sits behind the sidebar
@@ -469,6 +493,9 @@
       hoverStrip.id = "pfx-hover-strip";
       sidebarMain.parentNode.appendChild(hoverStrip);
       hoverStrip.addEventListener("mouseenter", () => {
+        // Synchronous guard — checked before queuing rAF, because rAF fires
+        // after setTimeout(0), by which point _ignoreNextHover may be reset.
+        if (_ignoreNextHover) return;
         clearFlash();
         requestAnimationFrame(() => {
           if (!_ignoreNextHover) setHover(true);
@@ -481,14 +508,20 @@
   }
 
   function compactDisable() {
+    dbg("compactDisable");
     clearFlash();
     sidebarMain.removeAttribute("data-pfx-compact");
     sidebarMain.removeAttribute("pfx-has-hover");
 
+    // Disconnect the urlbar breakout observer — must happen before
+    // restoring popover so it doesn't fire on the attribute change below.
+    urlbarCompactObserver?.disconnect();
+    urlbarCompactObserver = null;
+
     // Restore popover so the urlbar returns to the top layer
     if (urlbar) {
       urlbar.setAttribute("popover", "manual");
-      urlbar.showPopover();
+      if (!urlbar.matches(":popover-open")) urlbar.showPopover();
     }
 
     if (hoverStrip) {
@@ -502,22 +535,31 @@
 
   function compactToggle() {
     const active = sidebarMain.hasAttribute("data-pfx-compact");
+    dbg("compactToggle", { wasActive: active });
     if (active) {
       compactDisable();
       Services.prefs.setBoolPref(COMPACT_PREF, false);
     } else {
-      // Block hover strip from immediately re-showing the sidebar.
-      // When CSS sets pointer-events:none on the sidebar, the hover
-      // strip behind it may receive a mouseenter as the pointer
-      // "falls through." This flag blocks that one event.
-      // Cleared next tick — by then the pointer state has settled.
-      // Zen equivalent: _ignoreNextHover (ZenCompactMode.mjs:623)
       _ignoreNextHover = true;
       compactEnable();
       Services.prefs.setBoolPref(COMPACT_PREF, true);
-      setTimeout(() => {
-        _ignoreNextHover = false;
-      }, 0);
+      // Clear after the CSS hide transition completes (transform, 250ms).
+      //
+      // Cannot use mouseleave: adding data-pfx-compact applies pointer-events:none
+      // immediately (not after the animation), firing a synthetic mouseleave on the
+      // sidebar. That clears _ignoreNextHover before the hover strip's mouseenter
+      // guard fires, letting the sidebar immediately re-open.
+      //
+      // Zen clears _ignoreNextHover inside animateCompactMode().then() — after the
+      // animation promise resolves. Our equivalent: transitionend on "transform".
+      const clearIgnore = () => { _ignoreNextHover = false; };
+      const safetyTimer = setTimeout(clearIgnore, 400);
+      sidebarMain.addEventListener("transitionend", function onTransitionEnd(e) {
+        if (e.target !== sidebarMain || e.propertyName !== "transform") return;
+        sidebarMain.removeEventListener("transitionend", onTransitionEnd);
+        clearTimeout(safetyTimer);
+        clearIgnore();
+      });
     }
   }
 
@@ -527,14 +569,22 @@
   }
 
   // Live-toggle via about:config without restart
-  Services.prefs.addObserver(COMPACT_PREF, {
+  const compactObserver = {
     observe() {
       const enabled = Services.prefs.getBoolPref(COMPACT_PREF, false);
       const active = sidebarMain.hasAttribute("data-pfx-compact");
       if (enabled && !active) compactEnable();
       else if (!enabled && active) compactDisable();
     },
-  });
+  };
+  Services.prefs.addObserver(COMPACT_PREF, compactObserver);
+
+  // Remove pref observers when this window closes so they don't fire
+  // against dead DOM nodes after the window is gone.
+  window.addEventListener("unload", () => {
+    Services.prefs.removeObserver(DRAGGABLE_PREF, draggableObserver);
+    Services.prefs.removeObserver(COMPACT_PREF, compactObserver);
+  }, { once: true });
 
   // Clear stale hover when window minimizes/maximizes/restores.
   // The mouse may no longer be over the sidebar after the state change.
