@@ -57,6 +57,167 @@
   var CLOSED_MEMORY = 32;
   var PIN_ATTR = "pfx-id";
 
+  // src/tabs/state.ts
+  var treeOf = new WeakMap;
+  var rowOf = new WeakMap;
+  var hzDisplay = new WeakMap;
+  var savedTabQueue = [];
+  var closedTabs = [];
+
+  // src/tabs/persist.ts
+  function profilePath() {
+    return PathUtils.join(Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE);
+  }
+  function serializeState(snapshot) {
+    const tabEntries = snapshot.tabs.map((tab) => {
+      const d = snapshot.treeData(tab);
+      return {
+        type: "tab",
+        id: d.id,
+        parentId: d.parentId ?? null,
+        url: snapshot.tabUrl(tab),
+        name: d.name,
+        state: d.state,
+        collapsed: d.collapsed
+      };
+    });
+    const groupEntries = [];
+    let lastSeenTabId = null;
+    for (const row of snapshot.rows()) {
+      if (row._tab) {
+        lastSeenTabId = snapshot.treeData(row._tab).id;
+      } else if (row._group) {
+        groupEntries.push({
+          id: 0,
+          parentId: null,
+          type: "group",
+          name: row._group.name,
+          level: row._group.level,
+          state: row._group.state,
+          collapsed: row._group.collapsed,
+          afterTabId: lastSeenTabId
+        });
+      }
+    }
+    const liveUrls = new Set(tabEntries.map((e) => e.url).filter(Boolean));
+    const leftovers = snapshot.savedTabQueue.filter((s) => !s.url || !liveUrls.has(s.url)).map((s) => ({ ...s, type: "tab" }));
+    const out = [...tabEntries, ...groupEntries, ...leftovers];
+    return JSON.stringify({
+      nodes: out,
+      closedTabs: snapshot.closedTabs,
+      nextTabId: snapshot.nextTabId
+    });
+  }
+  function parseLoaded(text) {
+    let raw;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!raw || !Array.isArray(raw.nodes))
+      return null;
+    const tabNodes = raw.nodes.filter((n) => n.type === "tab" || n.type === undefined).map((n) => ({ ...n }));
+    {
+      const stack = [];
+      for (const n of tabNodes) {
+        const lv = n.level || 0;
+        while (stack.length && stack[stack.length - 1].level >= lv)
+          stack.pop();
+        if (n.parentId === undefined) {
+          n.parentId = stack.length ? stack[stack.length - 1].id : null;
+        }
+        if (n.id)
+          stack.push({ level: lv, id: n.id });
+      }
+    }
+    return {
+      nodes: raw.nodes,
+      tabNodes,
+      closedTabs: Array.isArray(raw.closedTabs) ? raw.closedTabs.slice(-CLOSED_MEMORY) : [],
+      nextTabId: Number.isInteger(raw.nextTabId) ? raw.nextTabId : null
+    };
+  }
+  async function writeTreeToDisk(snapshot) {
+    try {
+      await IOUtils.writeUTF8(profilePath(), serializeState(snapshot));
+    } catch (e) {
+      console.error("palefox-tabs: writeTreeToDisk failed", e);
+      throw e;
+    }
+  }
+  async function readTreeFromDisk() {
+    const path = profilePath();
+    let text;
+    try {
+      text = await IOUtils.readUTF8(path);
+    } catch (e) {
+      console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
+      return null;
+    }
+    const parsed = parseLoaded(text);
+    if (!parsed) {
+      console.log("palefox-tabs: save file exists but failed to parse");
+    }
+    return parsed;
+  }
+  function makeSaver(getSnapshot, onError = (e) => console.error("palefox-tabs: save chain", e)) {
+    let inFlight = false;
+    let pending = false;
+    function scheduleSave() {
+      if (inFlight) {
+        pending = true;
+        return;
+      }
+      inFlight = true;
+      (async () => {
+        try {
+          await writeTreeToDisk(getSnapshot());
+        } catch (e) {
+          onError(e);
+        }
+        inFlight = false;
+        if (pending) {
+          pending = false;
+          scheduleSave();
+        }
+      })();
+    }
+    return scheduleSave;
+  }
+  function popSavedByUrl(queue, url) {
+    if (!url)
+      return null;
+    const i = queue.findIndex((s) => s.url === url);
+    return i >= 0 ? queue.splice(i, 1)[0] : null;
+  }
+  function popSavedForTab(queue, ctx) {
+    const { currentIdx, pinnedId, url, inSessionRestore, log } = ctx;
+    if (pinnedId) {
+      const i = queue.findIndex((s) => s.id === pinnedId);
+      if (i >= 0) {
+        log?.("popSavedForTab:pfxId", { idx: currentIdx, pfxId: pinnedId, url });
+        return queue.splice(i, 1)[0];
+      }
+    }
+    if (url && url !== "about:blank") {
+      const node2 = popSavedByUrl(queue, url);
+      log?.("popSavedForTab:url", { idx: currentIdx, url, found: !!node2 });
+      return node2;
+    }
+    if (!inSessionRestore)
+      return null;
+    const node = queue.length ? queue.shift() : null;
+    log?.("popSavedForTab:fifo", {
+      idx: currentIdx,
+      pfxId: pinnedId,
+      url,
+      nodeId: node?.id,
+      nodeOrigIdx: node?._origIdx
+    });
+    return node;
+  }
+
   // src/tabs/index.ts
   var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
@@ -74,9 +235,6 @@
       return null;
     }
   })();
-  var treeOf = new WeakMap;
-  var rowOf = new WeakMap;
-  var hzDisplay = new WeakMap;
   var panel;
   var spacer;
   var pinnedContainer;
@@ -88,8 +246,6 @@
   var pendingCursorMove = false;
   var selection = new Set;
   var movingTabs = new Set;
-  var closedTabs = [];
-  var savedTabQueue = [];
   var _lastLoadedNodes = [];
   var _inSessionRestore = true;
   var nextTabId = 1;
@@ -506,7 +662,7 @@
   function onTabOpen(e) {
     const tab = e.target;
     const td = treeData(tab);
-    const prior = popSavedForTab(tab);
+    const prior = popSavedForTab2(tab);
     if (prior) {
       const idx = [...gBrowser.tabs].indexOf(tab);
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
@@ -634,33 +790,17 @@
     updateVisibility();
     scheduleSave();
   }
-  function popSavedByUrl(url) {
-    if (!url)
-      return null;
-    const i = savedTabQueue.findIndex((s) => s.url === url);
-    return i >= 0 ? savedTabQueue.splice(i, 1)[0] : null;
+  function popSavedByUrl2(url) {
+    return popSavedByUrl(savedTabQueue, url);
   }
-  function popSavedForTab(tab) {
-    const pinnedId = readPinnedId(tab);
-    const u = tabUrl(tab);
-    const idx = [...gBrowser.tabs].indexOf(tab);
-    if (pinnedId) {
-      const i = savedTabQueue.findIndex((s) => s.id === pinnedId);
-      if (i >= 0) {
-        pfxLog("popSavedForTab:pfxId", { idx, pfxId: pinnedId, url: u });
-        return savedTabQueue.splice(i, 1)[0];
-      }
-    }
-    if (u && u !== "about:blank") {
-      const node2 = popSavedByUrl(u);
-      pfxLog("popSavedForTab:url", { idx, url: u, found: !!node2 });
-      return node2;
-    }
-    if (!_inSessionRestore)
-      return null;
-    const node = savedTabQueue.length ? savedTabQueue.shift() : null;
-    pfxLog("popSavedForTab:fifo", { idx, pfxId: pinnedId, url: u, nodeId: node?.id, nodeOrigIdx: node?._origIdx });
-    return node;
+  function popSavedForTab2(tab) {
+    return popSavedForTab(savedTabQueue, {
+      currentIdx: [...gBrowser.tabs].indexOf(tab),
+      pinnedId: readPinnedId(tab),
+      url: tabUrl(tab),
+      inSessionRestore: _inSessionRestore,
+      log: pfxLog
+    });
   }
   function onTabRestoring(e) {
     const tab = e.target;
@@ -672,7 +812,7 @@
       const td2 = treeData(tab);
       if (td2.appliedSavedState)
         return;
-      const correction = popSavedByUrl(url);
+      const correction = popSavedByUrl2(url);
       if (correction) {
         pfxLog("onTabRestoring:correction", { idx, url, savedId: correction.id, savedParentId: correction.parentId, parentResolvesTo: tabById(correction.parentId)?.label });
         td2.id = correction.id || td2.id;
@@ -2258,112 +2398,32 @@
     });
     input.addEventListener("blur", () => finish(true));
   }
-  var saveInFlight = false;
-  var savePending = false;
-  function scheduleSave() {
-    if (saveInFlight) {
-      savePending = true;
-      return;
-    }
-    saveInFlight = true;
-    (async () => {
-      try {
-        await writeToDisk();
-      } catch (e) {
-        console.error("palefox-tabs: save chain", e);
-      }
-      saveInFlight = false;
-      if (savePending) {
-        savePending = false;
-        scheduleSave();
-      }
-    })();
-  }
-  async function writeToDisk() {
-    const tabsArr = [...gBrowser.tabs];
-    const tabEntries = tabsArr.map((tab) => {
-      const d = treeData(tab);
-      return {
-        type: "tab",
-        id: d.id,
-        parentId: d.parentId ?? null,
-        url: tabUrl(tab),
-        name: d.name,
-        state: d.state,
-        collapsed: d.collapsed
-      };
-    });
-    const groupEntries = [];
-    let lastSeenTabId = null;
-    for (const row of allRows()) {
-      if (row._tab) {
-        lastSeenTabId = treeData(row._tab).id;
-      } else if (row._group) {
-        groupEntries.push({
-          type: "group",
-          name: row._group.name,
-          level: row._group.level,
-          state: row._group.state,
-          collapsed: row._group.collapsed,
-          afterTabId: lastSeenTabId
-        });
-      }
-    }
-    const liveUrls = new Set(tabEntries.map((e) => e.url).filter(Boolean));
-    const leftovers = savedTabQueue.filter((s) => !s.url || !liveUrls.has(s.url)).map((s) => ({ ...s, type: "tab" }));
-    const out = [...tabEntries, ...groupEntries, ...leftovers];
-    try {
-      const path = PathUtils.join(Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE);
-      await IOUtils.writeUTF8(path, JSON.stringify({
-        nodes: out,
-        closedTabs,
-        nextTabId
-      }));
-    } catch (e) {
-      console.error("palefox-tabs: save failed", e);
-    }
-  }
+  var scheduleSave = makeSaver(() => ({
+    tabs: [...gBrowser.tabs],
+    rows: () => allRows(),
+    savedTabQueue,
+    closedTabs,
+    nextTabId,
+    tabUrl,
+    treeData
+  }));
   async function loadFromDisk() {
-    const path = PathUtils.join(Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE);
-    let saved;
-    try {
-      saved = JSON.parse(await IOUtils.readUTF8(path));
-    } catch (e) {
-      console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
+    const parsed = await readTreeFromDisk();
+    if (!parsed)
       return;
-    }
     try {
-      if (!saved || !Array.isArray(saved.nodes)) {
-        console.log("palefox-tabs: save file exists but has no nodes array");
-        return;
-      }
-      if (Number.isInteger(saved.nextTabId))
-        nextTabId = saved.nextTabId;
-      if (Array.isArray(saved.closedTabs)) {
-        closedTabs.length = 0;
-        closedTabs.push(...saved.closedTabs.slice(-CLOSED_MEMORY));
-      }
+      if (parsed.nextTabId != null)
+        nextTabId = parsed.nextTabId;
+      closedTabs.length = 0;
+      closedTabs.push(...parsed.closedTabs);
       const tabs = allTabs();
-      const tabNodes = saved.nodes.filter((n) => n.type === "tab");
+      const tabNodes = parsed.tabNodes.map((s) => ({ ...s }));
       _lastLoadedNodes = tabNodes.map((s) => ({ ...s }));
       for (const s of tabNodes) {
         if (s.id && s.id >= nextTabId)
           nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: saved.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
-      {
-        const stack = [];
-        for (const n of tabNodes) {
-          const lv = n.level || 0;
-          while (stack.length && stack[stack.length - 1].level >= lv)
-            stack.pop();
-          if (n.parentId === undefined) {
-            n.parentId = stack.length ? stack[stack.length - 1].id : null;
-          }
-          if (n.id)
-            stack.push({ level: lv, id: n.id });
-        }
-      }
+      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
       const applied = new Set;
       const apply = (tab, s, i) => {
         const id = s.id || nextTabId++;
@@ -2411,9 +2471,9 @@
         s._origIdx = i;
         savedTabQueue.push(s);
       });
-      loadedNodes = saved.nodes;
+      loadedNodes = parsed.nodes;
     } catch (e) {
-      console.error("palefox-tabs: loadFromDisk parse/apply error", e);
+      console.error("palefox-tabs: loadFromDisk apply error", e);
     }
   }
   var loadedNodes = null;

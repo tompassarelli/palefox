@@ -7,6 +7,16 @@
 
 import { createLogger } from "./log.ts";
 import { INDENT, SAVE_FILE, CHORD_TIMEOUT, CLOSED_MEMORY, PIN_ATTR } from "./constants.ts";
+import {
+  treeOf, rowOf, hzDisplay, savedTabQueue, closedTabs,
+} from "./state.ts";
+import {
+  makeSaver,
+  readTreeFromDisk,
+  popSavedByUrl as popQueueByUrl,
+  popSavedForTab as popQueueForTab,
+  type Snapshot,
+} from "./persist.ts";
 
 const pfxLog = createLogger("tabs");
 
@@ -37,10 +47,7 @@ const pfxLog = createLogger("tabs");
   // (debug log moved to ./log.ts; pfxLog imported above)
 
   // --- State ---
-
-  const treeOf = new WeakMap();     // native tab → { level, name, state, collapsed }
-  const rowOf  = new WeakMap();     // native tab → row element
-  const hzDisplay = new WeakMap();  // row → tab whose visuals to show (horizontal collapse)
+  // (treeOf, rowOf, hzDisplay imported from ./state.ts)
   let panel, spacer, pinnedContainer, contextTab;
   let groupCounter = 0;
 
@@ -61,16 +68,12 @@ const pfxLog = createLogger("tabs");
   // Pattern cribbed from Sidebery (src/services/tabs.fg.move.ts:335-371).
   const movingTabs = new Set();
 
-  // Recently-closed tab memory, for restoring hierarchy on Ctrl+Shift+T.
-  // Matched by URL on reopen; parent is looked up by id. (CLOSED_MEMORY in ./constants.ts)
-  const closedTabs = [];            // [{ url, id, parentId, name, state, collapsed }]
+  // (closedTabs imported from ./state.ts; capped by CLOSED_MEMORY constant)
 
-  // Ordered queue of saved-tab nodes left over from last session's tree file
-  // after the load-time positional match. Session-restore tabs arriving later
-  // via onTabOpen consume entries from the head of this queue in order,
-  // using URL when resolvable and positional-blindspot when pending.
-  const savedTabQueue = [];
-  let _lastLoadedNodes = [];
+  // (savedTabQueue imported from ./state.ts — ordered queue of saved-tab nodes
+  // left over from last session's tree file. Session-restore tabs arriving later
+  // via onTabOpen consume entries from this queue.)
+  let _lastLoadedNodes = [];   // snapshot of last load's tabNodes; consumed by onManualRestore
   let _inSessionRestore = true;
 
   let nextTabId = 1;
@@ -704,61 +707,17 @@ const pfxLog = createLogger("tabs");
     scheduleSave();
   }
 
-  // Exact URL match (FIFO). Used when a tab's URL is resolvable.
-  function popSavedByUrl(url) {
-    if (!url) return null;
-    const i = savedTabQueue.findIndex(s => s.url === url);
-    return i >= 0 ? savedTabQueue.splice(i, 1)[0] : null;
-  }
-
-  // Index-based match for pending tabs. Saved nodes carry `_origIdx` — their
-  // original position in gBrowser.tabs at save time. Firefox session-restore
-  // recreates tabs in saved order, so a tab's current index in gBrowser.tabs
-  // equals its _origIdx. Matching by index avoids the FIFO-queue race where
-  // tabs arriving out of order would consume wrong saved nodes.
-  function popSavedByIndex(idx) {
-    if (idx < 0) return null;
-    const i = savedTabQueue.findIndex(s => s._origIdx === idx);
-    return i >= 0 ? savedTabQueue.splice(i, 1)[0] : null;
-  }
-
-  // Combined helper: match a tab to its saved node.
-  //
-  // Priority order:
-  //   1. pfx-id attribute — Firefox persists this via persistTabAttribute, so
-  //      restored tabs arrive with their previous-session palefox ID already
-  //      set. Reliable regardless of tab index or whether the URL has loaded.
-  //   2. Exact URL — for tabs that somehow lack a pfx-id but have a known URL.
-  //   3. Index-based blindspot — last resort for pending about:blank tabs.
-  //      Only correct when no extra tabs (e.g. localhost) offset the indices.
+  // Thin shims over ./persist.ts so call sites stay terse. Persist's
+  // popSaved* fns take the queue + a context object; we pre-bind here.
+  function popSavedByUrl(url) { return popQueueByUrl(savedTabQueue, url); }
   function popSavedForTab(tab) {
-    const pinnedId = readPinnedId(tab);
-    const u = tabUrl(tab);
-    const idx = [...gBrowser.tabs].indexOf(tab);
-
-    // 1. pfx-id match — most reliable, survives any tab ordering.
-    //    Requires persistTabAttribute to be working; falls through if not.
-    if (pinnedId) {
-      const i = savedTabQueue.findIndex(s => s.id === pinnedId);
-      if (i >= 0) {
-        pfxLog("popSavedForTab:pfxId", { idx, pfxId: pinnedId, url: u });
-        return savedTabQueue.splice(i, 1)[0];
-      }
-    }
-
-    // 2. URL match — reliable when the URL has already resolved.
-    if (u && u !== "about:blank") {
-      const node = popSavedByUrl(u);
-      pfxLog("popSavedForTab:url", { idx, url: u, found: !!node });
-      return node;
-    }
-
-    // 3. FIFO — only during session restore (startup or Ctrl+Shift+T).
-    //    Gated by _inSessionRestore so new user tabs don't consume stale entries.
-    if (!_inSessionRestore) return null;
-    const node = savedTabQueue.length ? savedTabQueue.shift() : null;
-    pfxLog("popSavedForTab:fifo", { idx, pfxId: pinnedId, url: u, nodeId: node?.id, nodeOrigIdx: node?._origIdx });
-    return node;
+    return popQueueForTab(savedTabQueue, {
+      currentIdx: [...gBrowser.tabs].indexOf(tab),
+      pinnedId: readPinnedId(tab),
+      url: tabUrl(tab),
+      inSessionRestore: _inSessionRestore,
+      log: pfxLog,
+    });
   }
 
   // Fires when SessionStore restores a tab (activation of a lazy tab, or
@@ -2519,111 +2478,29 @@ const pfxLog = createLogger("tabs");
 
   // --- Persistence ---
 
-  // Write-on-every-change: capture state at the moment of call and fire an
-  // async write. If a write is already in flight, queue one more so the
-  // latest state always reaches disk. No debounce, no reliance on unload —
-  // quitting/crashing at any moment leaves disk consistent with the latest
-  // committed change.
-  let saveInFlight = false;
-  let savePending = false;
-  function scheduleSave() {
-    if (saveInFlight) { savePending = true; return; }
-    saveInFlight = true;
-    (async () => {
-      try { await writeToDisk(); } catch (e) { console.error("palefox-tabs: save chain", e); }
-      saveInFlight = false;
-      if (savePending) { savePending = false; scheduleSave(); }
-    })();
-  }
-
-  async function writeToDisk() {
-    // Tabs saved in Firefox's canonical tab order so positional matching
-    // at load time is unambiguous. Groups are anchored by afterTabId —
-    // "insert this group right after the tab with this id."
-    const tabsArr = [...gBrowser.tabs];
-    const tabEntries = tabsArr.map((tab) => {
-      const d = treeData(tab);
-      return {
-        type: "tab",
-        id: d.id,
-        parentId: d.parentId ?? null,
-        url: tabUrl(tab),
-        name: d.name,
-        state: d.state,
-        collapsed: d.collapsed,
-      };
-    });
-
-    // Walk the panel in DOM order to capture group positions. Each group is
-    // anchored to the most-recent preceding tab (null = at top of panel).
-    const groupEntries = [];
-    let lastSeenTabId = null;
-    for (const row of allRows()) {
-      if (row._tab) {
-        lastSeenTabId = treeData(row._tab).id;
-      } else if (row._group) {
-        groupEntries.push({
-          type: "group",
-          name: row._group.name,
-          level: row._group.level,
-          state: row._group.state,
-          collapsed: row._group.collapsed,
-          afterTabId: lastSeenTabId,
-        });
-      }
-    }
-
-    // Preserve unconsumed saved-state entries (tabs we expected but haven't
-    // seen this session yet) so periodic saves during a blank window don't
-    // clobber them before the real window is restored.
-    // Filter out leftovers whose URL matches a live tab to prevent duplicates
-    // that corrupt the correction path on subsequent restores.
-    const liveUrls = new Set(tabEntries.map(e => e.url).filter(Boolean));
-    const leftovers = savedTabQueue
-      .filter(s => !s.url || !liveUrls.has(s.url))
-      .map(s => ({ ...s, type: "tab" }));
-
-    const out = [...tabEntries, ...groupEntries, ...leftovers];
-
-    try {
-      const path = PathUtils.join(
-        Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE
-      );
-      await IOUtils.writeUTF8(path, JSON.stringify({
-        nodes: out,
-        closedTabs,
-        nextTabId,
-      }));
-    } catch (e) {
-      console.error("palefox-tabs: save failed", e);
-    }
-  }
+  // Write-on-every-change: pulls a fresh snapshot for every flush, coalesces
+  // overlapping schedules. Implementation in ./persist.ts; the closure here
+  // just supplies live state.
+  const scheduleSave = makeSaver(() => ({
+    tabs: [...gBrowser.tabs],
+    rows: () => allRows(),
+    savedTabQueue,
+    closedTabs,
+    nextTabId,
+    tabUrl,
+    treeData,
+  }));
 
   async function loadFromDisk() {
-    const path = PathUtils.join(
-      Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE
-    );
-    let saved;
+    const parsed = await readTreeFromDisk();
+    if (!parsed) return;
     try {
-      saved = JSON.parse(await IOUtils.readUTF8(path));
-    } catch (e) {
-      console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
-      return;
-    }
-    try {
-      if (!saved || !Array.isArray(saved.nodes)) {
-        console.log("palefox-tabs: save file exists but has no nodes array");
-        return;
-      }
-
-      if (Number.isInteger(saved.nextTabId)) nextTabId = saved.nextTabId;
-      if (Array.isArray(saved.closedTabs)) {
-        closedTabs.length = 0;
-        closedTabs.push(...saved.closedTabs.slice(-CLOSED_MEMORY));
-      }
+      if (parsed.nextTabId != null) nextTabId = parsed.nextTabId;
+      closedTabs.length = 0;
+      closedTabs.push(...parsed.closedTabs);
 
       const tabs = allTabs();
-      const tabNodes = saved.nodes.filter(n => n.type === "tab");
+      const tabNodes = parsed.tabNodes.map(s => ({ ...s }));
       _lastLoadedNodes = tabNodes.map(s => ({ ...s }));
 
       // Belt-and-suspenders: advance nextTabId past every saved node ID before
@@ -2634,21 +2511,7 @@ const pfxLog = createLogger("tabs");
       for (const s of tabNodes) {
         if (s.id && s.id >= nextTabId) nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: saved.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
-
-      // Legacy-format migration: if tab nodes have `level` but no `parentId`,
-      // derive parentId from level+order via a stack walk.
-      {
-        const stack = [];
-        for (const n of tabNodes) {
-          const lv = n.level || 0;
-          while (stack.length && stack[stack.length - 1].level >= lv) stack.pop();
-          if (n.parentId === undefined) {
-            n.parentId = stack.length ? stack[stack.length - 1].id : null;
-          }
-          if (n.id) stack.push({ level: lv, id: n.id });
-        }
-      }
+      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
 
       const applied = new Set();
       const apply = (tab, s, i) => {
@@ -2709,9 +2572,9 @@ const pfxLog = createLogger("tabs");
       });
 
       // Full node list drives buildFromSaved for groups + order.
-      loadedNodes = saved.nodes;
+      loadedNodes = parsed.nodes;
     } catch (e) {
-      console.error("palefox-tabs: loadFromDisk parse/apply error", e);
+      console.error("palefox-tabs: loadFromDisk apply error", e);
     }
   }
 
