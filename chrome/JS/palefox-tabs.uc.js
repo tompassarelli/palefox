@@ -76,7 +76,7 @@
   const treeOf = new WeakMap();     // native tab → { level, name, state, collapsed }
   const rowOf  = new WeakMap();     // native tab → row element
   const hzDisplay = new WeakMap();  // row → tab whose visuals to show (horizontal collapse)
-  let panel, spacer, contextTab;
+  let panel, spacer, pinnedContainer, contextTab;
   let groupCounter = 0;
 
   // Vim mode
@@ -211,7 +211,10 @@
 
   // All rows (tabs + groups) in visual order
   function allRows() {
-    return [...panel.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
+    const pinned = pinnedContainer
+      ? [...pinnedContainer.querySelectorAll(".pfx-tab-row")]
+      : [];
+    return [...pinned, ...panel.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
   }
 
   function hasChildren(row) {
@@ -491,8 +494,19 @@
   function buildPanel() {
     if (!panel) return;
     while (panel.firstChild !== spacer) panel.firstChild.remove();
+    if (pinnedContainer) {
+      while (pinnedContainer.firstChild) pinnedContainer.firstChild.remove();
+    }
     for (const tab of gBrowser.tabs) {
-      panel.insertBefore(createTabRow(tab), spacer);
+      const row = createTabRow(tab);
+      if (tab.pinned && pinnedContainer) {
+        pinnedContainer.appendChild(row);
+      } else {
+        panel.insertBefore(row, spacer);
+      }
+    }
+    if (pinnedContainer) {
+      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
     }
     updateVisibility();
   }
@@ -587,7 +601,12 @@
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
       const row = createTabRow(tab);
-      panel.insertBefore(row, spacer);
+      if (tab.pinned && pinnedContainer) {
+        pinnedContainer.appendChild(row);
+        pinnedContainer.hidden = false;
+      } else {
+        panel.insertBefore(row, spacer);
+      }
       if (pendingCursorMove) { pendingCursorMove = false; setCursor(row); }
       updateVisibility();
       scheduleSave();
@@ -611,8 +630,13 @@
     // For the "root" pref, also ask Firefox to put the tab at the end of the
     // strip; the TabMove it fires re-aligns us there.
     const row = createTabRow(tab);
-    panel.insertBefore(row, spacer);
-    placeRowInFirefoxOrder(tab, row);
+    if (tab.pinned && pinnedContainer) {
+      pinnedContainer.appendChild(row);
+      pinnedContainer.hidden = false;
+    } else {
+      panel.insertBefore(row, spacer);
+      placeRowInFirefoxOrder(tab, row);
+    }
 
     if (position === "root") {
       const tabsArr = [...gBrowser.tabs];
@@ -667,6 +691,52 @@
       row.remove();
     }
     rowOf.delete(tab);
+    updateVisibility();
+    scheduleSave();
+  }
+
+  function onTabPinned(e) {
+    const tab = e.target;
+    const row = rowOf.get(tab);
+    if (!row || !pinnedContainer) return;
+    const td = treeData(tab);
+    const pinnedId = td.id;
+    td.parentId = null;
+    // Promote any direct children of this tab to root (pinned tabs can't have children).
+    for (const t of gBrowser.tabs) {
+      if (treeData(t).parentId === pinnedId) treeData(t).parentId = null;
+    }
+    row.removeAttribute("style");
+    // TabMove fires before TabPinned (during pinTab) and may have already
+    // routed the row to pinnedContainer at the right position. Only fix up
+    // if needed.
+    if (row.parentNode !== pinnedContainer) {
+      pinnedContainer.appendChild(row);
+      placeRowInFirefoxOrder(tab, row);
+    }
+    pinnedContainer.hidden = false;
+    syncTabRow(tab);
+    for (const r of allRows()) syncAnyRow(r);
+    updateVisibility();
+    scheduleSave();
+  }
+
+  function onTabUnpinned(e) {
+    const tab = e.target;
+    const row = rowOf.get(tab);
+    if (!row) return;
+    row.draggable = true;
+    // TabMove fires before TabUnpinned and (with the pinned-aware
+    // placeRowInFirefoxOrder) already placed the row in panel. Catch the
+    // case where the row is somehow still in pinnedContainer.
+    if (row.parentNode !== panel) {
+      panel.insertBefore(row, spacer);
+      placeRowInFirefoxOrder(tab, row);
+    }
+    syncTabRow(tab);
+    if (!pinnedContainer.querySelector(".pfx-tab-row")) {
+      pinnedContainer.hidden = true;
+    }
     updateVisibility();
     scheduleSave();
   }
@@ -903,14 +973,49 @@
 
   function onTabAttrModified(e) { syncTabRow(e.target); }
 
+  // True iff Firefox considers this tab pinned right now. During pinTab(),
+  // the tab is moved into pinnedTabsContainer BEFORE the `pinned` attribute
+  // is set (and TabMove fires inside that window) — so tab.pinned alone
+  // isn't enough to classify it.
+  function isFxPinned(tab) {
+    if (tab.pinned) return true;
+    const ptc = gBrowser.tabContainer?.pinnedTabsContainer
+              || gBrowser.pinnedTabsContainer;
+    return !!ptc && tab.parentNode === ptc;
+  }
+
   // Move a row to the DOM position matching the tab's index in gBrowser.tabs.
+  // Pinned and unpinned tabs live in separate containers (pinnedContainer
+  // vs panel), so we anchor only against same-pinned-state siblings.
   // Returns true if the row was moved; false if already in place.
   function placeRowInFirefoxOrder(tab, row) {
     if (!row || !panel) return false;
     const tabsArr = [...gBrowser.tabs];
     const myIdx = tabsArr.indexOf(tab);
     if (myIdx < 0) return false;
-    const prevTab = myIdx > 0 ? tabsArr[myIdx - 1] : null;
+
+    // Pinned tabs: reorder within pinnedContainer.
+    if (isFxPinned(tab)) {
+      if (!pinnedContainer) return false;
+      let prevTab = null;
+      for (let i = myIdx - 1; i >= 0; i--) {
+        if (isFxPinned(tabsArr[i])) { prevTab = tabsArr[i]; break; }
+      }
+      if (prevTab) {
+        const prevRow = rowOf.get(prevTab);
+        if (!prevRow || prevRow === row) return false;
+        if (prevRow.nextElementSibling !== row) { prevRow.after(row); return true; }
+      } else if (pinnedContainer.firstChild !== row) {
+        pinnedContainer.insertBefore(row, pinnedContainer.firstChild); return true;
+      }
+      return false;
+    }
+
+    // Unpinned tabs: place in panel, skipping pinned tabs as anchors.
+    let prevTab = null;
+    for (let i = myIdx - 1; i >= 0; i--) {
+      if (!isFxPinned(tabsArr[i])) { prevTab = tabsArr[i]; break; }
+    }
     if (prevTab) {
       const prevRow = rowOf.get(prevTab);
       if (!prevRow || prevRow === row) return false;
@@ -1149,7 +1254,7 @@
   }
 
   function makeChildOfAbove(row) {
-    if (!row?._tab) return;
+    if (!row?._tab || row._tab.pinned) return;
     const prev = row.previousElementSibling;
     if (!prev?._tab) return;
     treeData(row._tab).parentId = treeData(prev._tab).id;
@@ -1720,19 +1825,26 @@
       if (!dragSource || dragSource === row) return;
       // Don't allow drop onto own subtree
       if (subtreeRows(dragSource).includes(row)) return;
+      // Pinned and unpinned tabs cannot mix-drop. Pinned drags stay within
+      // the pinned container; unpinned drags stay within the tree panel.
+      const srcPinned = !!dragSource._tab?.pinned;
+      const tgtPinned = !!row._tab?.pinned;
+      if (srcPinned !== tgtPinned) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
 
-      const rect = row.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const zone = rect.height / 3;
-
-      if (y < zone) {
-        dropPosition = "before";
-      } else if (y > zone * 2) {
-        dropPosition = "after";
+      if (srcPinned) {
+        // Pinned: horizontal layout, before/after only (no child).
+        const rect = row.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        dropPosition = x < rect.width / 2 ? "before" : "after";
       } else {
-        dropPosition = "child";
+        const rect = row.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const zone = rect.height / 3;
+        if (y < zone) dropPosition = "before";
+        else if (y > zone * 2) dropPosition = "after";
+        else dropPosition = "child";
       }
       dropTarget = row;
       showDropIndicator(row, dropPosition);
@@ -1760,6 +1872,16 @@
       dropIndicator.id = "pfx-drop-indicator";
     }
     dropIndicator.removeAttribute("pfx-drop-child");
+    dropIndicator.removeAttribute("pfx-pinned");
+    dropIndicator.style.marginInlineStart = "";
+
+    // Pinned target: vertical-line indicator before/after the icon.
+    if (targetRow._tab?.pinned) {
+      dropIndicator.setAttribute("pfx-pinned", "true");
+      if (position === "before") targetRow.before(dropIndicator);
+      else targetRow.after(dropIndicator);
+      return;
+    }
 
     if (position === "child") {
       dropIndicator.setAttribute("pfx-drop-child", "true");
@@ -2521,14 +2643,25 @@
     };
 
     while (panel.firstChild !== spacer) panel.firstChild.remove();
+    if (pinnedContainer) {
+      while (pinnedContainer.firstChild) pinnedContainer.firstChild.remove();
+    }
 
     for (const g of leadingGroups) panel.insertBefore(mkGroup(g), spacer);
 
     for (const tab of gBrowser.tabs) {
-      panel.insertBefore(createTabRow(tab), spacer);
-      const tid = treeData(tab).id;
-      const groups = groupsAfter.get(tid);
-      if (groups) for (const g of groups) panel.insertBefore(mkGroup(g), spacer);
+      const row = createTabRow(tab);
+      if (tab.pinned && pinnedContainer) {
+        pinnedContainer.appendChild(row);
+      } else {
+        panel.insertBefore(row, spacer);
+        const tid = treeData(tab).id;
+        const groups = groupsAfter.get(tid);
+        if (groups) for (const g of groups) panel.insertBefore(mkGroup(g), spacer);
+      }
+    }
+    if (pinnedContainer) {
+      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
     }
 
     loadedNodes = null;
@@ -2579,6 +2712,45 @@
       }
       #pfx-tab-panel[pfx-icons-only] .pfx-tab-icon {
         margin: 0;
+      }
+
+      /* Pinned tabs — icon grid at top of sidebar */
+      #pfx-pinned-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        padding: 4px var(--pfx-sidebar-inset);
+        border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+        align-items: center;
+      }
+      #pfx-pinned-container[hidden] {
+        display: none !important;
+      }
+      #pfx-pinned-container .pfx-tab-row {
+        width: 32px;
+        height: 32px;
+        padding: 8px !important;
+        padding-inline-start: 8px !important;
+        justify-content: center;
+        margin: 0;
+        min-height: unset;
+        box-sizing: content-box;
+        flex-shrink: 0;
+      }
+      #pfx-pinned-container .pfx-tab-label,
+      #pfx-pinned-container .pfx-tab-close {
+        display: none !important;
+      }
+      #pfx-pinned-container .pfx-tab-icon {
+        margin: 0;
+      }
+      #pfx-pinned-container[pfx-icons-only] {
+        justify-content: center;
+      }
+      #pfx-pinned-container[pfx-icons-only] .pfx-tab-row {
+        width: 32px;
+        height: 32px;
+        padding: 8px !important;
       }
 
       #pfx-tab-spacer {
@@ -2683,6 +2855,12 @@
         border: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
         margin-top: -1px;
         margin-bottom: -1px;
+      }
+      #pfx-drop-indicator[pfx-pinned] {
+        height: 32px;
+        width: 2px;
+        margin: 0;
+        flex-shrink: 0;
       }
 
       /* Label */
@@ -2859,11 +3037,14 @@
     if (vertical) {
       const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
       panel.toggleAttribute("pfx-icons-only", !expanded);
+      pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
       if (toolboxInSidebar) {
-        if (toolbox.nextElementSibling !== panel) toolbox.after(panel);
+        if (toolbox.nextElementSibling !== pinnedContainer) toolbox.after(pinnedContainer);
+        if (pinnedContainer.nextElementSibling !== panel) pinnedContainer.after(panel);
       } else if (panel.parentNode !== sidebarMain ||
-                 sidebarMain.firstElementChild !== panel) {
+                 sidebarMain.firstElementChild !== pinnedContainer) {
         sidebarMain.prepend(panel);
+        sidebarMain.prepend(pinnedContainer);
       }
       teardownHorizontalAlignSpacer();
       // If horizontal mode had a popout open, urlbar may be without popover
@@ -2908,6 +3089,10 @@
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
 
+    pinnedContainer = document.createXULElement("hbox");
+    pinnedContainer.id = "pfx-pinned-container";
+    pinnedContainer.hidden = true;
+
     panel = document.createXULElement("vbox");
     panel.id = "pfx-tab-panel";
 
@@ -2945,6 +3130,8 @@
     tc.addEventListener("TabAttrModified", onTabAttrModified);
     tc.addEventListener("TabMove", onTabMove);
     tc.addEventListener("SSTabRestoring", onTabRestoring);
+    tc.addEventListener("TabPinned", onTabPinned);
+    tc.addEventListener("TabUnpinned", onTabUnpinned);
 
     // Click on spacer activates vim with last row
     spacer.addEventListener("click", () => {
