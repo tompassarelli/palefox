@@ -220,7 +220,7 @@ try {
     }
 
     # Core files — always overwrite
-    foreach ($file in @("palefox.css")) {
+    foreach ($file in @("palefox.css", "palefox-tabs.css")) {
         $source = Join-Path $chromeSource $file
         $dest = Join-Path $chromeDir $file
         if (Test-Path $source) {

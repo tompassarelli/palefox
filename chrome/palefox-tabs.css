@@ -1,0 +1,409 @@
+/* palefox-tabs.css — styles for the palefox tab panel
+ *
+ * This file is overwritten on update.
+ * Put your customizations in user.css instead.
+ *
+ * Loaded via @import in userChrome.css.
+ * The DOM these target is built by palefox-tabs.uc.js.
+ */
+
+
+/* #region sidebar containers */
+
+/* Hide native vertical tab strip — we render our own panel. */
+#vertical-tabs { display: none !important; }
+
+#sidebar-main > sidebar-main {
+  flex: none !important;
+  overflow: hidden !important;
+  position: absolute;
+  bottom: 0;
+}
+
+/* #endregion sidebar containers */
+
+
+/* #region tab panel */
+
+#pfx-tab-panel {
+  flex: 1 !important;
+  max-height: 76%;
+  margin-top: 8px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+}
+#pfx-tab-panel:focus { outline: none; }
+
+/* Icons-only mode (collapsed sidebar layout) */
+#pfx-tab-panel[pfx-icons-only] .pfx-tab-label,
+#pfx-tab-panel[pfx-icons-only] .pfx-tab-close {
+  display: none !important;
+}
+#pfx-tab-panel[pfx-icons-only] .pfx-group-row {
+  display: none !important;
+}
+#pfx-tab-panel[pfx-icons-only] .pfx-tab-row {
+  width: 32px;
+  height: 32px;
+  padding: 8px !important;
+  padding-inline-start: 8px !important;
+  justify-content: center;
+  margin: 2px auto;
+  min-height: unset;
+  box-sizing: content-box;
+}
+#pfx-tab-panel[pfx-icons-only] .pfx-tab-icon {
+  margin: 0;
+}
+
+#pfx-tab-spacer {
+  min-height: 20px;
+  -moz-window-dragging: drag;
+}
+
+/* #endregion tab panel */
+
+
+/* #region pinned tabs — icon grid at top of sidebar */
+
+#pfx-pinned-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px var(--pfx-sidebar-inset);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  align-items: center;
+}
+#pfx-pinned-container[hidden] {
+  display: none !important;
+}
+
+/* Empty drop zone — shown during drag of unpinned tabs */
+#pfx-pinned-container[pfx-empty-zone] {
+  min-height: 40px;
+  border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 4px;
+  margin: 4px var(--pfx-sidebar-inset);
+  padding: 4px;
+  justify-content: center;
+  opacity: 0.7;
+}
+#pfx-pinned-container[pfx-empty-zone]::before {
+  content: "drop to pin";
+  font-size: 11px;
+  opacity: 0.6;
+  align-self: center;
+}
+
+#pfx-pinned-container .pfx-tab-row {
+  width: 32px;
+  height: 32px;
+  padding: 8px !important;
+  padding-inline-start: 8px !important;
+  justify-content: center;
+  margin: 0;
+  min-height: unset;
+  box-sizing: content-box;
+  flex-shrink: 0;
+}
+#pfx-pinned-container .pfx-tab-label,
+#pfx-pinned-container .pfx-tab-close {
+  display: none !important;
+}
+#pfx-pinned-container .pfx-tab-icon {
+  margin: 0;
+}
+#pfx-pinned-container[pfx-icons-only] {
+  justify-content: center;
+}
+#pfx-pinned-container[pfx-icons-only] .pfx-tab-row {
+  width: 32px;
+  height: 32px;
+  padding: 8px !important;
+}
+
+/* Symmetric drop zone in the tree panel — shown when dragging
+ * a pinned tab and the panel has no rows. */
+#pfx-tab-panel[pfx-empty-zone] {
+  border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 4px;
+  margin: 4px var(--pfx-sidebar-inset);
+  min-height: 60px;
+  position: relative;
+}
+#pfx-tab-panel[pfx-empty-zone]::before {
+  content: "drop to unpin";
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* #endregion pinned tabs */
+
+
+/* #region rows */
+
+/* Shared row base */
+.pfx-tab-row, .pfx-group-row {
+  padding: 5px 8px;
+  padding-inline-end: 6px;
+  border-radius: 4px;
+  margin: 1px var(--pfx-sidebar-inset);
+  min-height: 28px;
+  cursor: default;
+  transition: padding-inline-start 0.15s ease;
+}
+.pfx-tab-row:hover, .pfx-group-row:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.pfx-tab-row[selected] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Favicon */
+.pfx-tab-icon {
+  width: 16px; height: 16px;
+  margin-inline-end: 6px;
+  flex-shrink: 0;
+}
+.pfx-tab-row[busy] .pfx-tab-icon { opacity: 0.4; }
+
+/* Label */
+.pfx-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Close button — hover only */
+.pfx-tab-close {
+  width: 16px; height: 16px;
+  margin-inline-start: 4px;
+  opacity: 0; flex-shrink: 0;
+  list-style-image: url("chrome://global/skin/icons/close.svg");
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+.pfx-tab-row:hover .pfx-tab-close { opacity: 0.5; }
+.pfx-tab-close:hover { opacity: 1 !important; cursor: pointer; }
+
+/* Group rows */
+.pfx-group-row {
+  font-weight: 600;
+  opacity: 0.85;
+}
+.pfx-group-marker {
+  margin-inline-end: 6px;
+  font-size: 8px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* Collapse indicator */
+[pfx-collapsed] .pfx-tab-label::after {
+  content: " ▸";
+  opacity: 0.5;
+  margin-inline-start: 4px;
+}
+
+/* #endregion rows */
+
+
+/* #region vim cursor */
+
+[pfx-cursor] {
+  outline: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: -1px;
+}
+:root[pfx-mode="insert"] [pfx-cursor] {
+  outline-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* #endregion vim cursor */
+
+
+/* #region modeline — absolute overlay at bottom, hidden by default */
+
+#pfx-modeline {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  padding: 0 8px;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 20px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  z-index: 100;
+  display: none;
+}
+#pfx-modeline[pfx-visible] {
+  display: flex;
+}
+#pfx-modeline-mode {
+  font-weight: bold;
+  margin-inline-end: 12px;
+}
+#pfx-modeline-chord {
+  opacity: 0.6;
+}
+#pfx-modeline-msg {
+  opacity: 0.5;
+  margin-inline-start: 8px;
+}
+:root[pfx-mode="normal"] #pfx-modeline-mode { color: #7aa2f7; }
+:root[pfx-mode="insert"] #pfx-modeline-mode { color: #9ece6a; }
+
+/* Search input (in modeline) */
+.pfx-search-prefix {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: bold;
+  opacity: 0.6;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.pfx-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 20px;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+
+/* #endregion modeline */
+
+
+/* #region rename input */
+
+.pfx-rename-input {
+  flex: 1; min-width: 0;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 2px;
+  font: inherit;
+  background: var(--toolbar-field-background-color, Field);
+  color: var(--toolbar-field-color, FieldText);
+}
+
+/* #endregion rename input */
+
+
+/* #region multi-select */
+
+[pfx-multi] {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* #endregion multi-select */
+
+
+/* #region drag and drop */
+
+[pfx-dragging] {
+  opacity: 0.5;
+  outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  outline-offset: -1px;
+}
+#pfx-drop-indicator {
+  height: 2px;
+  background: color-mix(in srgb, currentColor 50%, transparent);
+  margin: 0 var(--pfx-sidebar-inset);
+  border-radius: 1px;
+}
+#pfx-drop-indicator[pfx-drop-child] {
+  height: 0;
+  border: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  margin-top: -1px;
+  margin-bottom: -1px;
+}
+#pfx-drop-indicator[pfx-pinned] {
+  height: 32px;
+  width: 2px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* #endregion drag and drop */
+
+
+/* #region horizontal mode — replace native tab strip */
+
+:root[pfx-horizontal-tabs] #tabbrowser-tabs {
+  display: none !important;
+}
+:root[pfx-horizontal-tabs] #TabsToolbar {
+  position: relative;
+  z-index: 100;
+  margin-top: 6px;
+}
+
+#pfx-tab-panel[pfx-horizontal] {
+  display: grid !important;
+  /* No min — columns shrink infinitely small as more tabs arrive,
+   * rather than scrolling offscreen. */
+  grid-auto-columns: minmax(0, 200px);
+  grid-auto-rows: auto;
+  justify-content: start;
+  align-content: start;
+  /* Fill the toolbar's available width so columns distribute
+   * within the container instead of overflowing. */
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  min-height: unset !important;
+  overflow: visible !important;
+  z-index: 2;
+}
+
+#pfx-tab-panel[pfx-horizontal] .pfx-tab-row,
+#pfx-tab-panel[pfx-horizontal] .pfx-group-row {
+  margin: 1px;
+  position: relative;
+}
+/* Horizontal mode: close button anchors to the right edge and sits
+ * above the label via z-index. When the tab is narrow, it overlaps
+ * the truncated label rather than falling off the right edge. */
+#pfx-tab-panel[pfx-horizontal] .pfx-tab-close {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-inline-start: 0;
+  z-index: 1;
+  background: inherit;
+  border-radius: 3px;
+  padding: 1px;
+}
+
+/* Popout children — background so they're readable over content */
+#pfx-tab-panel[pfx-horizontal] [pfx-popout-child] {
+  background: var(--sidebar-background-color, light-dark(#f9f9fb, #1c1b22));
+  z-index: 3;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+/* Shadow on the last child in each popout column */
+#pfx-tab-panel[pfx-horizontal] [pfx-popout-child]:not(:has(+ [pfx-popout-child])) {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+
+#pfx-tab-panel[pfx-horizontal] #pfx-tab-spacer {
+  display: none !important;
+}
+
+/* #endregion horizontal mode */

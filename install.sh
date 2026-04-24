@@ -238,7 +238,7 @@ mkdir -p "$chrome_dir/utils"
 mkdir -p "$chrome_dir/JS"
 
 # Core files — always overwrite
-for file in palefox.css; do
+for file in palefox.css palefox-tabs.css; do
     if [ -f "$extracted/$file" ]; then
         cp "$extracted/$file" "$chrome_dir/$file"
     fi
