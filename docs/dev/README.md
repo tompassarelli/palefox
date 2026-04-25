@@ -12,8 +12,12 @@ always-loaded primer; everything in this directory is reference you read
   the rules for which tier covers which surface. Read end-to-end before
   doing test work.
 - [**firefox-upstream-stability.md**](firefox-upstream-stability.md) —
-  the strategy for surviving Firefox upstream churn: manifest, canary,
-  adapter layer, breakage taxonomy, anti-goals.
+  the strategy for surviving Firefox upstream churn: doctrine, two-layer
+  architecture (Firefox adapter + Palefox semantic), reconciler pattern,
+  Tier 0–3 primitive classification, breakage taxonomy, anti-goals.
+- [**firefox-stability-roadmap.md**](firefox-stability-roadmap.md) —
+  plan-of-record for executing the stability strategy. Milestones M0–M10
+  with status, scope, and what each unlocks. The big-arc TODO file.
 - [**multi-session-architecture.md**](multi-session-architecture.md) —
   SQLite temporal substrate (`history.ts`): event log shape, retention,
   hash dedupe, why JSON was retired, FTS deferred.

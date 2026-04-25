@@ -127,7 +127,9 @@ chat or commit messages.
 Palefox treats Firefox internals as an unstable ABI. Every chrome-API
 dependency we have is enumerated in
 [docs/dev/firefox-upstream-stability.md](docs/dev/firefox-upstream-stability.md)
-and exercised by the canary. Operating rules:
+(architecture + doctrine) and tracked in
+[docs/dev/firefox-stability-roadmap.md](docs/dev/firefox-stability-roadmap.md)
+(the milestone TODO file). Operating rules:
 
 - **New chrome-API calls go through `src/firefox/<adapter>.ts`** —
   feature code imports typed primitives, never touches `gBrowser` /

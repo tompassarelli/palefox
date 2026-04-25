@@ -1,11 +1,40 @@
 # Firefox upstream stability strategy
 
+> **Roadmap & milestone tracking lives in
+> [firefox-stability-roadmap.md](firefox-stability-roadmap.md).** This doc
+> is the architectural strategy. The roadmap doc is the plan-of-record
+> with current milestone status.
+
 ## Thesis
 
 Palefox does not assume Firefox internals are stable. Every Firefox internal
 palefox depends on is **explicit, source-linked, version-pinned, and
 re-verified against upstream change**. When upstream moves, our job is to
 detect *which specific* files we cite have changed — not to re-audit Firefox.
+
+## Doctrine
+
+Five rules that decide every architecture question downstream:
+
+1. **Palefox does not program directly against Firefox internals except in
+   the Firefox adapter layer (`src/firefox/*`).** Feature code imports
+   typed primitives from there; raw `gBrowser` / `Services` / `gURLBar` calls
+   only exist inside the adapter.
+2. **Palefox defines its own semantic API over a small set of stable
+   Firefox primitives.** When the API expresses *what palefox means*
+   (`Palefox.tabs.move(id, intent)`), not *what Firefox can do*
+   (`gBrowser.moveTabTo(tab, idx)`), the contract becomes ours.
+3. **Firefox events are invalidation signals, not perfect descriptions of
+   state.** A `TabOpen` doesn't mean "render exactly one row now"; it
+   means "the tab set may have changed — reconcile palefox's model
+   against `gBrowser.tabs`." This handles ordering quirks, late state,
+   and missed events without fragile event-order code.
+4. **Firefox session state is an interoperability source, not the sole
+   source of truth.** Palefox owns its own snapshot format
+   (already in `history.ts`); SessionStore is consulted, not depended on.
+5. **All high-risk Firefox dependencies are source-linked, typed, tested,
+   and tracked by the upstream canary.** Untracked dependencies leak —
+   the manifest is the gate, not a wishlist.
 
 Palefox is chrome-privileged code living next to Firefox's private
 implementation. We are not a WebExtension; we are not behind a stable API
@@ -84,13 +113,40 @@ makes recurring patterns visible.
   encoding semantics shift. *Defense:* explicit fixtures in the test
   suite; a separate fixture-restore Tier 3 test bank when this gets hot.
 
-## Adapter layer (`src/firefox/`)
+## Two-layer architecture
 
-The blast shield. New rule: **all chrome-API calls go through
-`src/firefox/<adapter>.ts`.** Most palefox code imports from there:
+The strategy is bigger than "wrap chrome globals." Palefox is becoming a
+small browser-chrome runtime built on top of Firefox primitives, with
+two distinct platform layers:
+
+```
+src/firefox/        — Firefox adapter layer
+                      typed wrappers around chrome globals
+                      stays loyal to Firefox primitives
+                      patches happen here when upstream shifts
+
+src/platform/       — Palefox semantic layer
+                      tab-model, window-model, snapshot-store, event-bus, reconciler
+                      stays loyal to palefox's own contract
+                      feature code talks to this, not to Firefox
+
+src/<features>/     — Feature code: vim, sidebar, picker, urlbar, history
+                      imports from src/platform/* (capabilities)
+                      may import from src/firefox/* (only when capability missing)
+                      never touches gBrowser / Services / gURLBar directly
+```
+
+Today only `src/firefox/` is bootstrapped; `src/platform/` is still on
+the roadmap. The strategy doc commits to building it. Until it's live,
+treat new feature work as "import what you need from `src/firefox/*`,
+add the missing primitive there if it doesn't exist."
+
+### The adapter layer (`src/firefox/`) — what's there today
+
+Blast shield. **All chrome-API calls go through `src/firefox/<adapter>.ts`.**
 
 ```ts
-import { pinTab, unpinTab, getSelectedTab } from "@/firefox/tabs";
+import { pinTab, allTabs, selectedTab } from "@/firefox/tabs";
 ```
 
 NOT:
@@ -99,20 +155,122 @@ NOT:
 gBrowser.pinTab(gBrowser.selectedTab); // raw access — only inside src/firefox/
 ```
 
-When Firefox shifts a method's semantics, we patch the one adapter file,
-not 14 callsites scattered across the codebase. The adapter layer also:
+The adapter is the right place for:
 
-- Localizes `// @ts-expect-error` and `as any` casts to the adapter
-  module — they don't leak into feature code.
-- Gives the canary's `palefoxOwner` field a real value to point at.
-- Means feature modules can be unit-tested with mocked adapters (Tier 1
-  becomes more useful for vim.ts and friends).
+- Idempotency wrappers (`pinTab` no-ops if already pinned).
+- Debouncing / retry-on-stale-tab-ref.
+- Consistent observability — every adapter call logs through
+  `createLogger("firefox:tabs")` etc., giving us one seam where every
+  Firefox interaction is visible.
+- Localizing `// @ts-expect-error` and `as any` casts so they don't
+  leak into feature code.
+- Tier 1 unit-testing: `vim.ts` is hard to unit-test today because
+  every line touches `gBrowser`. Once it imports from
+  `src/firefox/tabs`, we can mock the adapter and unit-test feature
+  logic without spinning up Firefox.
 
-This is **aspirational** today. The migration is the larger conversation.
-What we do now: establish `src/firefox/` with one example adapter to set
-the pattern, document the rule in CLAUDE.md, and require new code to
-follow it. Migration of existing callsites happens incrementally as
-modules get touched.
+Migration is incremental — strangler-fig. Each module that's touched
+for any reason routes its Firefox calls through adapters; over time
+the bulk migrates without a big-bang rewrite. The roadmap tracks the
+backlog of un-migrated callsites.
+
+### The semantic layer (`src/platform/palefox/*`) — the bigger move
+
+Capabilities, not internals. Each Palefox surface gets a model:
+
+```
+src/platform/palefox/
+  tabs.ts         Palefox.tabs.{list, get, select, pin, move, close, …}
+  windows.ts      Palefox.windows.{current, list, snapshot, reconcile}
+  events.ts       Palefox.events.on("tab:created" | "tab:selected" | "window:reconciled" | …)
+  snapshots.ts    Palefox.sessions.{capture, restore, restoreWindow}
+  reconciler.ts   schedule + run model-vs-firefox reconciliation
+  diagnostics.ts  Palefox.diagnostics.{dumpModel, verifyFirefoxCompatibility}
+```
+
+The semantic API expresses palefox's domain:
+
+```ts
+// Bad — feature code knows about Firefox primitives:
+gBrowser.pinTab(gBrowser.selectedTab);
+updateSidebar();
+
+// Good — capability-shaped:
+await Palefox.tabs.pin(Palefox.tabs.selectedId());
+// (sidebar reconciles via the event stream; vim doesn't have to call it)
+```
+
+Two rules govern the semantic layer:
+
+1. **Capabilities are idempotent and intent-shaped.** `move(id, intent)`
+   takes a destination + flags, not a raw integer index. The
+   implementation translates intent into `gBrowser.moveTabTo` calls.
+2. **Internal state is reconciled, not patched.** Receiving a `TabOpen`
+   doesn't directly mutate the tree. It marks the tree dirty;
+   the reconciler reads `gBrowser.tabs` and rebuilds. See *Reconciler*
+   below.
+
+### The reconciler
+
+```
+Firefox emits noisy primitive event.
+  ↓
+Adapter normalizes + bubbles a Palefox event.
+  ↓
+Palefox model marks itself dirty (with a reason tag).
+  ↓
+Reconciler is scheduled (microtask or rAF).
+  ↓
+Reconciler reads current Firefox primitive state.
+  ↓
+Reconciler diffs against Palefox model + applies the diff.
+  ↓
+UI rebuilds from Palefox model.
+```
+
+This is the architectural answer to Class C and Class D breakage. The
+v0.40.0 floating-urlbar regression where the horizontal observer raced
+the deactivate would have been impossible: the popover state would just
+be re-derived from `breakout-extend + pfx-urlbar-floating` on every
+reconcile pass, no race window.
+
+The `rows.scheduleTreeResync` pattern in `src/tabs/rows.ts` is already
+a partial reconciler for the tree. Generalizing it across the platform
+layer is M4 on the roadmap.
+
+### Tier 0–3 primitive classification (forward design rule)
+
+When designing a new Palefox capability, classify the Firefox primitive
+you're about to depend on:
+
+| Tier | Primitive shape | Examples | Design rule |
+|------|-----------------|----------|-------------|
+| **0** | Stable platform primitives (decade+) | `Services.prefs`, `Services.obs`, `IOUtils`, `PathUtils`, `createXULElement` | Build freely on these. |
+| **1** | Stable browser primitives (years) | basic `gBrowser` tab ops, `gBrowser.tabs`, `tab.linkedBrowser.currentURI`, `Tab*` DOM events | Build on these via adapters. |
+| **2** | Semantically risky | `SessionStore` (lazy tabs), urlbar lifecycle, `breakout-extend` semantics, `messageManager.loadFrameScript` | Wrap behind heavily-tested adapters; pin a behavioral test for the assumption. |
+| **3** | Volatile implementation | private DOM structure, internal class names, timing-dependent layout, undocumented globals | Avoid unless no alternative; centralize selectors; expect breakage. |
+
+The tier is orthogonal to the manifest's `stability` field. Stability
+is a diagnostic about how often Firefox moves it. Tier is a design rule
+about whether to build on it. They correlate but don't have to match
+for any single primitive.
+
+### Three rings of ABI investment
+
+Not every adapter deserves equal treatment. Three rings:
+
+- **Ring 1 — Load-bearing.** Used by core palefox features and on the
+  hot path (tab ops, urlbar focus, session state). Gets aggressive
+  types, behavior tests, source citations, manifest entries, JSDoc.
+- **Ring 2 — Known but non-load-bearing.** Touched by edge-case features.
+  Gets rough types and a one-paragraph JSDoc; manifest entry only if
+  in Tier 2 or 3.
+- **Ring 3 — Reference-only.** Stuff we've researched but don't depend
+  on. Lives as Markdown notes in `docs/dev/firefox-internals.md`,
+  not as TypeScript. No maintenance obligation.
+
+Ring 1 should never grow past ~30 entries. If it does, we're modeling
+Firefox; that's the trap.
 
 ## The manifest
 
