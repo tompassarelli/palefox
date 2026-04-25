@@ -541,8 +541,9 @@
         if (dropTarget === p) {
           if (tab.pinned)
             gBrowser.unpinTab(tab);
-        } else if (dropTarget?._tab && dropPosition) {
-          executeDrop(dragSource, dropTarget, dropPosition);
+        } else if (dropTarget && dropTarget._tab || dropTarget?._group) {
+          if (dropPosition)
+            executeDrop(dragSource, dropTarget, dropPosition);
         }
         clearDropIndicator();
       });
@@ -1627,6 +1628,7 @@
     let modelineTimer = 0;
     let panelActive = false;
     let refileSource = null;
+    let selectionAnchor = null;
     let searchInput = null;
     let searchActive = false;
     let searchMatches = [];
@@ -1803,8 +1805,12 @@
       if (!row?._tab || row._tab.pinned)
         return;
       const prev = row.previousElementSibling;
-      if (!prev?._tab)
+      if (!prev)
         return;
+      if (!prev._tab) {
+        indentRow(row);
+        return;
+      }
       treeData(row._tab).parentId = treeData(prev._tab).id;
       for (const r of subtreeRows(row))
         rows.syncAnyRow(r);
@@ -1988,6 +1994,8 @@
       }
     }
     function handleNormalKey(e) {
+      if (e.key !== "J" && e.key !== "K")
+        selectionAnchor = null;
       if (pendingCtrlW) {
         pendingCtrlW = false;
         clearTimeout(chordTimer);
@@ -2163,6 +2171,20 @@
         case ":":
           startExMode();
           return true;
+        case "J": {
+          if (!selectionAnchor)
+            selectionAnchor = state.cursor;
+          if (moveCursor(1) && selectionAnchor)
+            selectRange(selectionAnchor);
+          return true;
+        }
+        case "K": {
+          if (!selectionAnchor)
+            selectionAnchor = state.cursor;
+          if (moveCursor(-1) && selectionAnchor)
+            selectRange(selectionAnchor);
+          return true;
+        }
       }
       return false;
     }
@@ -2358,6 +2380,34 @@
           });
           modelineMsg(`Refile: "${srcLabel}" → search for target...`);
           setTimeout(() => startSearch(), 0);
+          break;
+        }
+        case "pin": {
+          const t = state.cursor?._tab;
+          if (!t) {
+            modelineMsg("No tab at cursor", 3000);
+            break;
+          }
+          if (t.pinned)
+            modelineMsg(`Already pinned: ${t.label}`, 2000);
+          else {
+            gBrowser.pinTab(t);
+            modelineMsg(`:pin ${t.label}`);
+          }
+          break;
+        }
+        case "unpin": {
+          const t = state.cursor?._tab;
+          if (!t) {
+            modelineMsg("No tab at cursor", 3000);
+            break;
+          }
+          if (!t.pinned)
+            modelineMsg(`Not pinned: ${t.label}`, 2000);
+          else {
+            gBrowser.unpinTab(t);
+            modelineMsg(`:unpin ${t.label}`);
+          }
           break;
         }
         default:

@@ -120,6 +120,10 @@ export function makeVim(deps: VimDeps): VimAPI {
   // Refile source — when set, search/Enter completes a refile-into-target.
   let refileSource: Row | null = null;
 
+  // Selection anchor — set on the first Shift+J/K and used as the range start
+  // for subsequent Shift+J/K presses. Reset whenever a non-extending key fires.
+  let selectionAnchor: Row | null = null;
+
   // Search/filter state.
   let searchInput: HTMLInputElement | null = null;
   let searchActive = false;
@@ -298,7 +302,15 @@ export function makeVim(deps: VimDeps): VimAPI {
   function makeChildOfAbove(row: Row): void {
     if (!row?._tab || row._tab.pinned) return;
     const prev = row.previousElementSibling;
-    if (!prev?._tab) return;
+    if (!prev) return;
+    // If the immediate previous row is a group (or any non-tab row), fall
+    // through to indentRow's semantics — find the previous TAB sibling at
+    // the same level via prevSiblingTab and become its child. This is what
+    // the user expects when a group sits between source and intended parent.
+    if (!prev._tab) {
+      indentRow(row);
+      return;
+    }
     treeData(row._tab).parentId = treeData(prev._tab).id;
     for (const r of subtreeRows(row)) rows.syncAnyRow(r);
     rows.updateVisibility();
@@ -507,6 +519,10 @@ export function makeVim(deps: VimDeps): VimAPI {
 
   /** Returns true if the key was consumed; false to pass through. */
   function handleNormalKey(e: KeyboardEvent): boolean {
+    // Selection anchor lives only across consecutive Shift+J/K presses.
+    // Any other key (including unshifted j/k) drops it.
+    if (e.key !== "J" && e.key !== "K") selectionAnchor = null;
+
     // --- Ctrl+W pane chords ---
     if (pendingCtrlW) {
       pendingCtrlW = false;
@@ -635,6 +651,17 @@ export function makeVim(deps: VimDeps): VimAPI {
       case "N": nextMatch(-1); return true;
       case "x": closeFocused(); return true;
       case ":": startExMode(); return true;
+      case "J": {
+        // Extend selection one row down. First press stamps the anchor.
+        if (!selectionAnchor) selectionAnchor = state.cursor;
+        if (moveCursor(1) && selectionAnchor) selectRange(selectionAnchor);
+        return true;
+      }
+      case "K": {
+        if (!selectionAnchor) selectionAnchor = state.cursor;
+        if (moveCursor(-1) && selectionAnchor) selectRange(selectionAnchor);
+        return true;
+      }
     }
 
     return false;
@@ -829,6 +856,20 @@ export function makeVim(deps: VimDeps): VimAPI {
         });
         modelineMsg(`Refile: "${srcLabel}" → search for target...`);
         setTimeout(() => startSearch(), 0);
+        break;
+      }
+      case "pin": {
+        const t = state.cursor?._tab;
+        if (!t) { modelineMsg("No tab at cursor", 3000); break; }
+        if (t.pinned) modelineMsg(`Already pinned: ${t.label}`, 2000);
+        else { gBrowser.pinTab(t); modelineMsg(`:pin ${t.label}`); }
+        break;
+      }
+      case "unpin": {
+        const t = state.cursor?._tab;
+        if (!t) { modelineMsg("No tab at cursor", 3000); break; }
+        if (!t.pinned) modelineMsg(`Not pinned: ${t.label}`, 2000);
+        else { gBrowser.unpinTab(t); modelineMsg(`:unpin ${t.label}`); }
         break;
       }
       default:

@@ -254,8 +254,10 @@ export function makeDrag(deps: DragDeps): DragAPI {
       if (dropTarget === p) {
         // Empty panel + pinned source: just unpin. onTabUnpinned routes the row.
         if (tab.pinned) gBrowser.unpinTab(tab);
-      } else if ((dropTarget as Row | null)?._tab && dropPosition) {
-        executeDrop(dragSource, dropTarget as Row, dropPosition);
+      } else if (dropTarget && (dropTarget as Row)._tab || (dropTarget as Row)?._group) {
+        // Anchor row may be a tab OR a group — both are valid drop targets
+        // when dropping into panel whitespace at the bottom of the list.
+        if (dropPosition) executeDrop(dragSource, dropTarget as Row, dropPosition);
       }
       clearDropIndicator();
     });
