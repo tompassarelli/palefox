@@ -2099,7 +2099,7 @@
   // src/tabs/vim.ts
   var log6 = createLogger("tabs/vim");
   function makeVim(deps) {
-    const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain } = deps;
+    const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain, history } = deps;
     let chord = null;
     let chordTimer = 0;
     let pendingCtrlW = false;
@@ -2952,9 +2952,137 @@
           }
           break;
         }
+        case "checkpoint":
+        case "cp": {
+          const label = args.slice(1).join(" ").trim();
+          if (!label) {
+            modelineMsg("Usage: :checkpoint <label>", 3000);
+            break;
+          }
+          scheduleSave();
+          setTimeout(async () => {
+            try {
+              const id = await history.tagLatest("checkpoint", label);
+              modelineMsg(id ? `:checkpoint "${label}"` : "Nothing to tag (no events yet)", 3000);
+            } catch (e) {
+              modelineMsg(`:checkpoint failed: ${e.message}`, 4000);
+            }
+          }, 100);
+          break;
+        }
+        case "restore": {
+          const arg = args.slice(1).join(" ").trim();
+          (async () => {
+            try {
+              const tagged = await history.getTagged(50);
+              if (!tagged.length) {
+                modelineMsg("No tagged sessions yet — :checkpoint or quit Firefox to create one", 4000);
+                return;
+              }
+              if (!arg) {
+                const head = tagged.slice(0, 5).map((e) => labelOf(e.tag) ?? "?").join(" │ ");
+                modelineMsg(`Tagged: ${head}${tagged.length > 5 ? " …" : ""}`, 6000);
+                return;
+              }
+              const needle = arg.toLowerCase();
+              const matches = tagged.filter((e) => (labelOf(e.tag) ?? "").toLowerCase().includes(needle));
+              if (matches.length === 0) {
+                modelineMsg(`No sessions match "${arg}"`, 3000);
+                return;
+              }
+              const target = matches[0];
+              await restoreEvent(target);
+              modelineMsg(`Restored: ${labelOf(target.tag)}`, 4000);
+            } catch (e) {
+              modelineMsg(`:restore failed: ${e.message}`, 4000);
+            }
+          })();
+          break;
+        }
+        case "sessions": {
+          const q = args.slice(1).join(" ").trim();
+          (async () => {
+            try {
+              const evs = q ? await history.search(q, { taggedOnly: true, limit: 20 }) : await history.getTagged(20);
+              if (!evs.length) {
+                modelineMsg(q ? `No sessions match "${q}"` : "No sessions yet", 3000);
+                return;
+              }
+              const summary = evs.slice(0, 5).map((e) => `${labelOf(e.tag) ?? "?"} (${(e.snapshot.nodes ?? []).filter((n) => n.type !== "group").length}t)`).join(" │ ");
+              modelineMsg(`Sessions: ${summary}${evs.length > 5 ? " …" : ""}`, 6000);
+            } catch (e) {
+              modelineMsg(`:sessions failed: ${e.message}`, 4000);
+            }
+          })();
+          break;
+        }
+        case "history": {
+          const q = args.slice(1).join(" ").trim();
+          (async () => {
+            try {
+              const evs = q ? await history.search(q, { taggedOnly: false, limit: 20 }) : await history.getRecent(20);
+              if (!evs.length) {
+                modelineMsg(q ? `No events match "${q}"` : "No history yet", 3000);
+                return;
+              }
+              const summary = evs.slice(0, 5).map((e) => {
+                const t = labelOf(e.tag);
+                const when = new Date(e.timestamp).toLocaleTimeString();
+                return t ? `[${t}]` : when;
+              }).join(" │ ");
+              modelineMsg(`History: ${summary}${evs.length > 5 ? " …" : ""}`, 6000);
+            } catch (e) {
+              modelineMsg(`:history failed: ${e.message}`, 4000);
+            }
+          })();
+          break;
+        }
         default:
           modelineMsg(`Unknown command: ${name}`, 3000);
       }
+    }
+    function labelOf(tag) {
+      if (!tag)
+        return null;
+      const i = tag.indexOf(":");
+      return i >= 0 ? tag.slice(i + 1) : tag;
+    }
+    async function restoreEvent(event) {
+      const env = event.snapshot;
+      const tabNodes = env.nodes.filter((n) => n.type !== "group");
+      if (!tabNodes.length) {
+        modelineMsg("Restore: no tabs in event", 3000);
+        return;
+      }
+      const maxSavedId = Math.max(0, ...tabNodes.map((n) => n.id || 0));
+      const offset = state.nextTabId;
+      state.nextTabId = state.nextTabId + maxSavedId + 1;
+      const groupName = labelOf(event.tag) ?? `Restored ${new Date(event.timestamp).toLocaleString()}`;
+      const groupRow = rows.createGroupRow(groupName, 0);
+      state.panel.insertBefore(groupRow, state.spacer);
+      rows.syncAnyRow(groupRow);
+      for (const n of tabNodes) {
+        const newId = (n.id || 0) + offset;
+        const newParentId = typeof n.parentId === "number" ? n.parentId + offset : groupRow._group.id;
+        const cloned = {
+          ...n,
+          id: newId,
+          parentId: newParentId,
+          _origIdx: savedTabQueue.length
+        };
+        savedTabQueue.push(cloned);
+      }
+      for (const n of tabNodes) {
+        const url = n.url || "about:blank";
+        try {
+          gBrowser.addTab(url, {
+            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal()
+          });
+        } catch (e) {
+          log6("restore:addTab-failed", { url, err: String(e) });
+        }
+      }
+      scheduleSave();
     }
     function executeRefile(target) {
       if (!refileSource) {
@@ -3413,8 +3541,8 @@
         const conn = await openConnection();
         const finalLabel = label ?? (kind === "session" ? dateLabel() : "Untitled");
         const tagValue = `${kind}:${finalLabel}`;
-        const result = await conn.execute(`UPDATE events SET tag = ?
-          WHERE id = (SELECT MAX(id) FROM events) AND tag IS NULL`, [tagValue]);
+        await conn.execute(`UPDATE events SET tag = ?
+          WHERE id = (SELECT MAX(id) FROM events)`, [tagValue]);
         const idRows = await conn.execute("SELECT id FROM events ORDER BY id DESC LIMIT 1");
         const id = idRows?.[0]?.getResultByName?.("id") ?? null;
         log7("tagLatest", { id, tagValue });
@@ -3594,7 +3722,8 @@
     scheduleSave,
     clearSelection,
     selectRange,
-    sidebarMain
+    sidebarMain,
+    history
   });
   var events = makeEvents({
     rows: Rows,

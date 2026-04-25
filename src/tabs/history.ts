@@ -275,13 +275,16 @@ export function makeHistory(): HistoryAPI {
       const conn = await openConnection();
       const finalLabel = label ?? (kind === "session" ? dateLabel() : "Untitled");
       const tagValue = `${kind}:${finalLabel}`;
-      const result = await conn.execute(
+      // Tag (or re-tag) the most recent event. If the latest event is
+      // already tagged (e.g., user runs :checkpoint twice on identical
+      // state), we OVERWRITE — this matches user intent ("tag this
+      // moment with this label") and avoids silent failures when hash
+      // dedupe means no new event was inserted.
+      await conn.execute(
         `UPDATE events SET tag = ?
-          WHERE id = (SELECT MAX(id) FROM events) AND tag IS NULL`,
+          WHERE id = (SELECT MAX(id) FROM events)`,
         [tagValue],
       );
-      // Sqlite.sys.mjs returns affected rows on UPDATE via the connection's
-      // _connectionData; we can confirm via a follow-up SELECT.
       const idRows = await conn.execute(
         "SELECT id FROM events ORDER BY id DESC LIMIT 1",
       );

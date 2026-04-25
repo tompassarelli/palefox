@@ -25,7 +25,7 @@ import {
   treeData,
 } from "./helpers.ts";
 import { createLogger } from "./log.ts";
-import { hzDisplay, rowOf, selection, state, treeOf } from "./state.ts";
+import { hzDisplay, rowOf, savedTabQueue, selection, state, treeOf } from "./state.ts";
 import type { Row, Tab } from "./types.ts";
 import type { LayoutAPI } from "./layout.ts";
 import type { RowsAPI } from "./rows.ts";
@@ -56,6 +56,9 @@ export type VimDeps = {
   /** The native #sidebar-main element — used for the search "single match
    *  found, dismiss sidebar" event. */
   readonly sidebarMain: HTMLElement;
+  /** Temporal substrate — read for :restore / :sessions / :history,
+   *  written via :checkpoint. */
+  readonly history: import("./history.ts").HistoryAPI;
 };
 
 export type VimAPI = {
@@ -92,7 +95,7 @@ export type VimAPI = {
 // =============================================================================
 
 export function makeVim(deps: VimDeps): VimAPI {
-  const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain } = deps;
+  const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain, history } = deps;
 
   // ---------- private state -------------------------------------------------
 
@@ -946,9 +949,189 @@ export function makeVim(deps: VimDeps): VimAPI {
         else { gBrowser.unpinTab(t); modelineMsg(`:unpin ${t.label}`); }
         break;
       }
+      case "checkpoint":
+      case "cp": {
+        // :checkpoint <label> — tag the most recent history event.
+        const label = args.slice(1).join(" ").trim();
+        if (!label) {
+          modelineMsg("Usage: :checkpoint <label>", 3000);
+          break;
+        }
+        // Force a save first so the latest tree state is captured before
+        // we tag. Then tag.
+        scheduleSave();
+        // scheduleSave is async; give the dedupe + INSERT a moment.
+        setTimeout(async () => {
+          try {
+            const id = await history.tagLatest("checkpoint", label);
+            modelineMsg(id ? `:checkpoint "${label}"` : "Nothing to tag (no events yet)", 3000);
+          } catch (e) {
+            modelineMsg(`:checkpoint failed: ${(e as Error).message}`, 4000);
+          }
+        }, 100);
+        break;
+      }
+      case "restore": {
+        // :restore [<label-substring>] — restore a tagged session.
+        // No arg: list recent tagged points to the modeline.
+        // With arg: substring-match against tag labels; restore exact match.
+        const arg = args.slice(1).join(" ").trim();
+        (async () => {
+          try {
+            const tagged = await history.getTagged(50);
+            if (!tagged.length) {
+              modelineMsg("No tagged sessions yet — :checkpoint or quit Firefox to create one", 4000);
+              return;
+            }
+            if (!arg) {
+              // List 5 most recent.
+              const head = tagged.slice(0, 5).map((e) => labelOf(e.tag) ?? "?").join(" │ ");
+              modelineMsg(`Tagged: ${head}${tagged.length > 5 ? " …" : ""}`, 6000);
+              return;
+            }
+            const needle = arg.toLowerCase();
+            const matches = tagged.filter((e) => (labelOf(e.tag) ?? "").toLowerCase().includes(needle));
+            if (matches.length === 0) {
+              modelineMsg(`No sessions match "${arg}"`, 3000);
+              return;
+            }
+            const target = matches[0]!; // most recent match
+            await restoreEvent(target);
+            modelineMsg(`Restored: ${labelOf(target.tag)}`, 4000);
+          } catch (e) {
+            modelineMsg(`:restore failed: ${(e as Error).message}`, 4000);
+          }
+        })();
+        break;
+      }
+      case "sessions": {
+        // :sessions [<query>] — list/search tagged points.
+        const q = args.slice(1).join(" ").trim();
+        (async () => {
+          try {
+            const evs = q
+              ? await history.search(q, { taggedOnly: true, limit: 20 })
+              : await history.getTagged(20);
+            if (!evs.length) {
+              modelineMsg(q ? `No sessions match "${q}"` : "No sessions yet", 3000);
+              return;
+            }
+            const summary = evs.slice(0, 5)
+              .map((e) => `${labelOf(e.tag) ?? "?"} (${(e.snapshot.nodes ?? []).filter((n) => n.type !== "group").length}t)`)
+              .join(" │ ");
+            modelineMsg(`Sessions: ${summary}${evs.length > 5 ? " …" : ""}`, 6000);
+          } catch (e) {
+            modelineMsg(`:sessions failed: ${(e as Error).message}`, 4000);
+          }
+        })();
+        break;
+      }
+      case "history": {
+        // :history [<query>] — search ALL events, tagged or not.
+        const q = args.slice(1).join(" ").trim();
+        (async () => {
+          try {
+            const evs = q
+              ? await history.search(q, { taggedOnly: false, limit: 20 })
+              : await history.getRecent(20);
+            if (!evs.length) {
+              modelineMsg(q ? `No events match "${q}"` : "No history yet", 3000);
+              return;
+            }
+            const summary = evs.slice(0, 5)
+              .map((e) => {
+                const t = labelOf(e.tag);
+                const when = new Date(e.timestamp).toLocaleTimeString();
+                return t ? `[${t}]` : when;
+              })
+              .join(" │ ");
+            modelineMsg(`History: ${summary}${evs.length > 5 ? " …" : ""}`, 6000);
+          } catch (e) {
+            modelineMsg(`:history failed: ${(e as Error).message}`, 4000);
+          }
+        })();
+        break;
+      }
       default:
         modelineMsg(`Unknown command: ${name}`, 3000);
     }
+  }
+
+  // ---------- History helpers ----------------------------------------------
+
+  /** Strip the "session:" / "checkpoint:" prefix off an event's tag. */
+  function labelOf(tag: string | null): string | null {
+    if (!tag) return null;
+    const i = tag.indexOf(":");
+    return i >= 0 ? tag.slice(i + 1) : tag;
+  }
+
+  /** Restore a saved event into the live workspace as a subtree under a
+   *  synthetic group node. Re-keys all pfx-ids past state.nextTabId so
+   *  there's no collision with currently-live tabs. Live tabs are NOT
+   *  affected — restored content is added alongside.
+   *
+   *  Walks the saved nodes:
+   *    1. Compute a re-key offset = state.nextTabId; bump nextTabId past max.
+   *    2. Build a synthetic Group entry with the event's label + level 0.
+   *    3. Each saved node's id and parentId (when numeric) are shifted by
+   *       offset. Saved nodes whose parentId was null become children of
+   *       the synthetic group.
+   *    4. Push everything onto state.savedTabQueue, then open new tabs at
+   *       the saved URLs — palefox's onTabOpen → popSavedForTab pipeline
+   *       wires each newly-arriving tab to its pre-translated parentId.
+   */
+  async function restoreEvent(event: import("./history.ts").HistoryEvent): Promise<void> {
+    const env = event.snapshot;
+    const tabNodes = env.nodes.filter((n) => n.type !== "group");
+    if (!tabNodes.length) {
+      modelineMsg("Restore: no tabs in event", 3000);
+      return;
+    }
+
+    // Re-key offset: shift saved ids out of the live id space.
+    const maxSavedId = Math.max(0, ...tabNodes.map((n) => n.id || 0));
+    const offset = state.nextTabId;
+    state.nextTabId = state.nextTabId + maxSavedId + 1;
+
+    // Build synthetic group row + insert at top of panel.
+    const groupName = labelOf(event.tag) ?? `Restored ${new Date(event.timestamp).toLocaleString()}`;
+    const groupRow = rows.createGroupRow(groupName, 0);
+    state.panel.insertBefore(groupRow, state.spacer);
+    rows.syncAnyRow(groupRow);
+
+    // Push re-keyed saved nodes into the savedTabQueue. onTabOpen will
+    // consume them as new tabs arrive (matched by URL or FIFO).
+    for (const n of tabNodes) {
+      const newId = (n.id || 0) + offset;
+      const newParentId = typeof n.parentId === "number"
+        ? n.parentId + offset
+        : groupRow._group!.id;
+      const cloned: import("./types.ts").SavedNode = {
+        ...n,
+        id: newId,
+        parentId: newParentId,
+        _origIdx: savedTabQueue.length,
+      };
+      savedTabQueue.push(cloned);
+    }
+
+    // Now actually open tabs at the saved URLs. The TabOpen handler
+    // (events.ts onTabOpen) calls popSavedForTab which pulls our queued
+    // entries off and applies them via applySavedToTab.
+    for (const n of tabNodes) {
+      const url = n.url || "about:blank";
+      try {
+        gBrowser.addTab(url, {
+          triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+        });
+      } catch (e) {
+        log("restore:addTab-failed", { url, err: String(e) });
+      }
+    }
+
+    // Trigger a save so the restored state is captured.
+    scheduleSave();
   }
 
   // ---------- Refile --------------------------------------------------------

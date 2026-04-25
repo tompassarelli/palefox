@@ -151,6 +151,7 @@ const pfxLog = createLogger("tabs");
     clearSelection,
     selectRange,
     sidebarMain,
+    history,
   });
   const events = makeEvents({
     rows: Rows,
