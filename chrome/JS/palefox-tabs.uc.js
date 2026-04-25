@@ -1062,6 +1062,100 @@
     };
   }
 
+  // src/tabs/layout.ts
+  function makeLayout(deps) {
+    const { sidebarMain, rows, syncAnyRow } = deps;
+    let toolboxResizeObs = null;
+    let alignSpacer = null;
+    function isVertical() {
+      return Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+    }
+    function setupHorizontalAlignSpacer() {
+      const target = document.getElementById("TabsToolbar-customization-target");
+      if (!target)
+        return;
+      if (!alignSpacer) {
+        alignSpacer = document.createXULElement("box");
+        alignSpacer.id = "pfx-content-alignment-spacer";
+        alignSpacer.style.flex = "0 0 auto";
+        alignSpacer.style.width = "10px";
+      }
+      if (target.firstChild !== alignSpacer)
+        target.prepend(alignSpacer);
+    }
+    function teardownHorizontalAlignSpacer() {
+      alignSpacer?.remove();
+    }
+    function setUrlbarTopLayer(inTopLayer) {
+      const urlbar = document.getElementById("urlbar");
+      if (!urlbar)
+        return;
+      if (sidebarMain.hasAttribute("data-pfx-compact"))
+        return;
+      if (inTopLayer && !urlbar.hasAttribute("popover")) {
+        urlbar.setAttribute("popover", "manual");
+        try {
+          urlbar.showPopover();
+        } catch (_) {}
+      } else if (!inTopLayer && urlbar.hasAttribute("popover")) {
+        urlbar.removeAttribute("popover");
+      }
+    }
+    function positionPanel() {
+      if (!state.panel)
+        return;
+      const vertical = isVertical();
+      state.panel.toggleAttribute("pfx-horizontal", !vertical);
+      document.documentElement.toggleAttribute("pfx-horizontal-tabs", !vertical);
+      if (toolboxResizeObs) {
+        toolboxResizeObs.disconnect();
+        toolboxResizeObs = null;
+      }
+      const toolbox = document.getElementById("navigator-toolbox");
+      const toolboxInSidebar = toolbox?.parentNode === sidebarMain;
+      if (vertical) {
+        const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
+        state.panel.toggleAttribute("pfx-icons-only", !expanded);
+        state.pinnedContainer?.toggleAttribute("pfx-icons-only", !expanded);
+        if (toolboxInSidebar && toolbox && state.pinnedContainer) {
+          if (toolbox.nextElementSibling !== state.pinnedContainer)
+            toolbox.after(state.pinnedContainer);
+          if (state.pinnedContainer.nextElementSibling !== state.panel)
+            state.pinnedContainer.after(state.panel);
+        } else if (state.pinnedContainer && (state.panel.parentNode !== sidebarMain || sidebarMain.firstElementChild !== state.pinnedContainer)) {
+          sidebarMain.prepend(state.panel);
+          sidebarMain.prepend(state.pinnedContainer);
+        }
+        teardownHorizontalAlignSpacer();
+        setUrlbarTopLayer(true);
+      } else {
+        state.panel.removeAttribute("pfx-icons-only");
+        const tabbrowserTabs = document.getElementById("tabbrowser-tabs");
+        if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== state.panel) {
+          tabbrowserTabs.after(state.panel);
+        }
+        setupHorizontalAlignSpacer();
+      }
+      if (!toolboxInSidebar && toolbox) {
+        const updateHeight = () => {
+          const h = toolbox.getBoundingClientRect().height;
+          document.documentElement.style.setProperty("--pfx-toolbox-height", h + "px");
+        };
+        updateHeight();
+        toolboxResizeObs = new ResizeObserver(updateHeight);
+        toolboxResizeObs.observe(toolbox);
+      } else {
+        document.documentElement.style.removeProperty("--pfx-toolbox-height");
+      }
+      if (vertical)
+        rows.clearHorizontalGrid();
+      for (const row of allRows())
+        syncAnyRow(row);
+      rows.updateVisibility();
+    }
+    return { positionPanel, isVertical, setUrlbarTopLayer };
+  }
+
   // src/tabs/index.ts
   var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
@@ -1517,21 +1611,6 @@
     }
     return row;
   }
-  function setUrlbarTopLayer(inTopLayer) {
-    const urlbar = document.getElementById("urlbar");
-    if (!urlbar)
-      return;
-    if (sidebarMain.hasAttribute("data-pfx-compact"))
-      return;
-    if (inTopLayer && !urlbar.hasAttribute("popover")) {
-      urlbar.setAttribute("popover", "manual");
-      try {
-        urlbar.showPopover();
-      } catch (_) {}
-    } else if (!inTopLayer && urlbar.hasAttribute("popover")) {
-      urlbar.removeAttribute("popover");
-    }
-  }
   function collapseHzTree(root) {
     const d = dataOf(root);
     if (!d || !hasChildren(root))
@@ -1545,7 +1624,7 @@
     d.collapsed = true;
     syncAnyRow(root);
     if (isHorizontal())
-      setUrlbarTopLayer(true);
+      layout.setUrlbarTopLayer(true);
   }
   function expandHzTree(root) {
     const d = dataOf(root);
@@ -1555,7 +1634,7 @@
     d.collapsed = false;
     syncAnyRow(root);
     if (isHorizontal())
-      setUrlbarTopLayer(false);
+      layout.setUrlbarTopLayer(false);
   }
   function updateHorizontalExpansion() {
     if (!state.cursor)
@@ -2488,6 +2567,11 @@
     startRename,
     scheduleSave
   });
+  var layout = makeLayout({
+    sidebarMain,
+    rows,
+    syncAnyRow
+  });
   async function loadFromDisk() {
     const parsed = await readTreeFromDisk();
     if (!parsed)
@@ -2609,80 +2693,6 @@
     rows.updateVisibility();
     return true;
   }
-  function isVertical() {
-    return Services.prefs.getBoolPref("sidebar.verticalTabs", true);
-  }
-  var toolboxResizeObs = null;
-  var alignSpacer = null;
-  function setupHorizontalAlignSpacer() {
-    const target = document.getElementById("TabsToolbar-customization-target");
-    if (!target)
-      return;
-    if (!alignSpacer) {
-      alignSpacer = document.createXULElement("box");
-      alignSpacer.id = "pfx-content-alignment-spacer";
-      alignSpacer.style.flex = "0 0 auto";
-      alignSpacer.style.width = "10px";
-    }
-    if (target.firstChild !== alignSpacer)
-      target.prepend(alignSpacer);
-  }
-  function teardownHorizontalAlignSpacer() {
-    alignSpacer?.remove();
-  }
-  function positionPanel() {
-    const vertical = isVertical();
-    state.panel.toggleAttribute("pfx-horizontal", !vertical);
-    document.documentElement.toggleAttribute("pfx-horizontal-tabs", !vertical);
-    if (toolboxResizeObs) {
-      toolboxResizeObs.disconnect();
-      toolboxResizeObs = null;
-    }
-    const toolbox = document.getElementById("navigator-toolbox");
-    const toolboxInSidebar = toolbox?.parentNode === sidebarMain;
-    if (vertical) {
-      const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-      state.panel.toggleAttribute("pfx-icons-only", !expanded);
-      state.pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
-      if (toolboxInSidebar) {
-        if (toolbox.nextElementSibling !== state.pinnedContainer)
-          toolbox.after(state.pinnedContainer);
-        if (state.pinnedContainer.nextElementSibling !== state.panel)
-          state.pinnedContainer.after(state.panel);
-      } else if (state.panel.parentNode !== sidebarMain || sidebarMain.firstElementChild !== state.pinnedContainer) {
-        sidebarMain.prepend(state.panel);
-        sidebarMain.prepend(state.pinnedContainer);
-      }
-      teardownHorizontalAlignSpacer();
-      setUrlbarTopLayer(true);
-    } else {
-      state.panel.removeAttribute("pfx-icons-only");
-      const tabbrowserTabs = document.getElementById("tabbrowser-tabs");
-      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== state.panel) {
-        tabbrowserTabs.after(state.panel);
-      }
-      setupHorizontalAlignSpacer();
-    }
-    if (!toolboxInSidebar && toolbox) {
-      const updateHeight = () => {
-        const h = toolbox.getBoundingClientRect().height;
-        document.documentElement.style.setProperty("--pfx-toolbox-height", h + "px");
-      };
-      updateHeight();
-      toolboxResizeObs = new ResizeObserver(updateHeight);
-      toolboxResizeObs.observe(toolbox);
-    } else {
-      document.documentElement.style.removeProperty("--pfx-toolbox-height");
-    }
-    if (state.panel) {
-      if (vertical) {
-        rows.clearHorizontalGrid();
-      }
-      for (const row of allRows())
-        syncAnyRow(row);
-      rows.updateVisibility();
-    }
-  }
   async function init() {
     tryRegisterPinAttr();
     await loadFromDisk();
@@ -2698,15 +2708,15 @@
     state.spacer.setAttribute("flex", "1");
     state.panel.appendChild(state.spacer);
     drag.setupPanelDrop(state.panel);
-    positionPanel();
-    new MutationObserver(() => positionPanel()).observe(sidebarMain, {
+    layout.positionPanel();
+    new MutationObserver(() => layout.positionPanel()).observe(sidebarMain, {
       childList: true,
       attributes: true,
       attributeFilter: ["sidebar-launcher-expanded"]
     });
     Services.prefs.addObserver("sidebar.verticalTabs", {
       observe() {
-        positionPanel();
+        layout.positionPanel();
       }
     });
     if (!buildFromSaved())

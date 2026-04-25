@@ -22,6 +22,7 @@ import {
 import { makeDrag } from "./drag.ts";
 import { buildContextMenu } from "./menu.ts";
 import { makeRows } from "./rows.ts";
+import { makeLayout } from "./layout.ts";
 import {
   SS, tryRegisterPinAttr, pinTabId, readPinnedId,
   treeData, tabById, parentOfTab, levelOf, levelOfRow, dataOf,
@@ -583,25 +584,6 @@ const pfxLog = createLogger("tabs");
     return row;
   }
 
-  // Firefox sets popover="manual" on #urlbar so it lives in the CSS top
-  // layer. That makes it render above everything in horizontal mode,
-  // including tree popouts. We can't beat top layer with z-index — the
-  // only fix is to pull the urlbar *out* of top layer while the popout
-  // is visible, then restore it on collapse. Tree collapse runs before
-  // the user can move to the urlbar, so focus behaviour (breakout-extend
-  // positioning) is unaffected in practice.
-  function setUrlbarTopLayer(inTopLayer) {
-    const urlbar = document.getElementById("urlbar");
-    if (!urlbar) return;
-    // palefox-drawer owns popover state when compact mode is active
-    if (sidebarMain.hasAttribute("data-pfx-compact")) return;
-    if (inTopLayer && !urlbar.hasAttribute("popover")) {
-      urlbar.setAttribute("popover", "manual");
-      try { urlbar.showPopover(); } catch (_) {}
-    } else if (!inTopLayer && urlbar.hasAttribute("popover")) {
-      urlbar.removeAttribute("popover");
-    }
-  }
 
   // Auto-expand the state.cursor's tree, collapse the previous one.
   // On collapse, the root shows the last selected tab's visuals.
@@ -619,7 +601,7 @@ const pfxLog = createLogger("tabs");
 
     d.collapsed = true;
     syncAnyRow(root);
-    if (isHorizontal()) setUrlbarTopLayer(true);
+    if (isHorizontal()) layout.setUrlbarTopLayer(true);
   }
 
   function expandHzTree(root) {
@@ -631,7 +613,7 @@ const pfxLog = createLogger("tabs");
 
     d.collapsed = false;
     syncAnyRow(root);
-    if (isHorizontal()) setUrlbarTopLayer(false);
+    if (isHorizontal()) layout.setUrlbarTopLayer(false);
   }
 
   function updateHorizontalExpansion() {
@@ -1623,6 +1605,11 @@ const pfxLog = createLogger("tabs");
     activateVim, selectRange, clearSelection,
     cloneAsChild, startRename, scheduleSave,
   });
+  const layout = makeLayout({
+    sidebarMain,
+    rows,
+    syncAnyRow,
+  });
 
   async function loadFromDisk() {
     const parsed = await readTreeFromDisk();
@@ -1769,91 +1756,6 @@ const pfxLog = createLogger("tabs");
   }
 
 
-  // --- Panel positioning ---
-
-  function isVertical() {
-    return Services.prefs.getBoolPref("sidebar.verticalTabs", true);
-  }
-
-  let toolboxResizeObs = null;
-
-  // Content-alignment state.spacer: in horizontal mode the tab strip starts at the
-  // window's left edge. Inset it by 10px so tabs don't butt against the edge.
-  let alignSpacer = null;
-  function setupHorizontalAlignSpacer() {
-    const target = document.getElementById("TabsToolbar-customization-target");
-    if (!target) return;
-    if (!alignSpacer) {
-      alignSpacer = document.createXULElement("box");
-      alignSpacer.id = "pfx-content-alignment-spacer";
-      alignSpacer.style.flex = "0 0 auto";
-      alignSpacer.style.width = "10px";
-    }
-    if (target.firstChild !== alignSpacer) target.prepend(alignSpacer);
-  }
-  function teardownHorizontalAlignSpacer() {
-    alignSpacer?.remove();
-  }
-
-  function positionPanel() {
-    const vertical = isVertical();
-    state.panel.toggleAttribute("pfx-horizontal", !vertical);
-    document.documentElement.toggleAttribute("pfx-horizontal-tabs", !vertical);
-
-    if (toolboxResizeObs) {
-      toolboxResizeObs.disconnect();
-      toolboxResizeObs = null;
-    }
-
-    const toolbox = document.getElementById("navigator-toolbox");
-    const toolboxInSidebar = toolbox?.parentNode === sidebarMain;
-
-    if (vertical) {
-      const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-      state.panel.toggleAttribute("pfx-icons-only", !expanded);
-      state.pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
-      if (toolboxInSidebar) {
-        if (toolbox.nextElementSibling !== state.pinnedContainer) toolbox.after(state.pinnedContainer);
-        if (state.pinnedContainer.nextElementSibling !== state.panel) state.pinnedContainer.after(state.panel);
-      } else if (state.panel.parentNode !== sidebarMain ||
-                 sidebarMain.firstElementChild !== state.pinnedContainer) {
-        sidebarMain.prepend(state.panel);
-        sidebarMain.prepend(state.pinnedContainer);
-      }
-      teardownHorizontalAlignSpacer();
-      // If horizontal mode had a popout open, urlbar may be without popover
-      setUrlbarTopLayer(true);
-    } else {
-      state.panel.removeAttribute("pfx-icons-only");
-      const tabbrowserTabs = document.getElementById("tabbrowser-tabs");
-      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== state.panel) {
-        tabbrowserTabs.after(state.panel);
-      }
-      setupHorizontalAlignSpacer();
-    }
-
-    // Track toolbox height for compact mode offset when toolbox is above sidebar
-    if (!toolboxInSidebar && toolbox) {
-      const updateHeight = () => {
-        const h = toolbox.getBoundingClientRect().height;
-        document.documentElement.style.setProperty("--pfx-toolbox-height", h + "px");
-      };
-      updateHeight();
-      toolboxResizeObs = new ResizeObserver(updateHeight);
-      toolboxResizeObs.observe(toolbox);
-    } else {
-      document.documentElement.style.removeProperty("--pfx-toolbox-height");
-    }
-
-    // Re-sync all rows when switching modes
-    if (state.panel) {
-      if (vertical) {
-        rows.clearHorizontalGrid();
-      }
-      for (const row of allRows()) syncAnyRow(row);
-      rows.updateVisibility(); // calls rows.updateHorizontalGrid() if horizontal
-    }
-  }
 
   // --- Init ---
 
@@ -1876,10 +1778,10 @@ const pfxLog = createLogger("tabs");
     state.panel.appendChild(state.spacer);
     drag.setupPanelDrop(state.panel);
 
-    positionPanel();
+    layout.positionPanel();
 
     // Re-position when toolbox moves in/out of sidebar, or expand/collapse
-    new MutationObserver(() => positionPanel()).observe(sidebarMain, {
+    new MutationObserver(() => layout.positionPanel()).observe(sidebarMain, {
       childList: true,
       attributes: true,
       attributeFilter: ["sidebar-launcher-expanded"],
@@ -1887,7 +1789,7 @@ const pfxLog = createLogger("tabs");
 
     // Switch between horizontal/vertical layout
     Services.prefs.addObserver("sidebar.verticalTabs", {
-      observe() { positionPanel(); },
+      observe() { layout.positionPanel(); },
     });
 
     // Build from saved data (preserves groups + order) or fresh
