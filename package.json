@@ -6,7 +6,8 @@
     "build": "bun run build.ts",
     "dev": "bun --watch build.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test src/",
+    "test:integration": "bun run build && bun run tools/test-driver/runner.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

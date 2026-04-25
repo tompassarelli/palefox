@@ -159,20 +159,48 @@ Mark items as you ship them. Do NOT skip a sprint to start a later one.
 
 ### Sprint 3 — Tier 3 (real Firefox)
 
-- [ ] Confirm `geckodriver` install path on NixOS (likely via nix-shell or `nix run nixpkgs#geckodriver`)
-- [ ] `tools/test-driver/profile.ts` — ephemeral profile creator (copies palefox into `chrome/`, writes user.js with autoconfig prefs)
-- [ ] `tools/test-driver/marionette.ts` — minimal Marionette client (NewSession, SetContext, ExecuteScript, DeleteSession over HTTP)
-- [ ] `tools/test-driver/runner.ts` — orchestration: spawn Firefox → connect → run → tear down
-- [ ] First integration test: boot Firefox, toggle compact, assert `data-pfx-compact` is set then unset
-- [ ] `bun run test:integration` script
-- [ ] Headless mode works (CI-able even though no CI yet)
+- [x] geckodriver NOT required — we speak Marionette directly (TCP). NixOS
+      Firefox already includes the fx-autoconfig loader (`mozilla.cfg` +
+      `defaults/pref/autoconfig.js` baked into the package), so we don't
+      need to write to the binary install dir either.
+- [x] `tools/test-driver/profile.ts` — ephemeral profile under `mkdtemp`,
+      copies `chrome/` from repo, writes `user.js` with Marionette + sane
+      headless prefs. Auto-cleanup on `cleanup()`.
+- [x] `tools/test-driver/marionette.ts` — minimal Marionette TCP client.
+      Wire format: `<utf8-byte-length>:<json>`. Implements
+      `WebDriver:NewSession`, `Marionette:SetContext`, `WebDriver:ExecuteScript`,
+      `WebDriver:DeleteSession`. Handles framing, banner, in-flight map.
+- [x] `tools/test-driver/runner.ts` — orchestrates: createProfile → spawn
+      Firefox `--marionette --headless --remote-allow-system-access` →
+      connectMarionette → setContext("chrome") → run tests → teardown.
+      Emits structured JSON events (`test:start`/`test:pass`/`test:fail`/
+      `summary`) to stdout for AI/CI consumption.
+- [x] `tests/integration/compact.ts` — 4 tests covering bootstrap,
+      compact pref-observer chain, hover-strip element create/remove,
+      horizontal-compact mode swap.
+- [x] `bun run test:integration` script (chains build + runner)
+- [x] Headless mode works. **Caveat:** `#sidebar-button` doesn't exist
+      under `--headless` at script-eval time, so any test depending on
+      our `#pfx-sidebar-button` (built only when the native one is
+      present) won't pass headlessly. Headless tests should target
+      sidebar/toolbox state + pref behavior, not toolbar UI specifics.
+- [x] **Critical Firefox flag:** `--remote-allow-system-access` is
+      required for chrome-context `executeScript`. Landed in Firefox 128+
+      as a safety gate. Without it: "System access is required."
 
 ### Sprint 4 — Suite expansion + AI loop
 
-- [ ] Integration tests: compact mode (vertical + horizontal), tab tree round-trip across save/restore, vim chords (`dd`, `gg`, `yy`), drag-drop reorder
-- [ ] JSON result format from runner (test name, status, duration, error message)
-- [ ] CLAUDE.md addition: "How AI iterates on tests" — points at `bun run test:integration` and the JSON format
-- [ ] Document common failure modes + recovery (Firefox didn't start, profile got stuck, etc.)
+- [x] JSON result format from runner — Sprint 3 already shipped this.
+      Each line is one `{"type": "...", ...}` object. Parse line-by-line.
+- [x] CLAUDE.md addition: "AI iteration loop" section — points at
+      `bun run test:integration` and the JSON format.
+- [ ] Integration tests: tab-tree round-trip across save/restore
+- [ ] Integration tests: vim chords (`dd`, `gg`, `yy`)
+- [ ] Integration tests: drag-drop reorder (will need synthesized drag events)
+- [ ] Document common failure modes + recovery (Firefox didn't start,
+      profile got stuck, port collision)
+- [ ] (stretch) Make the runner support a single-test filter for fast
+      iteration: `bun run test:integration -- --grep="hover strip"`.
 
 ---
 

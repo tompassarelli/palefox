@@ -87,15 +87,57 @@ typecheck) — run `bun run typecheck` separately. Editor tsserver also runs.
 
 ### Testing strategy
 
-Palefox's test infrastructure is being built in tiers. **Read
+Palefox's test infrastructure is built in tiers. **Read
 [`docs/dev/testing.md`](docs/dev/testing.md) end-to-end before doing
 test-related work** — it's the source of truth for the plan, the sprint
 checklist, and the guiding principles. Quick orientation:
 
-- **Tier 1** (today): `bun test` for pure-function unit tests
-- **Tier 2** (next): `happy-dom`-backed mocks of chrome globals for state-machine tests
-- **Tier 3** (strategic): real Firefox via Marionette for end-to-end integration tests
-- **Tier 4** (after Tier 3): the autonomous AI iteration loop runs `bun run test:integration` instead of asking the user to reload Firefox
+- **Tier 1** (live): `bun test src/` — pure-function unit tests (persist, helpers)
+- **Tier 2** (live): happy-dom-backed mocks of chrome globals — compact state machine
+- **Tier 3** (live): real Firefox via Marionette — `bun run test:integration`
+- **Tier 4** (live): the autonomous AI iteration loop — see below
+
+### AI iteration loop (Tier 3 + 4)
+
+When you change `src/drawer/`, `src/tabs/`, or anything that affects runtime
+behavior, **run integration tests yourself** instead of asking the user to
+reload Firefox. The substrate is set up:
+
+```bash
+bun run test:integration              # Build, spawn headless Firefox, run all tests
+bun run test:integration -- --verbose # Same but pipe Firefox's stderr to terminal
+```
+
+The runner emits one JSON event per line on stdout — parse them line-by-line:
+
+```json
+{"type":"test:start","name":"...","file":"compact.ts"}
+{"type":"test:pass","name":"...","file":"compact.ts","durationMs":15}
+{"type":"test:fail","name":"...","file":"compact.ts","durationMs":12,"error":"...","stack":"..."}
+{"type":"summary","pass":4,"fail":0,"durationMs":1449}
+```
+
+Iteration loop for new behavior:
+1. Edit the code (`src/drawer/compact.ts` etc.)
+2. Add or extend a test in `tests/integration/<area>.ts` (default-export
+   array of `{name, run(mn)}` — `run` gets a connected, chrome-context
+   Marionette client)
+3. `bun run test:integration` and read the JSON output
+4. Iterate from #1 until pass
+
+Iteration loop for regressions:
+1. `bun run test:integration` — see what fails
+2. Read the failing test's `error` + `stack`
+3. Fix the code
+4. Re-run
+
+When to fall back to the "ask user to reload" loop documented in *Dev
+feedback loop* below: **only when the bug is in something that requires a
+non-headless surface** — visible-window CSS, real-cursor hover events with
+synthesized inputs, native input methods. The `#sidebar-button` toolbar
+button is one of those (doesn't exist headless), and our `#pfx-sidebar-button`
+is built downstream of it. For everything else, prefer the integration
+runner — it's faster and more reproducible than human-in-the-loop reloads.
 
 The sprint checklist in `docs/dev/testing.md` is the single tracking source.
 Don't fork tracking into chat or commit messages — update the checklist as
