@@ -39,8 +39,9 @@
  * to flex-column with explicit width so 24px children center reliably. The
  * min-width pushes the parent #sidebar-main wider than the bare 32px row, so
  * the strip has breathing room — this is what the old icon-grid CSS used to
- * give us via horizontal padding. */
-:is(#pfx-pinned-container, #pfx-tab-panel)[pfx-icons-only] {
+ * give us via horizontal padding. :not([hidden]) so an empty pinned
+ * container actually stays hidden when there are no pinned tabs. */
+:is(#pfx-pinned-container, #pfx-tab-panel)[pfx-icons-only]:not([hidden]) {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -49,7 +50,7 @@
 }
 
 #pfx-tab-panel[pfx-icons-only] .pfx-tab-label,
-#pfx-tab-panel[pfx-icons-only] .pfx-tab-close {
+#pfx-tab-panel[pfx-icons-only] .pfx-tab-chevron {
   display: none !important;
 }
 #pfx-tab-panel[pfx-icons-only] .pfx-group-row {
@@ -144,7 +145,7 @@
 /* Icons-only sidebar — match the tree panel's icons-only treatment so pinned
  * and unpinned rows collapse identically. */
 #pfx-pinned-container[pfx-icons-only] .pfx-tab-label,
-#pfx-pinned-container[pfx-icons-only] .pfx-tab-close {
+#pfx-pinned-container[pfx-icons-only] .pfx-tab-chevron {
   display: none !important;
 }
 #pfx-pinned-container[pfx-icons-only] .pfx-tab-row {
@@ -218,18 +219,6 @@
   min-width: 0;
 }
 
-/* Close button — hover only */
-.pfx-tab-close {
-  width: 16px; height: 16px;
-  margin-inline-start: 4px;
-  opacity: 0; flex-shrink: 0;
-  list-style-image: url("chrome://global/skin/icons/close.svg");
-  -moz-context-properties: fill;
-  fill: currentColor;
-}
-.pfx-tab-row:hover .pfx-tab-close { opacity: 0.5; }
-.pfx-tab-close:hover { opacity: 1 !important; cursor: pointer; }
-
 /* Group rows */
 .pfx-group-row {
   font-weight: 600;
@@ -242,11 +231,22 @@
   flex-shrink: 0;
 }
 
-/* Collapse indicator */
-[pfx-collapsed] .pfx-tab-label::after {
-  content: " ▸";
+/* Collapse indicator — real XUL <image> child anchored to the row's far
+ * right edge. margin-inline-start: auto pushes it past the label's flex:1
+ * so the chevron always sits flush right with breathing room. */
+.pfx-tab-chevron {
+  width: 12px; height: 12px;
+  margin-inline-start: auto;
+  margin-inline-end: 4px;
+  flex-shrink: 0;
+  display: none;
+  list-style-image: url("chrome://global/skin/icons/arrow-right.svg");
+  -moz-context-properties: fill;
+  fill: currentColor;
   opacity: 0.5;
-  margin-inline-start: 4px;
+}
+[pfx-collapsed] .pfx-tab-chevron {
+  display: inline-block;
 }
 
 /* #endregion rows */
@@ -416,8 +416,10 @@
 
 /* Horizontal-mode grid layout — both the panel and the pinned container
  * render as grids of tab cells. Pinned sits before panel, separated by a
- * vertical divider (border-right on the pinned container). */
-:is(#pfx-tab-panel, #pfx-pinned-container)[pfx-horizontal] {
+ * vertical divider (border-right on the pinned container).
+ *   :not([hidden])         — empty pinned container actually stays hidden
+ *   :not([pfx-empty-zone]) — empty-zone uses its own flex centering rule */
+:is(#pfx-tab-panel, #pfx-pinned-container)[pfx-horizontal]:not([hidden]):not([pfx-empty-zone]) {
   display: grid !important;
   /* No min — columns shrink infinitely small as more tabs arrive,
    * rather than scrolling offscreen. */
@@ -450,23 +452,6 @@
 :is(#pfx-tab-panel, #pfx-pinned-container)[pfx-horizontal] .pfx-group-row {
   margin: 1px;
   position: relative;
-  /* Reserve space for the absolute-positioned close button so the label
-   * truncates with `crop="end"` before running under it. */
-  padding-inline-end: 28px;
-}
-/* Horizontal mode: close button anchors to the right edge and sits
- * above the label via z-index. When the tab is narrow, it overlaps
- * the truncated label rather than falling off the right edge. */
-:is(#pfx-tab-panel, #pfx-pinned-container)[pfx-horizontal] .pfx-tab-close {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-inline-start: 0;
-  z-index: 1;
-  background: inherit;
-  border-radius: 3px;
-  padding: 1px;
 }
 
 /* Popout children — solid background so they obscure whatever paints

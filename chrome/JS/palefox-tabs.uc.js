@@ -1631,12 +1631,68 @@
   }
 
   // src/tabs/layout.ts
+  var log4 = createLogger("tabs/layout");
   function makeLayout(deps) {
     const { sidebarMain, rows } = deps;
     let toolboxResizeObs = null;
     let alignSpacer = null;
+    let lastVertical = null;
     function isVertical() {
       return Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+    }
+    function collapseInactiveTreesKeepingActive() {
+      const activeTab = gBrowser?.selectedTab;
+      const activeRow = activeTab ? rowOf.get(activeTab) : undefined;
+      const all = allRows();
+      let activeRoot = null;
+      if (activeRow) {
+        const idx = all.indexOf(activeRow);
+        for (let i = idx;i >= 0; i--) {
+          if (levelOfRow(all[i]) === 0) {
+            activeRoot = all[i];
+            break;
+          }
+        }
+      }
+      const rootsBefore = [];
+      let mutated = false;
+      for (const row of all) {
+        if (levelOfRow(row) !== 0)
+          continue;
+        const d = dataOf(row);
+        const wasCollapsed = !!d?.collapsed;
+        const isActiveTree = row === activeRoot;
+        if (isActiveTree) {
+          if (d?.collapsed) {
+            d.collapsed = false;
+            rows.syncAnyRow(row);
+            mutated = true;
+          }
+        } else {
+          if (d && !d.collapsed) {
+            d.collapsed = true;
+            rows.syncAnyRow(row);
+            mutated = true;
+          }
+        }
+        rootsBefore.push({
+          kind: row._tab ? "tab" : row._group ? "group" : "?",
+          label: row._tab?.label || row._group?.name,
+          wasCollapsed,
+          isActiveTree,
+          nowCollapsed: !!d?.collapsed
+        });
+      }
+      log4("collapseInactiveTrees", {
+        activeTab: activeTab?.label,
+        activeRootLabel: activeRoot?._tab?.label || activeRoot?._group?.name,
+        activeRootFound: !!activeRoot,
+        rootCount: rootsBefore.length,
+        mutated,
+        roots: rootsBefore
+      });
+      if (mutated)
+        rows.updateVisibility();
     }
     function setupHorizontalAlignSpacer() {
       const target = document.getElementById("TabsToolbar-customization-target");
@@ -1728,19 +1784,32 @@
       for (const row of allRows())
         rows.syncAnyRow(row);
       rows.updateVisibility();
+      const modeChanged = lastVertical !== null && lastVertical !== vertical;
+      const initialHorizontal = lastVertical === null && !vertical;
+      log4("positionPanel:transitionCheck", {
+        lastVertical,
+        vertical,
+        modeChanged,
+        initialHorizontal,
+        willTrigger: modeChanged || initialHorizontal
+      });
+      if (modeChanged || initialHorizontal) {
+        collapseInactiveTreesKeepingActive();
+      }
+      lastVertical = vertical;
     }
     return { positionPanel, isVertical, setUrlbarTopLayer };
   }
 
   // src/tabs/rows.ts
-  var log4 = createLogger("tabs/rows");
+  var log5 = createLogger("tabs/rows");
   function makeRows(deps) {
     const {
       setupDrag,
       activateVim,
       selectRange,
       clearSelection,
-      cloneAsChild,
+      cloneAsSibling,
       startRename,
       scheduleSave
     } = deps;
@@ -1756,17 +1825,15 @@
       label.className = "pfx-tab-label";
       label.setAttribute("crop", "end");
       label.setAttribute("flex", "1");
-      const close = document.createXULElement("image");
-      close.className = "pfx-tab-close";
-      row.append(icon, label, close);
+      const chevron = document.createXULElement("image");
+      chevron.className = "pfx-tab-chevron";
+      row.append(icon, label, chevron);
       row._tab = tab;
       rowOf.set(tab, row);
       row.addEventListener("click", (e) => {
         const me = e;
         if (me.button === 0) {
-          if (me.target === close) {
-            gBrowser.removeTab(tab);
-          } else if (me.shiftKey) {
+          if (me.shiftKey) {
             selectRange(row);
           } else {
             const target = hzDisplay.get(row) || tab;
@@ -1781,9 +1848,9 @@
       });
       row.addEventListener("dblclick", (e) => {
         const me = e;
-        if (me.button === 0 && me.target !== close) {
+        if (me.button === 0) {
           e.stopPropagation();
-          cloneAsChild(tab);
+          cloneAsSibling(tab);
         }
       });
       row.addEventListener("contextmenu", (e) => {
@@ -1952,7 +2019,7 @@
           if (totalPopouts > 0 && urlbar.hasAttribute("popover")) {
             urlbar.removeAttribute("popover");
           }
-          log4("hzGrid:urlbar", { totalPopouts, before, hasPopoverAfter: urlbar.hasAttribute("popover") });
+          log5("hzGrid:urlbar", { totalPopouts, before, hasPopoverAfter: urlbar.hasAttribute("popover") });
         }
         for (const container of containers) {
           const allRowsInContainer = container.querySelectorAll(".pfx-tab-row, .pfx-group-row");
@@ -2001,7 +2068,7 @@
               }
             };
           };
-          log4("hzGrid:stacking", {
+          log5("hzGrid:stacking", {
             popout: cs(popout),
             panel: cs(state.panel),
             tabsToolbar: cs(document.getElementById("TabsToolbar")),
@@ -2075,7 +2142,7 @@
   }
 
   // src/tabs/vim.ts
-  var log5 = createLogger("tabs/vim");
+  var log6 = createLogger("tabs/vim");
   function makeVim(deps) {
     const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain } = deps;
     let chord = null;
@@ -2175,13 +2242,13 @@
     }
     function moveCursor(delta) {
       if (!state.cursor) {
-        log5("moveCursor:noCursor", { delta });
+        log6("moveCursor:noCursor", { delta });
         return false;
       }
       const all = allRows();
       const idx = all.indexOf(state.cursor);
       if (idx < 0) {
-        log5("moveCursor:cursorNotInAllRows", { delta, allLen: all.length });
+        log6("moveCursor:cursorNotInAllRows", { delta, allLen: all.length });
         return false;
       }
       const step = delta > 0 ? 1 : -1;
@@ -2198,7 +2265,7 @@
           });
           continue;
         }
-        log5("moveCursor:landed", {
+        log6("moveCursor:landed", {
           delta,
           fromIdx: idx,
           toIdx: i,
@@ -2215,7 +2282,7 @@
           gBrowser.selectedTab = row._tab;
         return true;
       }
-      log5("moveCursor:noTarget", {
+      log6("moveCursor:noTarget", {
         delta,
         fromIdx: idx,
         allLen: all.length,
@@ -2550,6 +2617,11 @@
           goToTop();
           return true;
         }
+        if (combo === "gC") {
+          if (state.cursor?._tab)
+            cloneAsSibling(state.cursor._tab);
+          return true;
+        }
         return true;
       }
       if (e.key === "g" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
@@ -2780,11 +2852,11 @@
         scheduleSave();
       }
     }
-    function cloneAsChild(tab) {
-      const parentRow = rowOf.get(tab);
-      if (!parentRow)
+    function cloneAsSibling(tab) {
+      const sourceRow = rowOf.get(tab);
+      if (!sourceRow)
         return;
-      const parentId = treeData(tab).id;
+      const siblingParentId = treeData(tab).parentId;
       pendingCursorMove = true;
       const clone = gBrowser.duplicateTab(tab);
       const obs = new MutationObserver(() => {
@@ -2792,8 +2864,8 @@
         if (!cloneRow)
           return;
         obs.disconnect();
-        treeData(clone).parentId = parentId;
-        const st = subtreeRows(parentRow);
+        treeData(clone).parentId = siblingParentId;
+        const st = subtreeRows(sourceRow);
         st[st.length - 1].after(cloneRow);
         rows.syncTabRow(clone);
         rows.updateVisibility();
@@ -2887,7 +2959,7 @@
           }
           refileSource = state.cursor;
           const srcLabel = dataOf(state.cursor)?.name || state.cursor._tab?.label || "tab";
-          log5("refile:start", {
+          log6("refile:start", {
             srcLabel,
             srcKind: refileSource._tab ? "tab" : refileSource._group ? "group" : "?",
             srcLevel: levelOfRow(refileSource),
@@ -2931,33 +3003,33 @@
     }
     function executeRefile(target) {
       if (!refileSource) {
-        log5("refile:abort", { reason: "no-refileSource" });
+        log6("refile:abort", { reason: "no-refileSource" });
         return;
       }
       if (!target) {
-        log5("refile:abort", { reason: "no-target" });
+        log6("refile:abort", { reason: "no-target" });
         return;
       }
       if (target === refileSource) {
-        log5("refile:abort", { reason: "target-is-source" });
+        log6("refile:abort", { reason: "target-is-source" });
         return;
       }
       const srcRows = subtreeRows(refileSource);
       if (srcRows.includes(target)) {
-        log5("refile:abort", { reason: "target-in-source-subtree", srcRowsCount: srcRows.length });
+        log6("refile:abort", { reason: "target-in-source-subtree", srcRowsCount: srcRows.length });
         modelineMsg("Can't refile under own subtree", 3000);
         return;
       }
       const srcData = dataOf(refileSource);
       const tgtData = dataOf(target);
       if (!srcData || !tgtData) {
-        log5("refile:abort", { reason: "no-data", hasSrcData: !!srcData, hasTgtData: !!tgtData });
+        log6("refile:abort", { reason: "no-data", hasSrcData: !!srcData, hasTgtData: !!tgtData });
         return;
       }
       const srcKind = refileSource._tab ? "tab" : "group";
       const tgtKind = target._tab ? "tab" : "group";
       const groupCountInSubtree = srcRows.filter((r) => r._group).length;
-      log5("refile:enter", {
+      log6("refile:enter", {
         srcLabel: srcData.name || refileSource._tab?.label,
         tgtLabel: tgtData.name || target._tab?.label,
         srcKind,
@@ -2971,7 +3043,7 @@
       if (refileSource._tab && target._tab) {
         const oldParentId = treeData(refileSource._tab).parentId;
         treeData(refileSource._tab).parentId = treeData(target._tab).id;
-        log5("refile:tab-to-tab", {
+        log6("refile:tab-to-tab", {
           oldParentId,
           newParentId: treeData(target._tab).id,
           groupsAffected: groupCountInSubtree
@@ -2980,20 +3052,20 @@
         const tgtLevel = levelOfRow(target);
         const srcLevel = levelOfRow(refileSource);
         const delta = tgtLevel + 1 - srcLevel;
-        log5("refile:level-delta", { srcLevel, tgtLevel, delta });
+        log6("refile:level-delta", { srcLevel, tgtLevel, delta });
         for (const r of srcRows) {
           if (r._group)
             r._group.level = Math.max(0, (r._group.level || 0) + delta);
         }
       }
       const tgtSub = subtreeRows(target);
-      log5("refile:placing", { tgtSubtreeSize: tgtSub.length });
+      log6("refile:placing", { tgtSubtreeSize: tgtSub.length });
       tgtSub[tgtSub.length - 1].after(...srcRows);
       for (const r of srcRows)
         rows.syncAnyRow(r);
       rows.updateVisibility();
       scheduleSave();
-      log5("refile:done", {
+      log6("refile:done", {
         srcLevelAfter: levelOfRow(refileSource),
         groupLevelsAfter: srcRows.filter((r) => r._group).map((r) => r._group.level)
       });
@@ -3006,7 +3078,7 @@
     }
     function cancelRefile() {
       if (refileSource) {
-        log5("refile:cancel", {});
+        log6("refile:cancel", {});
         refileSource = null;
         searchMatches = [];
         searchIdx = -1;
@@ -3231,7 +3303,7 @@
       focusPanel,
       createModeline,
       setupVimKeys,
-      cloneAsChild,
+      cloneAsSibling,
       startRename,
       consumePendingCursorMove
     };
@@ -3303,7 +3375,7 @@
     activateVim: (row) => vim.activateVim(row),
     selectRange,
     clearSelection,
-    cloneAsChild: (tab) => vim.cloneAsChild(tab),
+    cloneAsSibling: (tab) => vim.cloneAsSibling(tab),
     startRename: (row) => vim.startRename(row),
     scheduleSave
   });

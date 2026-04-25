@@ -7,12 +7,17 @@
 //   isVertical()              — current mode read from sidebar.verticalTabs
 //   setUrlbarTopLayer(bool)   — pull urlbar in/out of the top layer
 
-import { allRows, isHorizontal } from "./helpers.ts";
-import { state } from "./state.ts";
+import { allRows, dataOf, isHorizontal, levelOfRow } from "./helpers.ts";
+import { createLogger } from "./log.ts";
+import { rowOf, state } from "./state.ts";
+import type { Row } from "./types.ts";
 import type { RowsAPI } from "./rows.ts";
 
 declare const document: Document;
+declare const gBrowser: any;
 declare const Services: any;
+
+const log = createLogger("tabs/layout");
 
 // =============================================================================
 // INTERFACE
@@ -43,9 +48,58 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
   // Module-private state.
   let toolboxResizeObs: ResizeObserver | null = null;
   let alignSpacer: HTMLElement | null = null;
+  // Tracks the previous mode so we can detect horizontal → vertical
+  // transitions and collapse everything except the active tab's tree.
+  let lastVertical: boolean | null = null;
 
   function isVertical(): boolean {
     return Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+  }
+
+  /** Collapse every root tree except the one containing the currently-active
+   *  Firefox tab. Used on both mode transitions: in horizontal it keeps only
+   *  one tree's popouts open at a time; in vertical it tidies the panel
+   *  after the user has been bouncing through horizontal popouts. */
+  function collapseInactiveTreesKeepingActive(): void {
+    const activeTab = gBrowser?.selectedTab;
+    const activeRow = activeTab ? rowOf.get(activeTab) as Row | undefined : undefined;
+    const all = allRows();
+    let activeRoot: Row | null = null;
+    if (activeRow) {
+      const idx = all.indexOf(activeRow);
+      for (let i = idx; i >= 0; i--) {
+        if (levelOfRow(all[i]!) === 0) { activeRoot = all[i]!; break; }
+      }
+    }
+    const rootsBefore: any[] = [];
+    let mutated = false;
+    for (const row of all) {
+      if (levelOfRow(row) !== 0) continue;
+      const d = dataOf(row);
+      const wasCollapsed = !!d?.collapsed;
+      const isActiveTree = row === activeRoot;
+      if (isActiveTree) {
+        if (d?.collapsed) { d.collapsed = false; rows.syncAnyRow(row); mutated = true; }
+      } else {
+        if (d && !d.collapsed) { d.collapsed = true; rows.syncAnyRow(row); mutated = true; }
+      }
+      rootsBefore.push({
+        kind: row._tab ? "tab" : row._group ? "group" : "?",
+        label: row._tab?.label || row._group?.name,
+        wasCollapsed,
+        isActiveTree,
+        nowCollapsed: !!d?.collapsed,
+      });
+    }
+    log("collapseInactiveTrees", {
+      activeTab: activeTab?.label,
+      activeRootLabel: activeRoot?._tab?.label || activeRoot?._group?.name,
+      activeRootFound: !!activeRoot,
+      rootCount: rootsBefore.length,
+      mutated,
+      roots: rootsBefore,
+    });
+    if (mutated) rows.updateVisibility();
   }
 
   /** Content-alignment spacer: in horizontal mode the tab strip starts at the
@@ -152,6 +206,20 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
     if (vertical) rows.clearHorizontalGrid();
     for (const row of allRows()) rows.syncAnyRow(row);
     rows.updateVisibility(); // calls rows.updateHorizontalGrid() if horizontal
+
+    // Apply the "keep only the active tree expanded" rule on every mode
+    // change AND on initial horizontal entry. Skip initial vertical so we
+    // don't trample the user's saved collapse state from disk.
+    const modeChanged = lastVertical !== null && lastVertical !== vertical;
+    const initialHorizontal = lastVertical === null && !vertical;
+    log("positionPanel:transitionCheck", {
+      lastVertical, vertical, modeChanged, initialHorizontal,
+      willTrigger: modeChanged || initialHorizontal,
+    });
+    if (modeChanged || initialHorizontal) {
+      collapseInactiveTreesKeepingActive();
+    }
+    lastVertical = vertical;
   }
 
   return { positionPanel, isVertical, setUrlbarTopLayer };

@@ -42,7 +42,7 @@ export type RowsDeps = {
   readonly activateVim: (row: Row) => void;
   readonly selectRange: (row: Row) => void;
   readonly clearSelection: () => void;
-  readonly cloneAsChild: (tab: Tab) => void;
+  readonly cloneAsSibling: (tab: Tab) => void;
   readonly startRename: (row: Row) => void;
   // From persist factory.
   readonly scheduleSave: () => void;
@@ -70,7 +70,7 @@ export type RowsAPI = {
 export function makeRows(deps: RowsDeps): RowsAPI {
   const {
     setupDrag, activateVim, selectRange, clearSelection,
-    cloneAsChild, startRename, scheduleSave,
+    cloneAsSibling, startRename, scheduleSave,
   } = deps;
 
   // Module-private state.
@@ -92,19 +92,17 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     label.setAttribute("crop", "end");
     label.setAttribute("flex", "1");
 
-    const close = document.createXULElement("image") as HTMLElement;
-    close.className = "pfx-tab-close";
+    const chevron = document.createXULElement("image") as HTMLElement;
+    chevron.className = "pfx-tab-chevron";
 
-    row.append(icon, label, close);
+    row.append(icon, label, chevron);
     row._tab = tab;
     rowOf.set(tab, row);
 
     row.addEventListener("click", (e) => {
       const me = e as MouseEvent;
       if (me.button === 0) {
-        if (me.target === close) {
-          gBrowser.removeTab(tab);
-        } else if (me.shiftKey) {
+        if (me.shiftKey) {
           selectRange(row);
         } else {
           // In horizontal mode, a collapsed root cell shows the last-selected
@@ -123,9 +121,9 @@ export function makeRows(deps: RowsDeps): RowsAPI {
 
     row.addEventListener("dblclick", (e) => {
       const me = e as MouseEvent;
-      if (me.button === 0 && me.target !== close) {
+      if (me.button === 0) {
         e.stopPropagation();
-        cloneAsChild(tab);
+        cloneAsSibling(tab);
       }
     });
 

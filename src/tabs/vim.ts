@@ -9,7 +9,7 @@
 //
 // Public API (factory-returned): see VimAPI below. Most surface is for vim's
 // own init (createModeline, setupVimKeys), the row-click hook (activateVim,
-// setCursor), the row-dblclick hooks (cloneAsChild, startRename), and the
+// setCursor), the row-dblclick hooks (cloneAsSibling, startRename), and the
 // onTabOpen hook (consumePendingCursorMove).
 
 import { CHORD_TIMEOUT, INDENT } from "./constants.ts";
@@ -77,13 +77,13 @@ export type VimAPI = {
 
   /** Duplicate a tab and place it as a child of the source tab. Sets the
    *  pending-cursor-move flag so the new row gets the cursor. */
-  readonly cloneAsChild: (tab: Tab) => void;
+  readonly cloneAsSibling: (tab: Tab) => void;
   /** Start inline rename of a tab or group row. */
   readonly startRename: (row: Row) => void;
 
   /** Consume the "next-new-row should get the cursor" flag. Called from
    *  onTabOpen in legacy. Returns true exactly once after a flag-setting
-   *  action (newTabBelow / cloneAsChild). */
+   *  action (newTabBelow / cloneAsSibling). */
   readonly consumePendingCursorMove: () => boolean;
 };
 
@@ -102,7 +102,7 @@ export function makeVim(deps: VimDeps): VimAPI {
   let pendingCtrlW = false;
   let pendingSpace: boolean | string = false; // false | true | "w"
 
-  // Cursor-handoff flag: newTabBelow / cloneAsChild set it; onTabOpen consumes
+  // Cursor-handoff flag: newTabBelow / cloneAsSibling set it; onTabOpen consumes
   // it to put the cursor on the freshly created row.
   let pendingCursorMove = false;
 
@@ -615,12 +615,16 @@ export function makeVim(deps: VimDeps): VimAPI {
       return true;
     }
 
-    // --- Regular chords (gg) ---
+    // --- Regular chords (gg, gC) ---
     if (chord) {
       const combo = chord + e.key;
       chord = null;
       clearTimeout(chordTimer);
       if (combo === "gg") { goToTop(); return true; }
+      if (combo === "gC") {
+        if (state.cursor?._tab) cloneAsSibling(state.cursor._tab);
+        return true;
+      }
       return true;
     }
     if (e.key === "g" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
@@ -810,10 +814,12 @@ export function makeVim(deps: VimDeps): VimAPI {
     }
   }
 
-  function cloneAsChild(tab: Tab): void {
-    const parentRow = rowOf.get(tab);
-    if (!parentRow) return;
-    const parentId = treeData(tab).id;
+  /** Duplicate a tab and place the clone as a sibling at the same hierarchy
+   *  level (shares parentId with the source tab). */
+  function cloneAsSibling(tab: Tab): void {
+    const sourceRow = rowOf.get(tab);
+    if (!sourceRow) return;
+    const siblingParentId = treeData(tab).parentId;
 
     pendingCursorMove = true;
     const clone = gBrowser.duplicateTab(tab);
@@ -822,8 +828,10 @@ export function makeVim(deps: VimDeps): VimAPI {
       const cloneRow = rowOf.get(clone);
       if (!cloneRow) return;
       obs.disconnect();
-      treeData(clone).parentId = parentId;
-      const st = subtreeRows(parentRow);
+      treeData(clone).parentId = siblingParentId;
+      // Insert after the source's full subtree so the clone lands as the
+      // next sibling, not in the middle of children.
+      const st = subtreeRows(sourceRow);
       st[st.length - 1]!.after(cloneRow);
       rows.syncTabRow(clone);
       rows.updateVisibility();
@@ -1252,7 +1260,7 @@ export function makeVim(deps: VimDeps): VimAPI {
   return {
     setCursor, activateVim, moveCursor, focusPanel,
     createModeline, setupVimKeys,
-    cloneAsChild, startRename,
+    cloneAsSibling, startRename,
     consumePendingCursorMove,
   };
 }

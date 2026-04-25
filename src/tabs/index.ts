@@ -111,7 +111,7 @@ const pfxLog = createLogger("tabs");
 
   // drag ↔ Rows ↔ vim form a small cycle of mutual deps:
   //   - rows needs drag.setupDrag (each row gets DnD wired) AND vim's row-
-  //     action handlers (activateVim, cloneAsChild, startRename, selectRange)
+  //     action handlers (activateVim, cloneAsSibling, startRename, selectRange)
   //   - drag needs Rows.scheduleTreeResync after a drop settles
   //   - vim needs the rows API (createGroupRow, sync*, toggleCollapse, …)
   //     AND the layout API (setUrlbarTopLayer)
@@ -129,7 +129,7 @@ const pfxLog = createLogger("tabs");
     activateVim:    (row) => vim.activateVim(row),
     selectRange,
     clearSelection,
-    cloneAsChild:   (tab) => vim.cloneAsChild(tab),
+    cloneAsSibling:   (tab) => vim.cloneAsSibling(tab),
     startRename:    (row) => vim.startRename(row),
     scheduleSave,
   });
