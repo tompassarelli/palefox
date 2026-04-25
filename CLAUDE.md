@@ -143,6 +143,31 @@ The sprint checklist in `docs/dev/testing.md` is the single tracking source.
 Don't fork tracking into chat or commit messages — update the checklist as
 work lands.
 
+### Cross-process / new-Firefox-API work — TDD is mandatory
+
+When the change involves the e10s boundary, IPC primitives (frame scripts,
+JSWindowActor, message manager), or any Firefox internal you haven't used
+in this repo before, the order is:
+
+1. **Read the IDL / Firefox source first.** `~/code/firefox/` is on disk.
+   Look up the actual interface (`*.webidl`, `*.idl`, `*.sys.mjs`) and the
+   eslint env file (`tools/lint/eslint/eslint-plugin-mozilla/lib/environments/`)
+   to know what globals exist in your target scope. Don't guess from "it's
+   chrome-like" or "it's content-like" — those scopes have specific,
+   enumerated globals that aren't a superset of either.
+2. **Write the Tier 3 test that asserts the contract.** Pin the exact
+   observable behavior — message arrives, attribute flips, function returns
+   true — before the implementation that makes it pass exists.
+3. **Implement. `bun run test:integration` until green.**
+4. **Only then ship to the user.**
+
+If the test substrate doesn't exist for the surface yet, the first PR is
+the substrate. Skipping these steps is what produced the v0.40.0
+content-focus regression — see [docs/dev/postmortem-content-focus.md](docs/dev/postmortem-content-focus.md)
+for the full failure trace. Heuristic-first ("content has focus, bail")
+beats reading the IDL by ~5 lines of code and costs ~90 minutes of user
+frustration when the heuristic is wrong.
+
 ### Dev feedback loop
 
 Reloading Firefox is the user's expensive step, not yours. Don't make them
