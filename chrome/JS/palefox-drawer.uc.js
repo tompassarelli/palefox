@@ -63,6 +63,70 @@
     };
   }
 
+  // src/drawer/banner.ts
+  var SHOW_DELAY_MS = 2000;
+  function makeBanner() {
+    const log = createLogger("drawer/banner");
+    const identityBox = document.getElementById("identity-box");
+    if (!identityBox) {
+      log("init:no-identity-box");
+      return { destroy: () => {} };
+    }
+    let timer = null;
+    let banner = null;
+    function show() {
+      if (banner)
+        return;
+      const el = document.createXULElement("hbox");
+      el.id = "pfx-insecure-banner";
+      el.setAttribute("align", "center");
+      el.setAttribute("pack", "center");
+      el.textContent = "\uD83E\uDD8A Palefox - HTTP Alert: Not Secure";
+      const browserEl = document.getElementById("browser");
+      if (!browserEl?.parentNode) {
+        log("show:no-browser-parent");
+        return;
+      }
+      browserEl.parentNode.insertBefore(el, browserEl);
+      banner = el;
+      log("show");
+    }
+    function hide() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (banner) {
+        banner.remove();
+        banner = null;
+        log("hide");
+      }
+    }
+    function check() {
+      const uri = gBrowser.selectedBrowser?.currentURI?.spec ?? "";
+      const isInternal = uri.startsWith("about:") || uri.startsWith("chrome:");
+      const isCustomizing = document.documentElement.hasAttribute("customizing");
+      const isInsecure = identityBox.classList.contains("notSecure") && !isInternal && !isCustomizing;
+      if (isInsecure && !timer && !banner) {
+        timer = setTimeout(show, SHOW_DELAY_MS);
+      } else if (!isInsecure) {
+        hide();
+      }
+    }
+    const classObserver = new MutationObserver(check);
+    classObserver.observe(identityBox, {
+      attributes: true,
+      attributeFilter: ["class"]
+    });
+    gBrowser.tabContainer.addEventListener("TabSelect", check);
+    function destroy() {
+      classObserver.disconnect();
+      gBrowser.tabContainer.removeEventListener("TabSelect", check);
+      hide();
+    }
+    return { destroy };
+  }
+
   // src/drawer/compact.ts
   function makeCompact(deps) {
     const { sidebarMain, navigatorToolbox, urlbar } = deps;
@@ -751,6 +815,346 @@
     };
   }
 
+  // src/drawer/drag-overlay.ts
+  var PREF = "pfx.view.draggable-sidebar";
+  function makeDragOverlay(deps) {
+    const log = createLogger("drawer/drag-overlay");
+    const { sidebarMain } = deps;
+    const arrowscrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+    let overlay = null;
+    let resizeObs = null;
+    let mutationObs = null;
+    function update() {
+      if (!overlay || !arrowscrollbox)
+        return;
+      const containerRect = sidebarMain.getBoundingClientRect();
+      const asbRect = arrowscrollbox.getBoundingClientRect();
+      const tabs = arrowscrollbox.querySelectorAll("tab.tabbrowser-tab");
+      const lastTab = tabs.length ? tabs[tabs.length - 1] : null;
+      let top;
+      if (lastTab) {
+        top = lastTab.getBoundingClientRect().bottom;
+      } else {
+        top = asbRect.top;
+      }
+      const bottom = asbRect.bottom;
+      const height = Math.max(0, bottom - top);
+      overlay.style.left = asbRect.left - containerRect.left + "px";
+      overlay.style.top = top - containerRect.top + "px";
+      overlay.style.width = asbRect.width + "px";
+      overlay.style.height = height + "px";
+      overlay.style.display = height > 0 ? "" : "none";
+    }
+    function enable() {
+      if (overlay)
+        return;
+      const el = document.createXULElement("box");
+      el.id = "pfx-drag-overlay";
+      sidebarMain.appendChild(el);
+      overlay = el;
+      if (arrowscrollbox) {
+        resizeObs = new ResizeObserver(update);
+        resizeObs.observe(arrowscrollbox);
+        mutationObs = new MutationObserver(update);
+        mutationObs.observe(arrowscrollbox, { childList: true });
+      }
+      update();
+      log("enable");
+    }
+    function disable() {
+      if (!overlay)
+        return;
+      resizeObs?.disconnect();
+      mutationObs?.disconnect();
+      resizeObs = null;
+      mutationObs = null;
+      overlay.remove();
+      overlay = null;
+      log("disable");
+    }
+    if (Services.prefs.getBoolPref(PREF, true))
+      enable();
+    const observer = {
+      observe() {
+        if (Services.prefs.getBoolPref(PREF, true))
+          enable();
+        else
+          disable();
+      }
+    };
+    Services.prefs.addObserver(PREF, observer);
+    function destroy() {
+      try {
+        Services.prefs.removeObserver(PREF, observer);
+      } catch {}
+      disable();
+    }
+    return { destroy };
+  }
+
+  // src/drawer/layout.ts
+  var WIDTH_PREF = "pfx.sidebar.width";
+  function makeLayout(deps) {
+    const log = createLogger("drawer/layout");
+    const { sidebarMain, navigatorToolbox, urlbarContainer, navBar, urlbar } = deps;
+    const sidebarMainElement = sidebarMain.querySelector("sidebar-main");
+    const toolboxParent = navigatorToolbox.parentNode;
+    const toolboxNext = navigatorToolbox.nextSibling;
+    const urlbarParent = urlbarContainer.parentNode;
+    const urlbarNext = urlbarContainer.nextSibling;
+    let urlbarToolbar = null;
+    let resizeObs = null;
+    let mutationObs = null;
+    let updating = false;
+    function hideSidebarSplitter() {
+      const sr = sidebarMainElement?.shadowRoot;
+      if (!sr) {
+        setTimeout(hideSidebarSplitter, 100);
+        return;
+      }
+      const s = new CSSStyleSheet;
+      s.replaceSync(`
+      #sidebar-tools-and-extensions-splitter { display: none !important; }
+    `);
+      sr.adoptedStyleSheets.push(s);
+    }
+    function syncUrlbarWidth() {
+      if (!urlbar || updating)
+        return;
+      if (urlbar.hasAttribute("breakout-extend"))
+        return;
+      updating = true;
+      const inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pfx-sidebar-inset")) || 10;
+      const w = Math.max(0, sidebarMain.getBoundingClientRect().width - inset * 2);
+      urlbar.style.setProperty("--urlbar-width", w + "px");
+      updating = false;
+    }
+    function expand() {
+      if (urlbarToolbar)
+        return;
+      log("expand");
+      if (sidebarMainElement)
+        sidebarMain.insertBefore(navigatorToolbox, sidebarMainElement);
+      const tb = document.createXULElement("toolbar");
+      tb.id = "pfx-urlbar-toolbar";
+      tb.classList.add("browser-toolbar");
+      tb.appendChild(urlbarContainer);
+      navBar.after(tb);
+      urlbarToolbar = tb;
+      if (urlbar) {
+        resizeObs = new ResizeObserver(syncUrlbarWidth);
+        resizeObs.observe(sidebarMain);
+        mutationObs = new MutationObserver(syncUrlbarWidth);
+        mutationObs.observe(urlbar, {
+          attributes: true,
+          attributeFilter: ["style"]
+        });
+      }
+    }
+    function collapse() {
+      if (!urlbarToolbar)
+        return;
+      log("collapse");
+      resizeObs?.disconnect();
+      mutationObs?.disconnect();
+      resizeObs = null;
+      mutationObs = null;
+      if (urlbarNext && urlbarNext.parentNode === urlbarParent) {
+        urlbarParent.insertBefore(urlbarContainer, urlbarNext);
+      } else {
+        urlbarParent.appendChild(urlbarContainer);
+      }
+      urlbarToolbar.remove();
+      urlbarToolbar = null;
+      const spring2 = document.getElementById("customizableui-special-spring2");
+      const extBtn = document.getElementById("unified-extensions-button");
+      if (spring2)
+        urlbarContainer.after(spring2);
+      if (spring2 && extBtn)
+        spring2.after(extBtn);
+      if (toolboxNext && toolboxNext.parentNode === toolboxParent) {
+        toolboxParent.insertBefore(navigatorToolbox, toolboxNext);
+      } else {
+        toolboxParent.appendChild(navigatorToolbox);
+      }
+    }
+    function onContextMenu(e) {
+      if (navigatorToolbox.parentNode === sidebarMain) {
+        e.stopPropagation();
+      }
+    }
+    navigatorToolbox.addEventListener("contextmenu", onContextMenu);
+    hideSidebarSplitter();
+    if (sidebarMain.hasAttribute("sidebar-launcher-expanded"))
+      expand();
+    const expandObserver = new MutationObserver(() => {
+      const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
+      if (expanded && !urlbarToolbar)
+        expand();
+      else if (!expanded && urlbarToolbar)
+        collapse();
+    });
+    expandObserver.observe(sidebarMain, {
+      attributes: true,
+      attributeFilter: ["sidebar-launcher-expanded"]
+    });
+    const defaultWidth = Services.prefs.getIntPref(WIDTH_PREF, 300);
+    if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
+      sidebarMain.style.width = defaultWidth + "px";
+    }
+    const widthObs = new ResizeObserver(() => {
+      if (!sidebarMain.hasAttribute("sidebar-launcher-expanded"))
+        return;
+      const w = Math.round(sidebarMain.getBoundingClientRect().width);
+      if (w > 0) {
+        try {
+          Services.prefs.setIntPref(WIDTH_PREF, w);
+        } catch {}
+      }
+    });
+    widthObs.observe(sidebarMain);
+    function destroy() {
+      expandObserver.disconnect();
+      widthObs.disconnect();
+      resizeObs?.disconnect();
+      mutationObs?.disconnect();
+      navigatorToolbox.removeEventListener("contextmenu", onContextMenu);
+    }
+    return {
+      isExpanded: () => urlbarToolbar !== null,
+      destroy
+    };
+  }
+
+  // src/drawer/sidebar-button.ts
+  function makeSidebarButton(deps) {
+    const log = createLogger("drawer/sidebar-button");
+    const { sidebarMain, compact } = deps;
+    const xul = (tag) => document.createXULElement(tag);
+    const sidebarButton = document.getElementById("sidebar-button");
+    if (!sidebarButton) {
+      log("init:no-sidebar-button");
+      return { destroy: () => {} };
+    }
+    const ogIcon = sidebarButton.querySelector(".toolbarbutton-icon");
+    const ogIconStyle = ogIcon ? getComputedStyle(ogIcon).listStyleImage : null;
+    sidebarButton.style.display = "none";
+    const pfxButton = xul("toolbarbutton");
+    pfxButton.id = "pfx-sidebar-button";
+    pfxButton.className = sidebarButton.className;
+    pfxButton.setAttribute("tooltiptext", "Toggle compact mode (right-click for more)");
+    for (const attr of [
+      "cui-areatype",
+      "widget-id",
+      "widget-type",
+      "removable",
+      "overflows"
+    ]) {
+      if (sidebarButton.hasAttribute(attr)) {
+        pfxButton.setAttribute(attr, sidebarButton.getAttribute(attr) ?? "");
+      }
+    }
+    if (ogIconStyle)
+      pfxButton.style.listStyleImage = ogIconStyle;
+    sidebarButton.after(pfxButton);
+    function onClick(e) {
+      if (e.button !== 0)
+        return;
+      compact.toggle();
+    }
+    pfxButton.addEventListener("click", onClick);
+    const pfxMenu = xul("menupopup");
+    pfxMenu.id = "pfx-sidebar-button-menu";
+    function mi(id, label, onCommand) {
+      const item = xul("menuitem");
+      item.id = id;
+      item.setAttribute("label", label);
+      item.addEventListener("command", onCommand);
+      return item;
+    }
+    const compactItem = mi("pfx-toggle-compact", "Enable Compact", () => compact.toggle());
+    const collapseItem = mi("pfx-collapse-layout", "Collapse Layout", () => {
+      try {
+        const prevDisplay = sidebarButton.style.display;
+        sidebarButton.style.display = "";
+        sidebarButton.click();
+        sidebarButton.style.display = prevDisplay;
+      } catch (e) {
+        console.error("[PFX:drawer] collapse layout failed", e);
+      }
+    });
+    const sidebarItem = mi("pfx-toggle-sidebar", "Enable Sidebar", () => {
+      try {
+        if (window.SidebarController?.toggle) {
+          window.SidebarController.toggle();
+          return;
+        }
+        if (window.SidebarUI?.toggle) {
+          window.SidebarUI.toggle();
+          return;
+        }
+        const cmd = document.getElementById("cmd_toggleSidebar");
+        if (cmd?.doCommand) {
+          cmd.doCommand();
+          return;
+        }
+        console.error("[PFX:drawer] no sidebar-toggle API available");
+      } catch (e) {
+        console.error("[PFX:drawer] sidebar toggle failed", e);
+      }
+    });
+    const layoutItem = mi("pfx-toggle-tab-layout", "Horizontal Tabs", () => {
+      const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+      Services.prefs.setBoolPref("sidebar.verticalTabs", !vertical);
+    });
+    const customizeItem = mi("pfx-customize-sidebar", "Customize Sidebar", () => {
+      try {
+        const native = document.getElementById("toolbar-context-customize-sidebar");
+        native?.doCommand?.();
+        if (!native?.doCommand)
+          native?.click?.();
+      } catch (e) {
+        console.error("palefox: customize sidebar failed", e);
+      }
+    });
+    pfxMenu.append(compactItem, collapseItem, sidebarItem, layoutItem, xul("menuseparator"), customizeItem);
+    const popupSet = document.getElementById("mainPopupSet");
+    popupSet?.appendChild(pfxMenu);
+    pfxButton.setAttribute("context", "pfx-sidebar-button-menu");
+    function onPopupShowing() {
+      const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+      const isCompact = vertical ? compact.isCompactVertical() : compact.isCompactHorizontal();
+      compactItem.setAttribute("label", isCompact ? "Disable Compact" : "Enable Compact");
+      collapseItem.hidden = !vertical;
+      if (vertical) {
+        const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
+        collapseItem.setAttribute("label", expanded ? "Collapse Layout" : "Expand Layout");
+      }
+      const sidebarOpen = window.SidebarController?.isOpen ?? (!sidebarMain.hidden && sidebarMain.getBoundingClientRect().width > 0);
+      sidebarItem.setAttribute("label", sidebarOpen ? "Disable Sidebar" : "Enable Sidebar");
+      layoutItem.setAttribute("label", vertical ? "Horizontal Tabs" : "Vertical Tabs");
+      if (compact.isCompactVertical())
+        compact.pinSidebar();
+      if (compact.isCompactHorizontal())
+        compact.pinToolbox();
+    }
+    pfxMenu.addEventListener("popupshowing", onPopupShowing);
+    function onPopupHidden() {
+      compact.reconcile("pfxMenu:popuphidden");
+      compact.reconcileHorizontal("pfxMenu:popuphidden");
+    }
+    pfxMenu.addEventListener("popuphidden", onPopupHidden);
+    function destroy() {
+      pfxButton.removeEventListener("click", onClick);
+      pfxMenu.removeEventListener("popupshowing", onPopupShowing);
+      pfxMenu.removeEventListener("popuphidden", onPopupHidden);
+      pfxMenu.remove();
+      pfxButton.remove();
+      sidebarButton.style.display = "";
+    }
+    return { destroy };
+  }
+
   // src/drawer/urlbar.ts
   function makeUrlbar(deps) {
     const { urlbar } = deps;
@@ -904,180 +1308,14 @@
       console.error("palefox-drawer: missing required elements");
       return;
     }
-    const sidebarMainElement = sidebarMain.querySelector("sidebar-main");
-    function hideSidebarSplitter() {
-      const sr = sidebarMainElement?.shadowRoot;
-      if (!sr)
-        return setTimeout(hideSidebarSplitter, 100);
-      const s = new CSSStyleSheet;
-      s.replaceSync(`
-      #sidebar-tools-and-extensions-splitter { display: none !important; }
-    `);
-      sr.adoptedStyleSheets.push(s);
-    }
-    hideSidebarSplitter();
-    const toolboxParent = navigatorToolbox.parentNode;
-    const toolboxNext = navigatorToolbox.nextSibling;
-    const urlbarParent = urlbarContainer.parentNode;
-    const urlbarNext = urlbarContainer.nextSibling;
-    const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pfx-gap")) || 6;
-    let urlbarToolbar = null;
-    let resizeObs = null;
-    let mutationObs = null;
-    let updating = false;
-    function syncUrlbarWidth() {
-      if (!urlbar || updating)
-        return;
-      if (urlbar.hasAttribute("breakout-extend"))
-        return;
-      updating = true;
-      const inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pfx-sidebar-inset")) || 10;
-      const w = Math.max(0, sidebarMain.getBoundingClientRect().width - inset * 2);
-      urlbar.style.setProperty("--urlbar-width", w + "px");
-      updating = false;
-    }
-    navigatorToolbox.addEventListener("contextmenu", (e) => {
-      if (navigatorToolbox.parentNode === sidebarMain) {
-        e.stopPropagation();
-      }
+    const layout = makeLayout({
+      sidebarMain,
+      navigatorToolbox,
+      urlbarContainer,
+      navBar,
+      urlbar
     });
-    function expand() {
-      sidebarMain.insertBefore(navigatorToolbox, sidebarMainElement);
-      urlbarToolbar = document.createXULElement("toolbar");
-      urlbarToolbar.id = "pfx-urlbar-toolbar";
-      urlbarToolbar.classList.add("browser-toolbar");
-      urlbarToolbar.appendChild(urlbarContainer);
-      navBar.after(urlbarToolbar);
-      if (urlbar) {
-        resizeObs = new ResizeObserver(syncUrlbarWidth);
-        resizeObs.observe(sidebarMain);
-        mutationObs = new MutationObserver(syncUrlbarWidth);
-        mutationObs.observe(urlbar, {
-          attributes: true,
-          attributeFilter: ["style"]
-        });
-      }
-    }
-    function collapse() {
-      if (resizeObs) {
-        resizeObs.disconnect();
-        resizeObs = null;
-      }
-      if (mutationObs) {
-        mutationObs.disconnect();
-        mutationObs = null;
-      }
-      if (urlbarNext && urlbarNext.parentNode === urlbarParent) {
-        urlbarParent.insertBefore(urlbarContainer, urlbarNext);
-      } else {
-        urlbarParent.appendChild(urlbarContainer);
-      }
-      if (urlbarToolbar) {
-        urlbarToolbar.remove();
-        urlbarToolbar = null;
-      }
-      const spring2 = document.getElementById("customizableui-special-spring2");
-      const extBtn = document.getElementById("unified-extensions-button");
-      if (spring2)
-        urlbarContainer.after(spring2);
-      if (spring2 && extBtn)
-        spring2.after(extBtn);
-      if (toolboxNext && toolboxNext.parentNode === toolboxParent) {
-        toolboxParent.insertBefore(navigatorToolbox, toolboxNext);
-      } else {
-        toolboxParent.appendChild(navigatorToolbox);
-      }
-    }
-    let dragOverlay = null;
-    let dragResizeObs = null;
-    let dragMutationObs = null;
-    const arrowscrollbox = document.getElementById("tabbrowser-arrowscrollbox");
-    function updateDragOverlay() {
-      if (!dragOverlay || !arrowscrollbox)
-        return;
-      const containerRect = sidebarMain.getBoundingClientRect();
-      const asbRect = arrowscrollbox.getBoundingClientRect();
-      const tabs = arrowscrollbox.querySelectorAll("tab.tabbrowser-tab");
-      const lastTab = tabs.length ? tabs[tabs.length - 1] : null;
-      let top;
-      if (lastTab) {
-        const tabRect = lastTab.getBoundingClientRect();
-        top = tabRect.bottom;
-      } else {
-        top = asbRect.top;
-      }
-      const bottom = asbRect.bottom;
-      const height = Math.max(0, bottom - top);
-      dragOverlay.style.left = asbRect.left - containerRect.left + "px";
-      dragOverlay.style.top = top - containerRect.top + "px";
-      dragOverlay.style.width = asbRect.width + "px";
-      dragOverlay.style.height = height + "px";
-      dragOverlay.style.display = height > 0 ? "" : "none";
-    }
-    function draggableEnable() {
-      if (dragOverlay)
-        return;
-      dragOverlay = document.createXULElement("box");
-      dragOverlay.id = "pfx-drag-overlay";
-      sidebarMain.appendChild(dragOverlay);
-      if (arrowscrollbox) {
-        dragResizeObs = new ResizeObserver(updateDragOverlay);
-        dragResizeObs.observe(arrowscrollbox);
-        dragMutationObs = new MutationObserver(updateDragOverlay);
-        dragMutationObs.observe(arrowscrollbox, { childList: true });
-      }
-      updateDragOverlay();
-    }
-    function draggableDisable() {
-      if (!dragOverlay)
-        return;
-      dragResizeObs?.disconnect();
-      dragMutationObs?.disconnect();
-      dragResizeObs = null;
-      dragMutationObs = null;
-      dragOverlay.remove();
-      dragOverlay = null;
-    }
-    const DRAGGABLE_PREF = "pfx.view.draggable-sidebar";
-    if (Services.prefs.getBoolPref(DRAGGABLE_PREF, true)) {
-      draggableEnable();
-    }
-    const draggableObserver = {
-      observe() {
-        if (Services.prefs.getBoolPref(DRAGGABLE_PREF, true)) {
-          draggableEnable();
-        } else {
-          draggableDisable();
-        }
-      }
-    };
-    Services.prefs.addObserver(DRAGGABLE_PREF, draggableObserver);
-    const WIDTH_PREF = "pfx.sidebar.width";
-    const defaultWidth = Services.prefs.getIntPref(WIDTH_PREF, 300);
-    if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
-      sidebarMain.style.width = defaultWidth + "px";
-    }
-    new ResizeObserver(() => {
-      if (!sidebarMain.hasAttribute("sidebar-launcher-expanded"))
-        return;
-      const w = Math.round(sidebarMain.getBoundingClientRect().width);
-      if (w > 0)
-        Services.prefs.setIntPref(WIDTH_PREF, w);
-    }).observe(sidebarMain);
-    if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) {
-      expand();
-    }
-    new MutationObserver(() => {
-      const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-      if (expanded && !urlbarToolbar) {
-        expand();
-      } else if (!expanded && urlbarToolbar) {
-        collapse();
-      }
-    }).observe(sidebarMain, {
-      attributes: true,
-      attributeFilter: ["sidebar-launcher-expanded"]
-    });
+    const dragOverlay = makeDragOverlay({ sidebarMain });
     const compact = makeCompact({
       sidebarMain,
       navigatorToolbox,
@@ -1095,159 +1333,19 @@
         urlbarApi?.activateFloating("current");
       }, true);
     }
+    const sidebarButton = makeSidebarButton({
+      sidebarMain,
+      compact
+    });
+    const banner = makeBanner();
     window.addEventListener("unload", () => {
-      Services.prefs.removeObserver(DRAGGABLE_PREF, draggableObserver);
+      layout.destroy();
+      dragOverlay.destroy();
       compact.destroy();
       urlbarApi?.destroy();
+      sidebarButton.destroy();
+      banner.destroy();
     }, { once: true });
-    const sidebarButton = document.getElementById("sidebar-button");
-    if (sidebarButton) {
-      let mi = function(id, label, onCommand) {
-        const item = document.createXULElement("menuitem");
-        item.id = id;
-        item.setAttribute("label", label);
-        item.addEventListener("command", onCommand);
-        return item;
-      };
-      const ogIcon = sidebarButton.querySelector(".toolbarbutton-icon");
-      const ogIconStyle = ogIcon ? getComputedStyle(ogIcon).listStyleImage : null;
-      sidebarButton.style.display = "none";
-      const pfxButton = document.createXULElement("toolbarbutton");
-      pfxButton.id = "pfx-sidebar-button";
-      pfxButton.className = sidebarButton.className;
-      pfxButton.setAttribute("tooltiptext", "Toggle compact mode (right-click for more)");
-      for (const attr of [
-        "cui-areatype",
-        "widget-id",
-        "widget-type",
-        "removable",
-        "overflows"
-      ]) {
-        if (sidebarButton.hasAttribute(attr)) {
-          pfxButton.setAttribute(attr, sidebarButton.getAttribute(attr));
-        }
-      }
-      if (ogIconStyle) {
-        pfxButton.style.listStyleImage = ogIconStyle;
-      }
-      sidebarButton.after(pfxButton);
-      pfxButton.addEventListener("click", (e) => {
-        if (e.button !== 0)
-          return;
-        compact.toggle();
-      });
-      const pfxMenu = document.createXULElement("menupopup");
-      pfxMenu.id = "pfx-sidebar-button-menu";
-      const compactItem = mi("pfx-toggle-compact", "Enable Compact", () => compact.toggle());
-      const collapseItem = mi("pfx-collapse-layout", "Collapse Layout", () => {
-        try {
-          const prevDisplay = sidebarButton.style.display;
-          sidebarButton.style.display = "";
-          sidebarButton.click();
-          sidebarButton.style.display = prevDisplay;
-        } catch (e) {
-          console.error("[PFX:drawer] collapse layout failed", e);
-        }
-      });
-      const sidebarItem = mi("pfx-toggle-sidebar", "Enable Sidebar", () => {
-        try {
-          const win = window;
-          if (win.SidebarController?.toggle) {
-            win.SidebarController.toggle();
-            return;
-          }
-          if (win.SidebarUI?.toggle) {
-            win.SidebarUI.toggle();
-            return;
-          }
-          const cmd = document.getElementById("cmd_toggleSidebar");
-          if (cmd?.doCommand) {
-            cmd.doCommand();
-            return;
-          }
-          console.error("[PFX:drawer] no sidebar-toggle API available");
-        } catch (e) {
-          console.error("[PFX:drawer] sidebar toggle failed", e);
-        }
-      });
-      const layoutItem = mi("pfx-toggle-tab-layout", "Horizontal Tabs", () => {
-        const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
-        Services.prefs.setBoolPref("sidebar.verticalTabs", !vertical);
-      });
-      const customizeItem = mi("pfx-customize-sidebar", "Customize Sidebar", () => {
-        try {
-          const native = document.getElementById("toolbar-context-customize-sidebar");
-          native?.doCommand?.() ?? native?.click?.();
-        } catch (e) {
-          console.error("palefox: customize sidebar failed", e);
-        }
-      });
-      pfxMenu.append(compactItem, collapseItem, sidebarItem, layoutItem, document.createXULElement("menuseparator"), customizeItem);
-      const popupSet = document.getElementById("mainPopupSet");
-      popupSet?.appendChild(pfxMenu);
-      pfxButton.setAttribute("context", "pfx-sidebar-button-menu");
-      pfxMenu.addEventListener("popupshowing", () => {
-        const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
-        const isCompact = vertical ? compact.isCompactVertical() : compact.isCompactHorizontal();
-        compactItem.setAttribute("label", isCompact ? "Disable Compact" : "Enable Compact");
-        collapseItem.hidden = !vertical;
-        if (vertical) {
-          const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-          collapseItem.setAttribute("label", expanded ? "Collapse Layout" : "Expand Layout");
-        }
-        const sidebarOpen = window.SidebarController?.isOpen ?? (!sidebarMain.hidden && sidebarMain.getBoundingClientRect().width > 0);
-        sidebarItem.setAttribute("label", sidebarOpen ? "Disable Sidebar" : "Enable Sidebar");
-        layoutItem.setAttribute("label", vertical ? "Horizontal Tabs" : "Vertical Tabs");
-        if (compact.isCompactVertical())
-          compact.pinSidebar();
-        if (compact.isCompactHorizontal())
-          compact.pinToolbox();
-      });
-      pfxMenu.addEventListener("popuphidden", () => {
-        compact.reconcile("pfxMenu:popuphidden");
-        compact.reconcileHorizontal("pfxMenu:popuphidden");
-      });
-    }
-    const identityBox = document.getElementById("identity-box");
-    let insecureTimer = null;
-    let insecureBanner = null;
-    function showInsecureBanner() {
-      if (insecureBanner)
-        return;
-      insecureBanner = document.createXULElement("hbox");
-      insecureBanner.id = "pfx-insecure-banner";
-      insecureBanner.setAttribute("align", "center");
-      insecureBanner.setAttribute("pack", "center");
-      insecureBanner.textContent = "\uD83E\uDD8A Palefox - HTTP Alert: Not Secure";
-      const browser = document.getElementById("browser");
-      browser.parentNode.insertBefore(insecureBanner, browser);
-    }
-    function hideInsecureBanner() {
-      clearTimeout(insecureTimer);
-      insecureTimer = null;
-      if (insecureBanner) {
-        insecureBanner.remove();
-        insecureBanner = null;
-      }
-    }
-    function checkInsecure() {
-      const uri = gBrowser.selectedBrowser?.currentURI?.spec || "";
-      const isInternal = uri.startsWith("about:") || uri.startsWith("chrome:");
-      const isCustomizing = document.documentElement.hasAttribute("customizing");
-      const isInsecure = identityBox?.classList.contains("notSecure") && !isInternal && !isCustomizing;
-      if (isInsecure && !insecureTimer && !insecureBanner) {
-        insecureTimer = setTimeout(showInsecureBanner, 2000);
-      } else if (!isInsecure) {
-        hideInsecureBanner();
-      }
-    }
-    if (identityBox) {
-      new MutationObserver(checkInsecure).observe(identityBox, {
-        attributes: true,
-        attributeFilter: ["class"]
-      });
-      gBrowser.tabContainer.addEventListener("TabSelect", checkInsecure);
-    }
     console.log("palefox-drawer: initialized");
   }
   init();

@@ -2108,6 +2108,25 @@
     let onSelect = null;
     let actions = [];
     let preserveTree = false;
+    function onDocKeydown(e) {
+      if (!active)
+        return;
+      if (e.key !== "Escape")
+        return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      dismiss();
+    }
+    document.addEventListener("keydown", onDocKeydown, true);
+    function onDocMouseDown(e) {
+      if (!active || !pickerEl)
+        return;
+      const t = e.target;
+      if (t && pickerEl.contains(t))
+        return;
+      dismiss();
+    }
+    document.addEventListener("mousedown", onDocMouseDown, true);
     function ensureBuilt() {
       if (pickerEl)
         return;
@@ -2373,6 +2392,8 @@
       pickerInput.focus();
     }
     function destroy() {
+      document.removeEventListener("keydown", onDocKeydown, true);
+      document.removeEventListener("mousedown", onDocMouseDown, true);
       dismiss();
       pickerEl?.remove();
       pickerEl = null;

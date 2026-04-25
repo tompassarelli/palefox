@@ -39,9 +39,21 @@ src/tabs/        palefox-tabs.uc.js — sidebar tree-tab panel
   *.test.ts        Tier 1 unit tests (bun test)
 
 src/drawer/      palefox-drawer.uc.js — chrome restructuring
-  index.ts         @ts-nocheck'd legacy orchestrator (layout, button/menu, banner)
+  index.ts         thin orchestrator — wires factories, runs the Ctrl+L keymap
+  layout.ts        toolbox/urlbar reparenting + width sync + width pref (factory)
+  drag-overlay.ts  -moz-window-dragging overlay over empty sidebar space (factory)
+  banner.ts        HTTP not-secure warning banner (factory)
   compact.ts       compact-mode state machine (factory)
   urlbar.ts        floating urlbar + Ctrl+J/K suggestion nav (factory)
+  sidebar-button.ts  custom #pfx-sidebar-button + context menu (factory)
+
+src/firefox/     Firefox adapter layer — typed wrappers around chrome globals
+  tabs.ts          gBrowser tab ops (allTabs / selectedTab / pinTab / …)
+  prefs.ts         Services.prefs get/set/observe
+  observers.ts     Services.obs add/remove/notify
+  files.ts         IOUtils + PathUtils + profile-relative helpers
+  dom.ts           createXULElement factories typed by tag
+  window.ts        well-known chrome IDs + system principal + ESM loader
 
 src/types/chrome.d.ts   ambient chrome globals + DOM augmentation
 src/hello/              smoke-test stub
@@ -330,8 +342,9 @@ rows = makeRows({ setupDrag: drag.setupDrag, … });
   off. They produce too much noise for the legacy code without catching real
   bugs. The check that matters — TS2304 "Cannot find name" — IS on, and that's
   what catches `toggleCollapse-is-not-defined`-class bugs.
-- `// @ts-nocheck` is allowed ONLY on the legacy port files (currently
-  `src/drawer/index.ts`). New code MUST be fully typed.
+- `// @ts-nocheck` is no longer present in `src/`. All new code is fully
+  typed; if you find yourself reaching for `// @ts-nocheck`, peel the
+  affected logic into a typed factory instead.
 - Chrome globals (`gBrowser`, `Services`, `Ci`, `Cc`, `Cu`, `ChromeUtils`,
   `IOUtils`, `PathUtils`, `SessionStore`, `TabContextMenu`,
   `PlacesCommandHook`) are typed as `any` in `src/types/chrome.d.ts`. Tighten

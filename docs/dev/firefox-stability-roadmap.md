@@ -24,6 +24,24 @@ multi-PR arcs and architectural commitments.
 
 ## M0 — Strategy + canary + pattern   ✅
 
+## Status check (2026-04-26)
+
+After the ambitious M1 + M3 + M7.1 push, the repo state is:
+
+- **All Bucket-A (Tier 0) Firefox primitives have a typed adapter** in
+  `src/firefox/*` — prefs, observers, files, dom, window, tabs.
+- **Zero `@ts-nocheck` files** in `src/`.
+- **`src/drawer/index.ts`** is a 65-line orchestrator that wires six
+  typed factories. Every drawer-side concern (layout, drag-overlay,
+  compact, urlbar, sidebar-button, banner) is its own factory file.
+- **Picker** is its own factory (`src/tabs/picker.ts`), making `vim.ts`
+  ~370 lines smaller and the picker mockable for future Tier 1 tests.
+
+What's left in the roadmap is mostly the *semantic* layer + migration of
+existing call sites. All architectural foundations are in place.
+
+---
+
 Shipped in `b1d639e` (2026-04-26).
 
 - Strategy doc: `docs/dev/firefox-upstream-stability.md` with thesis,
@@ -41,31 +59,24 @@ Shipped in `b1d639e` (2026-04-26).
 
 ---
 
-## M1 — Bucket-A adapter coverage   ⚪
+## M1 — Bucket-A adapter coverage   ✅
 
-Round out `src/firefox/*` with adapters for the rest of the rock-stable
-primitives. New code can stop importing chrome globals directly.
+Shipped in `87f4292`. Five adapter files cover the rock-stable
+primitives:
 
-Scope:
+- `src/firefox/prefs.ts` — typed get/set/observe wrappers around
+  `Services.prefs`. All swallow exceptions and return defaults.
+- `src/firefox/observers.ts` — `Services.obs` with disposer-returning
+  `on()` helper.
+- `src/firefox/files.ts` — `IOUtils` + `PathUtils` + `profileDir()` /
+  `profilePath(...parts)` helpers.
+- `src/firefox/dom.ts` — typed `createXULElement` factories. `XULTag`
+  union prevents typos.
+- `src/firefox/window.ts` — well-known chrome IDs centralized,
+  `systemPrincipal()` cached, `importESM<T>()` wrapper.
 
-- `src/firefox/prefs.ts` — `Services.prefs` (typed get/set/observe).
-  Most-touched call right now (`Services.prefs.getBoolPref` × 18).
-- `src/firefox/observers.ts` — `Services.obs.{add,remove}Observer`.
-- `src/firefox/files.ts` — `IOUtils` + `PathUtils` + profile-path helpers.
-- `src/firefox/dom.ts` — `createXULElement` factories with typed return.
-- `src/firefox/window.ts` — `gBrowser.selectedBrowser`, `.focus()`,
-  delayed startup, `gBrowserInit.delayedStartupFinished`.
-
-Each adapter:
-- Inline JSDoc with stability tier and source citation.
-- `createLogger("firefox:<area>")` instrumentation gated on `pfx.debug`.
-- Manifest entry in `tools/firefox-canary.ts` if not already there.
-
-**Defers:** migration of existing callsites (M2), Bucket-B/C wrapping
-(M5).
-
-**Unlocks:** new feature code can be written without a single
-`gBrowser`/`Services` reference.
+Each is small, dependency-free, drop-in. Existing call sites NOT
+migrated — that's M2's strangler-fig work.
 
 ---
 
@@ -95,32 +106,26 @@ of `src/`, dominated by `gBrowser.tabs` (×32), `gBrowser.selectedTab`
 
 ---
 
-## M3 — Extract `src/drawer/index.ts` into typed factories   ⚪
+## M3 — Extract `src/drawer/index.ts` into typed factories   ✅
 
-Was originally task #57. Now a milestone because it's the single
-biggest "remove `@ts-nocheck`" payoff and pairs naturally with M2's
-adapter migration.
+Shipped. `src/drawer/index.ts` shrunk from 521 lines (`@ts-nocheck`
+legacy) to 65 lines (thin orchestrator, fully typed). Four factory
+extractions:
 
-Scope: Five factory extractions (pattern matches `src/drawer/compact.ts`
-and `urlbar.ts`):
+- `src/drawer/layout.ts` — `expand()` / `collapse()` + urlbar width
+  sync + sidebar-width pref persistence (the three were too coupled
+  to split — width-sync observers live inside `expand()` lifecycle).
+- `src/drawer/drag-overlay.ts` — `#pfx-drag-overlay` with pref-driven
+  enable/disable.
+- `src/drawer/banner.ts` — HTTP not-secure warning.
+- `src/drawer/sidebar-button.ts` — `#pfx-sidebar-button` + custom
+  context menu.
 
-- `src/drawer/layout.ts` — `expand()` / `collapse()` (toolbox into/out
-  of sidebar-main, urlbar reparenting).
-- `src/drawer/width-sync.ts` — urlbar `--urlbar-width` ResizeObserver +
-  MutationObserver.
-- `src/drawer/drag-overlay.ts` — `#pfx-drag-overlay`
-  (`-moz-window-dragging` on empty sidebar space).
-- `src/drawer/sidebar-button.ts` — `#pfx-sidebar-button` +
-  `#pfx-sidebar-button-menu`.
-- `src/drawer/banner.ts` — HTTP not-secure warning banner.
+Each factory exposes `destroy()`. `index.ts` aggregates teardown via
+`window.unload`. **Zero `@ts-nocheck` files in the repo.**
 
-Outcome: `src/drawer/index.ts` becomes a thin orchestrator (like
-`src/tabs/index.ts`), `@ts-nocheck` comes off, and chrome-global
-calls in those modules go through adapters from M1.
-
-**Defers:** the same extraction for `src/tabs/vim.ts` (M7).
-
-**Unlocks:** zero `@ts-nocheck` files in the repo.
+Verified: 60/60 integration tests pass, including all compact-mode
+banks that exercise layout + sidebar-button + compact wiring together.
 
 ---
 
@@ -204,21 +209,27 @@ needed when we hit it).
 
 ---
 
-## M7 — `vim.ts` split   ⚪
+## M7 — `vim.ts` split   🟢 (M7.1 done)
 
-`src/tabs/vim.ts` is ~2200 lines hosting keymap + ex-mode + picker +
-search + global-keys. Split for the same reason `drawer/index.ts` is
-split: smaller blast radius, clearer ownership.
+### M7.1 — Extract picker   ✅
 
-Scope:
+Shipped. `src/tabs/picker.ts` — `makePicker({ restoreFocus, modelineMsg })`
+returns `{ show, isActive, dismiss, destroy }`. PickerItem and PickerAction
+are exported types. ~370 lines came out of `vim.ts`. Click-outside +
+document-level Esc dismiss added (was input-level only — bugs when
+focus moved off the input).
 
-- `src/tabs/picker.ts` — fzf-style overlay (used by `:tabs`,
-  `:history`, `:sessions`, `:restore`). Already a clear UI primitive.
-- `src/tabs/exmode.ts` — ex-command dispatch table. Each command
-  becomes a small handler.
-- `src/tabs/global-keys.ts` — chrome-scope keymap (the `t`/`o`/`O`/`x`/
-  backtick handlers + the content-focus bail). Naturally consumes
-  `Palefox.*` once M5 lands.
+### M7.2 — Extract ex-mode   ⚪
+
+Pull the giant `case "group":` switch (and friends) into
+`src/tabs/exmode.ts`. Each command becomes its own small handler.
+Vim becomes the dispatcher.
+
+### M7.3 — Extract global-keys   ⚪
+
+Pull `setupGlobalKeys()` into `src/tabs/global-keys.ts`. Naturally
+consumes `Palefox.*` once M5 lands; until then, imports from
+`src/firefox/*`.
 
 **Defers:** unit-test coverage for each split module (parallel to
 M2's adapter migration enabling mocks).

@@ -98,6 +98,28 @@ export function makePicker(deps: PickerDeps): PickerAPI {
    *  preserved (rendered as `[pfx-picker-context]` rows). */
   let preserveTree = false;
 
+  // Esc anywhere dismisses an active picker. The input-level listener only
+  // fires when the input has focus — clicking outside the input (or focus
+  // shifting on a long task) leaves Esc orphaned. Capture-phase document
+  // listener catches it regardless of where focus is.
+  function onDocKeydown(e: KeyboardEvent): void {
+    if (!active) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    dismiss();
+  }
+  document.addEventListener("keydown", onDocKeydown, true);
+
+  // Click-outside also dismisses — matches typical spotlight UX.
+  function onDocMouseDown(e: MouseEvent): void {
+    if (!active || !pickerEl) return;
+    const t = e.target as Node | null;
+    if (t && pickerEl.contains(t)) return;
+    dismiss();
+  }
+  document.addEventListener("mousedown", onDocMouseDown, true);
+
   /** Build the picker DOM lazily. After build it lives in the chrome doc
    *  (display:none) and gets reused on each show. Use locals while building
    *  and assign to the closure vars at the end — TS doesn't narrow
@@ -381,6 +403,8 @@ export function makePicker(deps: PickerDeps): PickerAPI {
   }
 
   function destroy(): void {
+    document.removeEventListener("keydown", onDocKeydown, true);
+    document.removeEventListener("mousedown", onDocMouseDown, true);
     dismiss();
     pickerEl?.remove();
     pickerEl = null;
