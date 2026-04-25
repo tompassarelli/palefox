@@ -109,9 +109,13 @@
     --urlbar-box-bgcolor:                       var(--pfx-bg-elevated) !important;
     --urlbar-box-hover-bgcolor:                 color-mix(in srgb, var(--pfx-fg) 8%, transparent) !important;
 
-    /* Urlbar dropdown view */
-    --urlbarView-background-color-selected:     var(--pfx-bg-elevated) !important;
-    --urlbarView-text-color-selected:           var(--pfx-fg) !important;
+    /* Urlbar dropdown row colors. Variables are LOWERCASE per Firefox source
+     * (browser/themes/shared/urlbar/tokens.css:23 + view-nova.css:74) — earlier
+     * camelCase overrides were silently ignored. Selected row tracks the
+     * hover color so Ctrl+J/K navigation matches mouse hover exactly. */
+    --urlbarview-background-color-hover:        color-mix(in srgb, var(--pfx-fg) 8%, transparent) !important;
+    --urlbarview-background-color-selected:     color-mix(in srgb, var(--pfx-fg) 8%, transparent) !important;
+    --urlbarview-text-color-selected:           var(--pfx-fg) !important;
 
     /* Sidebar */
     --sidebar-background-color:                 var(--pfx-bg) !important;
@@ -336,6 +340,107 @@ Preserve these (security warnings):
 }
 
 /* #endregion urlbar */
+
+
+/* #region floating urlbar — keyboard-driven command-palette presentation
+ * Activated by Ctrl+L (Cmd+L), or by palefox `o` / `O` keys (which dispatch
+ * pfx-urlbar-activate). JS lives in src/drawer/urlbar.ts — sets the attribute,
+ * sets popover="manual" + showPopover() for top-layer placement, and on intent
+ * "newTab" intercepts Enter to re-dispatch with altKey=true (Firefox's existing
+ * "open in new tab" path). Mouse-click activation is deliberately NOT covered
+ * here — the in-sidebar breakout-extend at-click-point behavior is preserved. */
+
+/* Width: 720px ideal, never closer than 20px to either edge, never above
+ * 720px. min(720px, 100vw - 40px) computes once and reapplies on every
+ * window resize. All three width properties use the same expression so
+ * Firefox's UrlbarInput sizing JS can't override any of them. */
+:root[pfx-urlbar-floating] {
+  --pfx-floating-w: min(720px, calc(100vw - 40px));
+  /* Cap dropdown height so a long suggestion list doesn't bleed below the
+   * viewport on tall-narrow windows. 100vh - 22vh (top offset) - 24vh (input
+   * height + breathing room) ≈ 54vh of result list. */
+  --pfx-floating-max-h: calc(100vh - 22vh - 60px);
+}
+
+/* Center using left:0 + right:0 + margin:auto + fixed width — most robust
+ * approach: survives any transform JS Firefox applies and the UA
+ * `:popover-open { inset: 0; margin: auto }` defaults. */
+:root[pfx-urlbar-floating] #urlbar {
+  position: fixed !important;
+  top: 22vh !important;
+  bottom: auto !important;
+  left: 0 !important;
+  right: 0 !important;
+  inset-inline-start: 0 !important;
+  inset-inline-end: 0 !important;
+  inset-block-start: 22vh !important;
+  inset-block-end: auto !important;
+  margin: 0 auto !important;
+  margin-inline-start: auto !important;
+  margin-inline-end: auto !important;
+  width: var(--pfx-floating-w) !important;
+  min-width: var(--pfx-floating-w) !important;
+  max-width: var(--pfx-floating-w) !important;
+  transform: none !important;
+  z-index: 10001 !important;
+  /* Anchor the urlbar-results dropdown to our floating width. */
+  --urlbar-width: var(--pfx-floating-w) !important;
+}
+
+/* Pin width during breakout-extend (the in-sidebar selectors ALSO have
+ * !important, so we have to win specificity-wise here too). */
+:root[pfx-urlbar-floating] #pfx-urlbar-toolbar #urlbar:is([focused][breakout-extend]),
+:root[pfx-urlbar-floating] #urlbar[breakout-extend] {
+  width: var(--pfx-floating-w) !important;
+  min-width: var(--pfx-floating-w) !important;
+  max-width: var(--pfx-floating-w) !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: 0 auto !important;
+  margin-inline-start: auto !important;
+  margin-inline-end: auto !important;
+}
+
+/* Cap dropdown body height — Firefox lets it grow as tall as the result list
+ * needs, which can extend below the viewport on short windows. */
+:root[pfx-urlbar-floating] #urlbar .urlbarView,
+:root[pfx-urlbar-floating] #urlbar .urlbarView-results {
+  max-height: var(--pfx-floating-max-h) !important;
+  overflow-y: auto !important;
+}
+
+/* Backdrop dims everything behind the floating urlbar. Element is created
+ * by JS (#pfx-urlbar-backdrop) and removed on deactivate. */
+#pfx-urlbar-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+  animation: pfx-urlbar-backdrop-fade 120ms ease-out;
+}
+
+@keyframes pfx-urlbar-backdrop-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* New-tab intent: subtle visual hint that Enter will spawn a new tab.
+ * (Light-touch — anything stronger competes with Firefox's own urlbar UI.) */
+:root[pfx-urlbar-floating][pfx-urlbar-intent="new-tab"] #urlbar {
+  box-shadow: 0 0 0 2px var(--toolbarbutton-icon-fill-attention, #0a84ff),
+              0 12px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+:root[pfx-urlbar-floating] #urlbar {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pfx-urlbar-backdrop { animation: none !important; }
+}
+
+/* #endregion floating urlbar */
 
 
 /* #region nav-bar button labels — icons only */

@@ -2525,24 +2525,10 @@
         ]
       });
     }
-    function focusUrlbar() {
-      try {
-        const w = window;
-        if (w.gURLBar?.focus) {
-          w.gURLBar.focus();
-          w.gURLBar.select?.();
-        }
-      } catch {}
-    }
-    function openNewTabAndFocusUrlbar() {
-      try {
-        const sp = Services.scriptSecurityManager.getSystemPrincipal();
-        const tab = gBrowser.addTab("about:newtab", { triggeringPrincipal: sp });
-        gBrowser.selectedTab = tab;
-        setTimeout(() => focusUrlbar(), 60);
-      } catch (e) {
-        console.error("palefox-tabs: openNewTabAndFocusUrlbar failed", e);
-      }
+    function activateUrlbar(intent) {
+      document.dispatchEvent(new CustomEvent("pfx-urlbar-activate", {
+        detail: { intent }
+      }));
     }
     function toggleLastTab() {
       const target = lastTab;
@@ -2558,6 +2544,49 @@
     function keyEnabled(name) {
       return Services.prefs.getBoolPref(`pfx.keys.${name}.enabled`, true);
     }
+    function blacklistedHosts() {
+      const raw = Services.prefs.getStringPref("pfx.keys.blacklist", "");
+      return raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    }
+    function currentHost() {
+      try {
+        const uri = gBrowser.selectedBrowser?.currentURI?.spec;
+        if (!uri)
+          return "";
+        return new URL(uri).hostname.toLowerCase();
+      } catch {
+        return "";
+      }
+    }
+    function currentHostBlacklisted() {
+      const host = currentHost();
+      if (!host)
+        return false;
+      for (const entry of blacklistedHosts()) {
+        if (host === entry)
+          return true;
+        if (host.endsWith("." + entry))
+          return true;
+      }
+      return false;
+    }
+    function blacklistAdd(host) {
+      const list = blacklistedHosts();
+      const h = host.trim().toLowerCase();
+      if (!h || list.includes(h))
+        return;
+      list.push(h);
+      Services.prefs.setStringPref("pfx.keys.blacklist", list.join(","));
+    }
+    function blacklistRemove(host) {
+      const list = blacklistedHosts();
+      const h = host.trim().toLowerCase();
+      const next = list.filter((x) => x !== h);
+      if (next.length === list.length)
+        return false;
+      Services.prefs.setStringPref("pfx.keys.blacklist", next.join(","));
+      return true;
+    }
     function setupGlobalKeys() {
       currentSelectedTab = gBrowser.selectedTab;
       gBrowser.tabContainer.addEventListener("TabSelect", (e) => {
@@ -2569,6 +2598,8 @@
       });
       document.addEventListener("keydown", (e) => {
         if (pickerActive)
+          return;
+        if (currentHostBlacklisted())
           return;
         const a = document.activeElement;
         if (a && a !== state.panel && (a.tagName === "INPUT" || a.tagName === "input" || a.tagName === "TEXTAREA" || a.tagName === "textarea" || a.isContentEditable))
@@ -2605,14 +2636,14 @@
                 break;
               e.preventDefault();
               e.stopImmediatePropagation();
-              focusUrlbar();
+              activateUrlbar("current");
               return;
             case "O":
               if (!keyEnabled("O"))
                 break;
               e.preventDefault();
               e.stopImmediatePropagation();
-              openNewTabAndFocusUrlbar();
+              activateUrlbar("newTab");
               return;
             case "`":
               if (!keyEnabled("backtick"))
@@ -3477,6 +3508,40 @@
         case "tabs":
           openTabsPicker();
           break;
+        case "blacklist":
+        case "bl": {
+          const sub = (args[1] || "").toLowerCase();
+          if (sub === "list" || sub === "ls") {
+            const list = blacklistedHosts();
+            modelineMsg(list.length ? `Blacklist: ${list.join(", ")}` : "Blacklist is empty", 5000);
+          } else if (sub === "remove" || sub === "rm" || sub === "del") {
+            const host = args[2]?.trim() || currentHost();
+            if (!host) {
+              modelineMsg("No host to remove", 3000);
+              break;
+            }
+            modelineMsg(blacklistRemove(host) ? `Removed: ${host}` : `Not in blacklist: ${host}`, 3000);
+          } else {
+            const host = args[1]?.trim() || currentHost();
+            if (!host) {
+              modelineMsg("No host to blacklist", 3000);
+              break;
+            }
+            blacklistAdd(host);
+            modelineMsg(`Blacklisted: ${host}`, 3000);
+          }
+          break;
+        }
+        case "unblacklist":
+        case "ubl": {
+          const host = args[1]?.trim() || currentHost();
+          if (!host) {
+            modelineMsg("No host to remove", 3000);
+            break;
+          }
+          modelineMsg(blacklistRemove(host) ? `Removed: ${host}` : `Not in blacklist: ${host}`, 3000);
+          break;
+        }
         case "history": {
           const q = args.slice(1).join(" ").trim();
           (async () => {

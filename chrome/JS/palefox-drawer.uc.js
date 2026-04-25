@@ -461,6 +461,8 @@
         urlbarCompactObserver = new MutationObserver(() => {
           if (!sidebarMain.hasAttribute("data-pfx-compact"))
             return;
+          if (document.documentElement.hasAttribute("pfx-urlbar-floating"))
+            return;
           if (urlbar.hasAttribute("breakout-extend")) {
             dbg("urlbar:breakout-open");
             urlbar.setAttribute("popover", "manual");
@@ -469,8 +471,17 @@
           } else {
             dbg("urlbar:breakout-close");
             urlbar.removeAttribute("popover");
-            if (!sidebarMain.matches(":hover")) {
-              flashSidebar(KEEP_HOVER_DURATION);
+            const cursorOver = sidebarMain.matches(":hover") || (hoverStrip?.matches(":hover") ?? false);
+            if (cursorOver) {
+              dbg("urlbar:breakout-close:keep-open");
+            } else {
+              dbg("urlbar:breakout-close:close");
+              clearFlash();
+              cancelHideWatchdog();
+              if (sidebarMain.hasAttribute("pfx-has-hover")) {
+                sidebarMain.removeAttribute("pfx-has-hover");
+              }
+              _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
             }
           }
         });
@@ -738,6 +749,148 @@
     };
   }
 
+  // src/drawer/urlbar.ts
+  function makeUrlbar(deps) {
+    const { urlbar } = deps;
+    const root = document.documentElement;
+    const log = createLogger("urlbar");
+    let activated = false;
+    let intent = "current";
+    let backdrop = null;
+    function activateFloating(newIntent) {
+      intent = newIntent;
+      if (activated) {
+        log("activateFloating:re-arm", { intent });
+        root.setAttribute("pfx-urlbar-intent", intent === "newTab" ? "new-tab" : "current");
+        return;
+      }
+      activated = true;
+      log("activateFloating", { intent });
+      root.setAttribute("pfx-urlbar-floating", "");
+      root.setAttribute("pfx-urlbar-intent", intent === "newTab" ? "new-tab" : "current");
+      if (!backdrop) {
+        backdrop = document.createElement("div");
+        backdrop.id = "pfx-urlbar-backdrop";
+        backdrop.addEventListener("mousedown", () => deactivateFloating());
+        root.appendChild(backdrop);
+      }
+      try {
+        if (urlbar.getAttribute("popover") !== "manual") {
+          urlbar.setAttribute("popover", "manual");
+        }
+        if (!urlbar.matches(":popover-open")) {
+          urlbar.showPopover?.();
+        }
+        window.gURLBar?.focus?.();
+        window.gURLBar?.select?.();
+      } catch (e) {
+        log("activateFloating:error", { msg: String(e) });
+      }
+    }
+    function deactivateFloating() {
+      if (!activated)
+        return;
+      activated = false;
+      log("deactivateFloating");
+      root.removeAttribute("pfx-urlbar-floating");
+      root.removeAttribute("pfx-urlbar-intent");
+      backdrop?.remove();
+      backdrop = null;
+      const compactVertical = !!document.querySelector("#sidebar-main[data-pfx-compact]");
+      const compactHorizontal = root.hasAttribute("data-pfx-compact-horizontal");
+      const compactOn = compactVertical || compactHorizontal;
+      const breakout = urlbar.hasAttribute("breakout-extend");
+      if (compactOn && !breakout) {
+        try {
+          if (urlbar.matches(":popover-open")) {
+            urlbar.hidePopover?.();
+          }
+          urlbar.removeAttribute("popover");
+        } catch (e) {
+          log("deactivateFloating:popover-sync-error", { msg: String(e) });
+        }
+      }
+    }
+    function isFloating() {
+      return activated;
+    }
+    function onFocusOut(_e) {
+      if (!activated)
+        return;
+      setTimeout(() => {
+        if (!activated)
+          return;
+        const a = document.activeElement;
+        if (a && (a === urlbar || urlbar.contains(a)))
+          return;
+        deactivateFloating();
+      }, 0);
+    }
+    function onKeydown(e) {
+      const accel = e.ctrlKey || e.metaKey;
+      if (accel && !e.shiftKey && !e.altKey) {
+        const k = e.key;
+        if (k === "j" || k === "k") {
+          const view = window.gURLBar?.view;
+          if (view?.selectBy) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            try {
+              view.selectBy(k === "j" ? 1 : -1);
+            } catch (err) {
+              log("selectBy:error", { msg: String(err) });
+            }
+            return;
+          }
+        }
+      }
+      if (!activated)
+        return;
+      if (e.key === "Escape") {
+        setTimeout(deactivateFloating, 0);
+        return;
+      }
+      if (e.key === "Enter") {
+        if (intent === "newTab" && !e.altKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          log("intercept:newTab-enter");
+          const target = e.target;
+          target.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "Enter",
+            code: "Enter",
+            keyCode: 13,
+            which: 13,
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+            view: window
+          }));
+        }
+        setTimeout(deactivateFloating, 0);
+      }
+    }
+    function onActivateRequest(e) {
+      const detail = e.detail;
+      activateFloating(detail?.intent === "newTab" ? "newTab" : "current");
+    }
+    function onDeactivateRequest(_e) {
+      deactivateFloating();
+    }
+    urlbar.addEventListener("focusout", onFocusOut, true);
+    urlbar.addEventListener("keydown", onKeydown, true);
+    document.addEventListener("pfx-urlbar-activate", onActivateRequest);
+    document.addEventListener("pfx-urlbar-deactivate", onDeactivateRequest);
+    function destroy() {
+      urlbar.removeEventListener("focusout", onFocusOut, true);
+      urlbar.removeEventListener("keydown", onKeydown, true);
+      document.removeEventListener("pfx-urlbar-activate", onActivateRequest);
+      document.removeEventListener("pfx-urlbar-deactivate", onDeactivateRequest);
+      deactivateFloating();
+    }
+    return { activateFloating, deactivateFloating, isFloating, destroy };
+  }
+
   // src/drawer/index.ts
   function init() {
     const sidebarMain = document.getElementById("sidebar-main");
@@ -928,9 +1081,22 @@
       navigatorToolbox,
       urlbar
     });
+    let urlbarApi = null;
+    if (urlbar) {
+      urlbarApi = makeUrlbar({ urlbar });
+      document.addEventListener("keydown", (e) => {
+        const accel = e.ctrlKey || e.metaKey;
+        if (!accel || e.shiftKey || e.altKey)
+          return;
+        if (e.key !== "l" && e.key !== "L")
+          return;
+        urlbarApi?.activateFloating("current");
+      }, true);
+    }
     window.addEventListener("unload", () => {
       Services.prefs.removeObserver(DRAGGABLE_PREF, draggableObserver);
       compact.destroy();
+      urlbarApi?.destroy();
     }, { once: true });
     const sidebarButton = document.getElementById("sidebar-button");
     if (sidebarButton) {

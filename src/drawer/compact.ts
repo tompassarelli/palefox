@@ -524,15 +524,38 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
       urlbar.removeAttribute("popover");
       urlbarCompactObserver = new MutationObserver(() => {
         if (!sidebarMain.hasAttribute("data-pfx-compact")) return;
+        // Floating urlbar lives in its own top layer with popover state
+        // owned by src/drawer/urlbar.ts. Bail so we don't fight it.
+        if (document.documentElement.hasAttribute("pfx-urlbar-floating")) return;
         if (urlbar.hasAttribute("breakout-extend")) {
           dbg("urlbar:breakout-open");
           urlbar.setAttribute("popover", "manual");
           if (!urlbar.matches(":popover-open")) (urlbar as any).showPopover();
         } else {
+          // breakout-close = user dismissed the urlbar (Enter / Esc / click-out).
+          // Whether this counts as a "close-type" event depends on the cursor:
+          //   - cursor in sidebar OR hover-strip → user is still interacting
+          //     with the sidebar; just unwind popover and let hover state
+          //     continue (existing mouseleave logic will close it later)
+          //   - cursor outside the hover area → genuine close. Cancel any
+          //     pending flash, drop hover, set collapse-protection so
+          //     subsequent reveal triggers are blocked for ~280ms.
+          // Previously we called flashSidebar(150) here on the no-hover path,
+          // which revealed the sidebar after Ctrl+L → type → Enter from content.
           dbg("urlbar:breakout-close");
           urlbar.removeAttribute("popover");
-          if (!sidebarMain.matches(":hover")) {
-            flashSidebar(KEEP_HOVER_DURATION);
+          const cursorOver = sidebarMain.matches(":hover")
+            || (hoverStrip?.matches(":hover") ?? false);
+          if (cursorOver) {
+            dbg("urlbar:breakout-close:keep-open");
+          } else {
+            dbg("urlbar:breakout-close:close");
+            clearFlash();
+            cancelHideWatchdog();
+            if (sidebarMain.hasAttribute("pfx-has-hover")) {
+              sidebarMain.removeAttribute("pfx-has-hover");
+            }
+            _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
           }
         }
       });

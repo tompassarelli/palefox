@@ -510,8 +510,8 @@ export function makeVim(deps: VimDeps): VimAPI {
   //   t           open spotlight tabs picker
   //   :           open spotlight ex-input
   //   `           toggle to last selected tab
-  //   o           focus urlbar (open URL in current tab)
-  //   O           new tab + focus urlbar
+  //   o           floating urlbar, current-tab intent (drawer/urlbar.ts)
+  //   O           floating urlbar, new-tab intent — Enter spawns in new tab
   //   x           close current tab
   //   /           NOT intercepted — Firefox's native find owns it
   //   b / B       (Phase 1b — bookmarks picker, separate push)
@@ -578,27 +578,15 @@ export function makeVim(deps: VimDeps): VimAPI {
     });
   }
 
-  function focusUrlbar(): void {
-    try {
-      const w = window as unknown as { gURLBar?: { focus(): void; select?(): void } };
-      if (w.gURLBar?.focus) {
-        w.gURLBar.focus();
-        w.gURLBar.select?.();
-      }
-    } catch {}
-  }
-
-  function openNewTabAndFocusUrlbar(): void {
-    try {
-      const sp = Services.scriptSecurityManager.getSystemPrincipal();
-      const tab = gBrowser.addTab("about:newtab", { triggeringPrincipal: sp });
-      gBrowser.selectedTab = tab;
-      // Wait one tick so Firefox finishes its tab-switch focus dance,
-      // then steal focus back to the urlbar.
-      setTimeout(() => focusUrlbar(), 60);
-    } catch (e) {
-      console.error("palefox-tabs: openNewTabAndFocusUrlbar failed", e);
-    }
+  // Both o/O route through src/drawer/urlbar.ts via the pfx-urlbar-activate
+  // CustomEvent. The drawer owns the floating decoration + focus; tabs just
+  // declares intent. New-tab spawning happens on Enter (drawer intercepts
+  // and re-dispatches with altKey=true, hitting Firefox's open-in-new-tab
+  // path). Empty Esc means no tab spawned — the user just dismissed.
+  function activateUrlbar(intent: "current" | "newTab"): void {
+    document.dispatchEvent(new CustomEvent("pfx-urlbar-activate", {
+      detail: { intent },
+    }));
   }
 
   function toggleLastTab(): void {
@@ -619,6 +607,52 @@ export function makeVim(deps: VimDeps): VimAPI {
     return Services.prefs.getBoolPref(`pfx.keys.${name}.enabled`, true);
   }
 
+  /** Per-site escape hatch. Pref `pfx.keys.blacklist` is a comma-separated
+   *  list of hostnames; entries match the current tab's hostname exactly OR
+   *  as a parent suffix (e.g. `google.com` matches `docs.google.com`).
+   *  Empty pref = blacklist disabled. Managed via `:blacklist` ex-commands. */
+  function blacklistedHosts(): string[] {
+    const raw = Services.prefs.getStringPref("pfx.keys.blacklist", "");
+    return raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  }
+
+  function currentHost(): string {
+    try {
+      const uri = (gBrowser.selectedBrowser as { currentURI?: { spec?: string } })?.currentURI?.spec;
+      if (!uri) return "";
+      return new URL(uri).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  }
+
+  function currentHostBlacklisted(): boolean {
+    const host = currentHost();
+    if (!host) return false;
+    for (const entry of blacklistedHosts()) {
+      if (host === entry) return true;
+      if (host.endsWith("." + entry)) return true;
+    }
+    return false;
+  }
+
+  function blacklistAdd(host: string): void {
+    const list = blacklistedHosts();
+    const h = host.trim().toLowerCase();
+    if (!h || list.includes(h)) return;
+    list.push(h);
+    Services.prefs.setStringPref("pfx.keys.blacklist", list.join(","));
+  }
+
+  function blacklistRemove(host: string): boolean {
+    const list = blacklistedHosts();
+    const h = host.trim().toLowerCase();
+    const next = list.filter((x) => x !== h);
+    if (next.length === list.length) return false;
+    Services.prefs.setStringPref("pfx.keys.blacklist", next.join(","));
+    return true;
+  }
+
   /** Wire the global keydown listener + tab-toggle tracking. Called once
    *  from the orchestrator's init. */
   function setupGlobalKeys(): void {
@@ -635,6 +669,9 @@ export function makeVim(deps: VimDeps): VimAPI {
     document.addEventListener("keydown", (e) => {
       // Picker has its own input, don't compete.
       if (pickerActive) return;
+      // Per-site escape hatch — let the page own its keys without uninstalling
+      // palefox. Toggle via `:blacklist` / `:unblacklist`.
+      if (currentHostBlacklisted()) return;
       // Bail when typing in any input field — those keys are real input.
       const a = document.activeElement as HTMLElement | null;
       if (a && a !== state.panel && (
@@ -669,13 +706,13 @@ export function makeVim(deps: VimDeps): VimAPI {
             if (!keyEnabled("o")) break;
             e.preventDefault();
             e.stopImmediatePropagation();
-            focusUrlbar();
+            activateUrlbar("current");
             return;
           case "O":
             if (!keyEnabled("O")) break;
             e.preventDefault();
             e.stopImmediatePropagation();
-            openNewTabAndFocusUrlbar();
+            activateUrlbar("newTab");
             return;
           case "`":
             if (!keyEnabled("backtick")) break;
@@ -1633,6 +1670,35 @@ export function makeVim(deps: VimDeps): VimAPI {
       case "tabs":
         openTabsPicker();
         break;
+      case "blacklist":
+      case "bl": {
+        // :blacklist                 — add current site to blacklist
+        // :blacklist <host>          — add an explicit host
+        // :blacklist list            — show current blacklist
+        // :blacklist remove [<host>] — remove (default: current site)
+        const sub = (args[1] || "").toLowerCase();
+        if (sub === "list" || sub === "ls") {
+          const list = blacklistedHosts();
+          modelineMsg(list.length ? `Blacklist: ${list.join(", ")}` : "Blacklist is empty", 5000);
+        } else if (sub === "remove" || sub === "rm" || sub === "del") {
+          const host = args[2]?.trim() || currentHost();
+          if (!host) { modelineMsg("No host to remove", 3000); break; }
+          modelineMsg(blacklistRemove(host) ? `Removed: ${host}` : `Not in blacklist: ${host}`, 3000);
+        } else {
+          const host = args[1]?.trim() || currentHost();
+          if (!host) { modelineMsg("No host to blacklist", 3000); break; }
+          blacklistAdd(host);
+          modelineMsg(`Blacklisted: ${host}`, 3000);
+        }
+        break;
+      }
+      case "unblacklist":
+      case "ubl": {
+        const host = args[1]?.trim() || currentHost();
+        if (!host) { modelineMsg("No host to remove", 3000); break; }
+        modelineMsg(blacklistRemove(host) ? `Removed: ${host}` : `Not in blacklist: ${host}`, 3000);
+        break;
+      }
       case "history": {
         // :history [<query>] — picker over ALL events, tagged or not.
         const q = args.slice(1).join(" ").trim();

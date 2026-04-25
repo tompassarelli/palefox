@@ -17,6 +17,7 @@
 // CompactAPI. We call makeCompact() once and route menu/button events through it.
 
 import { makeCompact, type CompactAPI } from "./compact.ts";
+import { makeUrlbar, type UrlbarAPI } from "./urlbar.ts";
 
 function init() {
   // --- Element references ---
@@ -274,9 +275,34 @@ function init() {
     urlbar,
   });
 
+  // === Floating urlbar (typed factory in ./urlbar.ts) ===
+  // Adds a [pfx-urlbar-floating] decoration on :root when activated by
+  // Ctrl+L / Ctrl+K (capture phase, no preventDefault — Firefox still
+  // does its own focus dance) or by `o` / `O` palefox keys via the
+  // pfx-urlbar-activate CustomEvent. Mouse-click on in-sidebar urlbar
+  // keeps native breakout-extend at click point.
+
+  let urlbarApi: UrlbarAPI | null = null;
+  if (urlbar) {
+    urlbarApi = makeUrlbar({ urlbar });
+
+    document.addEventListener("keydown", (e) => {
+      // Ctrl+L on Win/Linux, Cmd+L on macOS. Ctrl+K deliberately NOT bound —
+      // too many web apps use it (Slack quick-switcher, etc.) and stealing
+      // it on every chrome window is hostile.
+      const accel = e.ctrlKey || e.metaKey;
+      if (!accel || e.shiftKey || e.altKey) return;
+      if (e.key !== "l" && e.key !== "L") return;
+      // Don't preventDefault — let Firefox's <key> element fire normally
+      // so gURLBar.select() runs. We just add the decoration.
+      urlbarApi?.activateFloating("current");
+    }, true);
+  }
+
   window.addEventListener("unload", () => {
     Services.prefs.removeObserver(DRAGGABLE_PREF, draggableObserver);
     compact.destroy();
+    urlbarApi?.destroy();
   }, { once: true });
 
   // === Sidebar Button ===
