@@ -15,8 +15,6 @@
 
 <img src="https://github.com/user-attachments/assets/fdefa78a-7847-4769-a532-f40172332ba7" alt="Palefox screenshot" />
 
-<img src="docs/demo.gif" alt="Palefox demo" />
-
 </div>
 
 ## Features
