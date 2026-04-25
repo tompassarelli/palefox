@@ -698,10 +698,10 @@
   function buildContextMenu(deps) {
     const {
       startRename,
-      toggleCollapse,
-      createGroupRow,
+      toggleCollapse: toggleCollapse2,
+      createGroupRow: createGroupRow2,
       setCursor,
-      updateVisibility,
+      updateVisibility: updateVisibility2,
       scheduleSave
     } = deps;
     const menu = document.createXULElement("menupopup");
@@ -725,7 +725,7 @@
         return;
       const row = rowOf.get(state.contextTab);
       if (row)
-        toggleCollapse(row);
+        toggleCollapse2(row);
     });
     const createGroupItem = mi("Create Group", () => {
       if (!state.contextTab)
@@ -733,11 +733,11 @@
       const row = rowOf.get(state.contextTab);
       if (!row)
         return;
-      const grp = createGroupRow("New Group", levelOfRow(row));
+      const grp = createGroupRow2("New Group", levelOfRow(row));
       const st = subtreeRows(row);
       st[st.length - 1].after(grp);
       setCursor(grp);
-      updateVisibility();
+      updateVisibility2();
       scheduleSave();
       startRename(grp);
     });
@@ -826,12 +826,247 @@
     return menu;
   }
 
+  // src/tabs/rows.ts
+  function makeRows(deps) {
+    const {
+      setupDrag,
+      activateVim,
+      selectRange,
+      clearSelection,
+      cloneAsChild,
+      startRename,
+      scheduleSave
+    } = deps;
+    let groupCounter = 0;
+    let resyncPending = false;
+    function createTabRow(tab) {
+      const row = document.createXULElement("hbox");
+      row.className = "pfx-tab-row";
+      row.setAttribute("align", "center");
+      const icon = document.createXULElement("image");
+      icon.className = "pfx-tab-icon";
+      const label = document.createXULElement("label");
+      label.className = "pfx-tab-label";
+      label.setAttribute("crop", "end");
+      label.setAttribute("flex", "1");
+      const close = document.createXULElement("image");
+      close.className = "pfx-tab-close";
+      row.append(icon, label, close);
+      row._tab = tab;
+      rowOf.set(tab, row);
+      row.addEventListener("click", (e) => {
+        const me = e;
+        if (me.button === 0) {
+          if (me.target === close) {
+            gBrowser.removeTab(tab);
+          } else if (me.shiftKey) {
+            selectRange(row);
+          } else {
+            clearSelection();
+            gBrowser.selectedTab = tab;
+            activateVim(row);
+          }
+        } else if (me.button === 1) {
+          e.preventDefault();
+          gBrowser.removeTab(tab);
+        }
+      });
+      row.addEventListener("dblclick", (e) => {
+        const me = e;
+        if (me.button === 0 && me.target !== close) {
+          e.stopPropagation();
+          cloneAsChild(tab);
+        }
+      });
+      row.addEventListener("contextmenu", (e) => {
+        const me = e;
+        e.preventDefault();
+        e.stopPropagation();
+        state.contextTab = tab;
+        const menu = document.getElementById("pfx-tab-menu");
+        menu?.openPopupAtScreen(me.screenX, me.screenY, true);
+      });
+      setupDrag(row);
+      syncTabRow(tab);
+      return row;
+    }
+    function syncTabRow(tab) {
+      const row = rowOf.get(tab);
+      if (!row)
+        return;
+      const td = treeData(tab);
+      const showTab = hzDisplay.get(row) || tab;
+      const showTd = showTab === tab ? td : treeData(showTab);
+      const img = showTab.getAttribute("image");
+      const iconEl = row.querySelector(".pfx-tab-icon");
+      iconEl?.setAttribute("src", img || "chrome://global/skin/icons/defaultFavicon.svg");
+      row.querySelector(".pfx-tab-label")?.setAttribute("value", showTd.name || showTab.label || "New Tab");
+      row.toggleAttribute("selected", tab.selected);
+      if (!movingTabs.has(tab)) {
+        row.toggleAttribute("busy", tab.hasAttribute("busy"));
+      }
+      row.toggleAttribute("pinned", tab.pinned);
+      row.toggleAttribute("pfx-collapsed", !!td.collapsed && hasChildren(row));
+      row.style.paddingInlineStart = levelOf(tab) * INDENT + 8 + "px";
+    }
+    function createGroupRow2(name, level = 0) {
+      const group = {
+        id: `g${++groupCounter}`,
+        type: "group",
+        name: name || "New Group",
+        level,
+        state: null,
+        collapsed: false
+      };
+      const row = document.createXULElement("hbox");
+      row.className = "pfx-group-row";
+      row.setAttribute("align", "center");
+      row._group = group;
+      const marker = document.createXULElement("label");
+      marker.className = "pfx-group-marker";
+      marker.setAttribute("value", "●");
+      const label = document.createXULElement("label");
+      label.className = "pfx-tab-label";
+      label.setAttribute("crop", "end");
+      label.setAttribute("flex", "1");
+      label.setAttribute("value", group.name);
+      row.append(marker, label);
+      row.addEventListener("click", (e) => {
+        if (e.button === 0)
+          activateVim(row);
+      });
+      row.addEventListener("dblclick", (e) => {
+        if (e.button === 0) {
+          e.stopPropagation();
+          startRename(row);
+        }
+      });
+      setupDrag(row);
+      syncGroupRow(row);
+      return row;
+    }
+    function syncGroupRow(row) {
+      const g = row._group;
+      if (!g)
+        return;
+      const label = row.querySelector(".pfx-tab-label");
+      const statePrefix = g.state === "todo" ? "[ ] " : g.state === "wip" ? "[-] " : g.state === "done" ? "[x] " : "";
+      label?.setAttribute("value", statePrefix + g.name);
+      row.toggleAttribute("pfx-collapsed", !!g.collapsed && hasChildren(row));
+      row.style.paddingInlineStart = g.level * INDENT + 8 + "px";
+    }
+    function updateVisibility2() {
+      let hideBelow = -1;
+      for (const row of allRows()) {
+        const d = dataOf(row);
+        if (!d)
+          continue;
+        const lv = levelOfRow(row);
+        if (hideBelow >= 0 && lv > hideBelow) {
+          row.hidden = true;
+          continue;
+        }
+        row.hidden = false;
+        hideBelow = d.collapsed && hasChildren(row) ? lv : -1;
+      }
+      updateHorizontalGrid();
+    }
+    function updateHorizontalGrid() {
+      if (!isHorizontal() || !state.panel)
+        return;
+      let col = 0;
+      let rowInCol = 0;
+      let selectedCol = 0;
+      for (const row of allRows()) {
+        const d = dataOf(row);
+        if (!d)
+          continue;
+        if (row.hidden) {
+          row.removeAttribute("pfx-popout-child");
+          continue;
+        }
+        if (levelOfRow(row) === 0 || col === 0) {
+          col++;
+          rowInCol = 0;
+        }
+        rowInCol++;
+        row.style.gridColumn = String(col);
+        row.style.gridRow = String(rowInCol);
+        row.toggleAttribute("pfx-popout-child", rowInCol > 1);
+        if (row.hasAttribute("selected"))
+          selectedCol = col;
+      }
+      if (col > 0) {
+        const tracks = [];
+        for (let i = 1;i <= col; i++) {
+          tracks.push(i === selectedCol ? "minmax(200px, 200px)" : "minmax(0, 200px)");
+        }
+        state.panel.style.gridTemplateColumns = tracks.join(" ");
+      } else {
+        state.panel.style.gridTemplateColumns = "";
+      }
+      requestAnimationFrame(() => {
+        if (!isHorizontal() || !state.panel)
+          return;
+        const firstRow = state.panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
+        if (firstRow) {
+          state.panel.style.maxHeight = firstRow.offsetHeight + 2 + "px";
+        }
+      });
+    }
+    function clearHorizontalGrid() {
+      if (!state.panel)
+        return;
+      state.panel.style.maxHeight = "";
+      for (const row of allRows()) {
+        row.style.gridColumn = "";
+        row.style.gridRow = "";
+        row.removeAttribute("pfx-popout-child");
+      }
+    }
+    function toggleCollapse2(row) {
+      const d = dataOf(row);
+      if (!d || !hasChildren(row))
+        return;
+      d.collapsed = !d.collapsed;
+      if (row._tab)
+        syncTabRow(row._tab);
+      else
+        syncGroupRow(row);
+      updateVisibility2();
+      scheduleSave();
+    }
+    function scheduleTreeResync() {
+      if (resyncPending)
+        return;
+      resyncPending = true;
+      Promise.resolve().then(() => {
+        resyncPending = false;
+        for (const t of gBrowser.tabs) {
+          if (rowOf.get(t))
+            syncTabRow(t);
+        }
+        updateVisibility2();
+      });
+    }
+    return {
+      createTabRow,
+      syncTabRow,
+      createGroupRow: createGroupRow2,
+      syncGroupRow,
+      updateVisibility: updateVisibility2,
+      updateHorizontalGrid,
+      clearHorizontalGrid,
+      toggleCollapse: toggleCollapse2,
+      scheduleTreeResync
+    };
+  }
+
   // src/tabs/index.ts
   var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
   if (!sidebarMain)
     return;
-  var groupCounter = 0;
   var chord = null;
   var chordTimer = 0;
   var pendingCursorMove = false;
@@ -859,187 +1094,6 @@
       rows[i].setAttribute("pfx-multi", "true");
     }
   }
-  function createTabRow(tab) {
-    const row = document.createXULElement("hbox");
-    row.className = "pfx-tab-row";
-    row.setAttribute("align", "center");
-    const icon = document.createXULElement("image");
-    icon.className = "pfx-tab-icon";
-    const label = document.createXULElement("label");
-    label.className = "pfx-tab-label";
-    label.setAttribute("crop", "end");
-    label.setAttribute("flex", "1");
-    const close = document.createXULElement("image");
-    close.className = "pfx-tab-close";
-    row.append(icon, label, close);
-    row._tab = tab;
-    rowOf.set(tab, row);
-    row.addEventListener("click", (e) => {
-      if (e.button === 0) {
-        if (e.target === close) {
-          gBrowser.removeTab(tab);
-        } else if (e.shiftKey) {
-          selectRange(row);
-        } else {
-          clearSelection();
-          gBrowser.selectedTab = tab;
-          activateVim(row);
-        }
-      } else if (e.button === 1) {
-        e.preventDefault();
-        gBrowser.removeTab(tab);
-      }
-    });
-    row.addEventListener("dblclick", (e) => {
-      if (e.button === 0 && e.target !== close) {
-        e.stopPropagation();
-        cloneAsChild(tab);
-      }
-    });
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      state.contextTab = tab;
-      document.getElementById("pfx-tab-menu")?.openPopupAtScreen(e.screenX, e.screenY, true);
-    });
-    drag.setupDrag(row);
-    syncTabRow(tab);
-    return row;
-  }
-  function syncTabRow(tab) {
-    const row = rowOf.get(tab);
-    if (!row)
-      return;
-    const td = treeData(tab);
-    const showTab = hzDisplay.get(row) || tab;
-    const showTd = showTab === tab ? td : treeData(showTab);
-    const img = showTab.getAttribute("image");
-    const icon = row.querySelector(".pfx-tab-icon");
-    icon.setAttribute("src", img || "chrome://global/skin/icons/defaultFavicon.svg");
-    row.querySelector(".pfx-tab-label").setAttribute("value", showTd.name || showTab.label || "New Tab");
-    row.toggleAttribute("selected", tab.selected);
-    if (!movingTabs.has(tab)) {
-      row.toggleAttribute("busy", tab.hasAttribute("busy"));
-    }
-    row.toggleAttribute("pinned", tab.pinned);
-    row.toggleAttribute("pfx-collapsed", !!td.collapsed && hasChildren(row));
-    row.style.paddingInlineStart = levelOf(tab) * INDENT + 8 + "px";
-  }
-  function createGroupRow(name, level = 0) {
-    const group = {
-      id: `g${++groupCounter}`,
-      type: "group",
-      name: name || "New Group",
-      level,
-      state: null,
-      collapsed: false
-    };
-    const row = document.createXULElement("hbox");
-    row.className = "pfx-group-row";
-    row.setAttribute("align", "center");
-    row._group = group;
-    const marker = document.createXULElement("label");
-    marker.className = "pfx-group-marker";
-    marker.setAttribute("value", "●");
-    const label = document.createXULElement("label");
-    label.className = "pfx-tab-label";
-    label.setAttribute("crop", "end");
-    label.setAttribute("flex", "1");
-    label.setAttribute("value", group.name);
-    row.append(marker, label);
-    row.addEventListener("click", (e) => {
-      if (e.button === 0)
-        activateVim(row);
-    });
-    row.addEventListener("dblclick", (e) => {
-      if (e.button === 0) {
-        e.stopPropagation();
-        startRename(row);
-      }
-    });
-    drag.setupDrag(row);
-    syncGroupRow(row);
-    return row;
-  }
-  function syncGroupRow(row) {
-    const g = row._group;
-    if (!g)
-      return;
-    const label = row.querySelector(".pfx-tab-label");
-    const statePrefix = g.state === "todo" ? "[ ] " : g.state === "wip" ? "[-] " : g.state === "done" ? "[x] " : "";
-    label.setAttribute("value", statePrefix + g.name);
-    row.toggleAttribute("pfx-collapsed", !!g.collapsed && hasChildren(row));
-    row.style.paddingInlineStart = g.level * INDENT + 8 + "px";
-  }
-  function updateVisibility() {
-    let hideBelow = -1;
-    for (const row of allRows()) {
-      const d = dataOf(row);
-      if (!d)
-        continue;
-      const lv = levelOfRow(row);
-      if (hideBelow >= 0 && lv > hideBelow) {
-        row.hidden = true;
-        continue;
-      }
-      row.hidden = false;
-      hideBelow = d.collapsed && hasChildren(row) ? lv : -1;
-    }
-    updateHorizontalGrid();
-  }
-  function updateHorizontalGrid() {
-    if (!isHorizontal() || !state.panel)
-      return;
-    let col = 0;
-    let rowInCol = 0;
-    let selectedCol = 0;
-    for (const row of allRows()) {
-      const d = dataOf(row);
-      if (!d)
-        continue;
-      if (row.hidden) {
-        row.removeAttribute("pfx-popout-child");
-        continue;
-      }
-      if (levelOfRow(row) === 0 || col === 0) {
-        col++;
-        rowInCol = 0;
-      }
-      rowInCol++;
-      row.style.gridColumn = String(col);
-      row.style.gridRow = String(rowInCol);
-      row.toggleAttribute("pfx-popout-child", rowInCol > 1);
-      if (row.hasAttribute("selected"))
-        selectedCol = col;
-    }
-    if (col > 0) {
-      const tracks = [];
-      for (let i = 1;i <= col; i++) {
-        tracks.push(i === selectedCol ? "minmax(200px, 200px)" : "minmax(0, 200px)");
-      }
-      state.panel.style.gridTemplateColumns = tracks.join(" ");
-    } else {
-      state.panel.style.gridTemplateColumns = "";
-    }
-    requestAnimationFrame(() => {
-      if (!isHorizontal() || !state.panel)
-        return;
-      const firstRow = state.panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
-      if (firstRow) {
-        state.panel.style.maxHeight = firstRow.offsetHeight + 2 + "px";
-      }
-    });
-  }
-  function clearHorizontalGrid() {
-    if (!state.panel)
-      return;
-    state.panel.style.maxHeight = "";
-    for (const row of allRows()) {
-      row.style.gridColumn = "";
-      row.style.gridRow = "";
-      row.removeAttribute("pfx-popout-child");
-    }
-  }
   function buildPanel() {
     if (!state.panel)
       return;
@@ -1050,7 +1104,7 @@
         state.pinnedContainer.firstChild.remove();
     }
     for (const tab of gBrowser.tabs) {
-      const row = createTabRow(tab);
+      const row = rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -1060,7 +1114,7 @@
     if (state.pinnedContainer) {
       state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
-    updateVisibility();
+    rows.updateVisibility();
   }
   function popClosedEntry(url) {
     if (!url)
@@ -1083,21 +1137,7 @@
     td.collapsed = !!prior.collapsed;
     pinTabId(tab, td.id);
     pfxLog("applySavedToTab", { id: td.id, parentId: td.parentId, priorId: prior.id, priorParentId: prior.parentId });
-    scheduleTreeResync();
-  }
-  var resyncPending = false;
-  function scheduleTreeResync() {
-    if (resyncPending)
-      return;
-    resyncPending = true;
-    Promise.resolve().then(() => {
-      resyncPending = false;
-      for (const t of gBrowser.tabs) {
-        if (rowOf.get(t))
-          syncTabRow(t);
-      }
-      updateVisibility();
-    });
+    rows.scheduleTreeResync();
   }
   function onTabOpen(e) {
     const tab = e.target;
@@ -1107,7 +1147,7 @@
       const idx = [...gBrowser.tabs].indexOf(tab);
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
-      const row2 = createTabRow(tab);
+      const row2 = rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row2);
         state.pinnedContainer.hidden = false;
@@ -1118,7 +1158,7 @@
         pendingCursorMove = false;
         setCursor(row2);
       }
-      updateVisibility();
+      rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -1129,7 +1169,7 @@
     } else if (position === "sibling" && anchor) {
       td.parentId = treeData(anchor).parentId;
     }
-    const row = createTabRow(tab);
+    const row = rows.createTabRow(tab);
     if (tab.pinned && state.pinnedContainer) {
       state.pinnedContainer.appendChild(row);
       state.pinnedContainer.hidden = false;
@@ -1150,7 +1190,7 @@
       pendingCursorMove = false;
       setCursor(row);
     }
-    scheduleTreeResync();
+    rows.scheduleTreeResync();
     scheduleSave();
   }
   function onTabClose(e) {
@@ -1170,14 +1210,14 @@
             break;
           if (ntd.parentId === closingId) {
             ntd.parentId = newParentId;
-            syncTabRow(next._tab);
+            rows.syncTabRow(next._tab);
           }
         } else if (next._group) {
           const gLv = next._group.level || 0;
           if (gLv <= myLevel)
             break;
           next._group.level = Math.max(0, gLv - 1);
-          syncGroupRow(next);
+          rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
@@ -1186,7 +1226,7 @@
       row.remove();
     }
     rowOf.delete(tab);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function onTabPinned(e) {
@@ -1207,10 +1247,10 @@
       placeRowInFirefoxOrder(tab, row);
     }
     state.pinnedContainer.hidden = false;
-    syncTabRow(tab);
+    rows.syncTabRow(tab);
     for (const r of allRows())
       syncAnyRow(r);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function onTabUnpinned(e) {
@@ -1223,11 +1263,11 @@
       state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
-    syncTabRow(tab);
+    rows.syncTabRow(tab);
     if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
       state.pinnedContainer.hidden = true;
     }
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function popSavedByUrl2(url) {
@@ -1262,7 +1302,7 @@
         td2.collapsed = !!correction.collapsed;
         td2.appliedSavedState = true;
         pinTabId(tab, td2.id);
-        scheduleTreeResync();
+        rows.scheduleTreeResync();
         scheduleSave();
       }
       return;
@@ -1294,9 +1334,9 @@
           n = n.nextElementSibling;
         }
       }
-      scheduleTreeResync();
+      rows.scheduleTreeResync();
     }
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function placeRestoredRow(row, parent, prevSiblingId) {
@@ -1383,10 +1423,10 @@
     if (row && !state.cursor)
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (isHorizontal())
-      updateHorizontalGrid();
+      rows.updateHorizontalGrid();
   }
   function onTabAttrModified(e) {
-    syncTabRow(e.target);
+    rows.syncTabRow(e.target);
   }
   function isFxPinned(tab) {
     if (tab.pinned)
@@ -1452,7 +1492,7 @@
     const tab = e.target;
     const moved = placeRowInFirefoxOrder(tab, rowOf.get(tab));
     if (moved && !movingTabs.has(tab)) {
-      scheduleTreeResync();
+      rows.scheduleTreeResync();
       scheduleSave();
     }
   }
@@ -1527,7 +1567,7 @@
       collapseHzTree(hzExpandedRoot);
     expandHzTree(root);
     hzExpandedRoot = root;
-    updateVisibility();
+    rows.updateVisibility();
   }
   function moveToLevel0(delta) {
     if (!state.cursor)
@@ -1568,9 +1608,9 @@
   }
   function syncAnyRow(row) {
     if (row._tab)
-      syncTabRow(row._tab);
+      rows.syncTabRow(row._tab);
     else
-      syncGroupRow(row);
+      rows.syncGroupRow(row);
   }
   function prevSiblingTab(row) {
     if (!row?._tab)
@@ -1611,7 +1651,7 @@
       for (const r of subtreeRows(row))
         syncAnyRow(r);
     }
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function outdentRow(row) {
@@ -1630,7 +1670,7 @@
       for (const r of subtreeRows(row))
         syncAnyRow(r);
     }
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function moveToRoot(row) {
@@ -1642,7 +1682,7 @@
     td.parentId = null;
     for (const r of subtreeRows(row))
       syncAnyRow(r);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function makeChildOfAbove(row) {
@@ -1654,7 +1694,7 @@
     treeData(row._tab).parentId = treeData(prev._tab).id;
     for (const r of subtreeRows(row))
       syncAnyRow(r);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function swapDown(row) {
@@ -1669,7 +1709,7 @@
     if (levelOfRow(nextRow) !== myLevel)
       return;
     subtreeRows(nextRow).at(-1).after(...rows);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   function swapUp(row) {
@@ -1683,19 +1723,7 @@
     if (!prev || levelOfRow(prev) !== myLevel)
       return;
     prev.before(...subtreeRows(row));
-    updateVisibility();
-    scheduleSave();
-  }
-  function toggleCollapse(row) {
-    const d = dataOf(row);
-    if (!d || !hasChildren(row))
-      return;
-    d.collapsed = !d.collapsed;
-    if (row._tab)
-      syncTabRow(row._tab);
-    else
-      syncGroupRow(row);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
   }
   var pendingCtrlW = false;
@@ -1776,7 +1804,7 @@
     if (isHorizontal() && hzExpandedRoot) {
       collapseHzTree(hzExpandedRoot);
       hzExpandedRoot = null;
-      updateVisibility();
+      rows.updateVisibility();
     }
     updateModeline();
   }
@@ -1992,11 +2020,11 @@
           blurPanel();
           gBrowser.selectedBrowser.focus();
         } else {
-          toggleCollapse(state.cursor);
+          rows.toggleCollapse(state.cursor);
         }
         return true;
       case "Tab":
-        toggleCollapse(state.cursor);
+        rows.toggleCollapse(state.cursor);
         return true;
       case "Escape":
         if (refileSource) {
@@ -2058,7 +2086,7 @@
         else if (rows[i]._group)
           rows[i].remove();
       }
-      updateVisibility();
+      rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -2076,14 +2104,14 @@
           break;
         if (next._group) {
           next._group.level = Math.max(0, (next._group.level || 0) - 1);
-          syncGroupRow(next);
+          rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
       const dying = state.cursor;
       moveCursor(1) || moveCursor(-1);
       dying.remove();
-      updateVisibility();
+      rows.updateVisibility();
       scheduleSave();
     }
   }
@@ -2135,7 +2163,7 @@
       case "grp":
       case "folder": {
         const label = args.slice(1).join(" ") || "New Group";
-        const row = createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
+        const row = rows.createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
         if (state.cursor) {
           const st = subtreeRows(state.cursor);
           st[st.length - 1].after(row);
@@ -2143,7 +2171,7 @@
           state.panel.insertBefore(row, state.spacer);
         }
         setCursor(row);
-        updateVisibility();
+        rows.updateVisibility();
         scheduleSave();
         modelineMsg(`:group ${label}`);
         break;
@@ -2196,8 +2224,8 @@
       treeData(clone).parentId = parentId;
       const st = subtreeRows(parentRow);
       st[st.length - 1].after(cloneRow);
-      syncTabRow(clone);
-      updateVisibility();
+      rows.syncTabRow(clone);
+      rows.updateVisibility();
       scheduleSave();
     });
     obs.observe(state.panel, { childList: true });
@@ -2228,7 +2256,7 @@
     tgtSub[tgtSub.length - 1].after(...srcRows);
     for (const r of srcRows)
       syncAnyRow(r);
-    updateVisibility();
+    rows.updateVisibility();
     scheduleSave();
     const label = srcData.name || refileSource._tab?.label || "tab";
     const tgtLabel = tgtData.name || target._tab?.label || "tab";
@@ -2383,7 +2411,7 @@
   function clearFilter() {
     for (const row of allRows())
       row.hidden = false;
-    updateVisibility();
+    rows.updateVisibility();
   }
   function startRename(row) {
     if (!row)
@@ -2416,9 +2444,9 @@
       input.remove();
       label.hidden = false;
       if (row._tab)
-        syncTabRow(row._tab);
+        rows.syncTabRow(row._tab);
       else
-        syncGroupRow(row);
+        rows.syncGroupRow(row);
       state.panel.focus();
     }
     input.addEventListener("keydown", (e) => {
@@ -2445,9 +2473,19 @@
     tabUrl,
     treeData
   }));
+  var rows;
   var drag = makeDrag({
     clearSelection,
-    scheduleTreeResync,
+    scheduleTreeResync: () => rows.scheduleTreeResync(),
+    scheduleSave
+  });
+  rows = makeRows({
+    setupDrag: drag.setupDrag,
+    activateVim,
+    selectRange,
+    clearSelection,
+    cloneAsChild,
+    startRename,
     scheduleSave
   });
   async function loadFromDisk() {
@@ -2536,10 +2574,10 @@
       }
     }
     const mkGroup = (g) => {
-      const row = createGroupRow(g.name, g.level || 0);
+      const row = rows.createGroupRow(g.name, g.level || 0);
       row._group.state = g.state || null;
       row._group.collapsed = !!g.collapsed;
-      syncGroupRow(row);
+      rows.syncGroupRow(row);
       return row;
     };
     while (state.panel.firstChild !== state.spacer)
@@ -2551,7 +2589,7 @@
     for (const g of leadingGroups)
       state.panel.insertBefore(mkGroup(g), state.spacer);
     for (const tab of gBrowser.tabs) {
-      const row = createTabRow(tab);
+      const row = rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -2567,8 +2605,8 @@
       state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
     loadedNodes = null;
-    scheduleTreeResync();
-    updateVisibility();
+    rows.scheduleTreeResync();
+    rows.updateVisibility();
     return true;
   }
   function isVertical() {
@@ -2638,11 +2676,11 @@
     }
     if (state.panel) {
       if (vertical) {
-        clearHorizontalGrid();
+        rows.clearHorizontalGrid();
       }
       for (const row of allRows())
         syncAnyRow(row);
-      updateVisibility();
+      rows.updateVisibility();
     }
   }
   async function init() {
@@ -2694,16 +2732,16 @@
     tc.addEventListener("TabPinned", onTabPinned);
     tc.addEventListener("TabUnpinned", onTabUnpinned);
     state.spacer.addEventListener("click", () => {
-      const rows = allRows().filter((r) => !r.hidden);
-      if (rows.length)
-        activateVim(rows[rows.length - 1]);
+      const rows2 = allRows().filter((r) => !r.hidden);
+      if (rows2.length)
+        activateVim(rows2[rows2.length - 1]);
     });
     const onSessionRestored = () => {
       console.log("palefox-tabs: sessionstore-windows-restored — final tree resync");
       pfxLog("sessionstore-windows-restored", { queueLen: savedTabQueue.length, inSessionRestore: _inSessionRestore });
       savedTabQueue.length = 0;
       _inSessionRestore = false;
-      scheduleTreeResync();
+      rows.scheduleTreeResync();
     };
     Services.obs.addObserver(onSessionRestored, "sessionstore-windows-restored");
     const onManualRestore = () => {
