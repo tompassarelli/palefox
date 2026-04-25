@@ -71,6 +71,8 @@
   var hzDisplay = new WeakMap;
   var savedTabQueue = [];
   var closedTabs = [];
+  var selection = new Set;
+  var movingTabs = new Set;
 
   // src/tabs/persist.ts
   function profilePath() {
@@ -226,6 +228,318 @@
     return node;
   }
 
+  // src/tabs/drag.ts
+  function makeDrag(deps) {
+    const {
+      subtreeRows,
+      levelOfRow,
+      dataOf,
+      allRows,
+      treeData,
+      tabById,
+      syncTabRow,
+      clearSelection,
+      scheduleTreeResync,
+      scheduleSave
+    } = deps;
+    let dragSource = null;
+    let dropIndicator = null;
+    let dropTarget = null;
+    let dropPosition = null;
+    function setupDrag(row) {
+      row.draggable = true;
+      row.addEventListener("dragstart", (e) => {
+        const t = e.target;
+        if (t.classList?.contains("pfx-tab-close")) {
+          e.preventDefault();
+          return;
+        }
+        dragSource = row;
+        const dt = e.dataTransfer;
+        dt.effectAllowed = "move";
+        dt.setData("text/plain", "");
+        row.setAttribute("pfx-dragging", "true");
+        if (state.pinnedContainer && !row._tab?.pinned && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
+          state.pinnedContainer.hidden = false;
+          state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
+        }
+        if (state.panel && row._tab?.pinned && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
+          state.panel.setAttribute("pfx-empty-zone", "true");
+        }
+      });
+      row.addEventListener("dragend", () => {
+        dragSource?.removeAttribute("pfx-dragging");
+        dragSource = null;
+        clearDropIndicator();
+        if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
+          state.pinnedContainer.removeAttribute("pfx-empty-zone");
+          if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+            state.pinnedContainer.hidden = true;
+          }
+        }
+        state.panel?.removeAttribute("pfx-empty-zone");
+      });
+      row.addEventListener("dragover", (e) => {
+        if (!dragSource || dragSource === row)
+          return;
+        if (subtreeRows(dragSource).includes(row))
+          return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const tgtPinned = !!row._tab?.pinned;
+        if (tgtPinned) {
+          const rect = row.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          dropPosition = x < rect.width / 2 ? "before" : "after";
+        } else {
+          const rect = row.getBoundingClientRect();
+          const y = e.clientY - rect.top;
+          const zone = rect.height / 3;
+          if (y < zone)
+            dropPosition = "before";
+          else if (y > zone * 2)
+            dropPosition = "after";
+          else
+            dropPosition = "child";
+        }
+        dropTarget = row;
+        showDropIndicator(row, dropPosition);
+      });
+      row.addEventListener("dragleave", (e) => {
+        const related = e.relatedTarget;
+        if (!row.contains(related)) {
+          if (dropTarget === row)
+            clearDropIndicator();
+        }
+      });
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (!dragSource || dragSource === row)
+          return;
+        if (subtreeRows(dragSource).includes(row))
+          return;
+        if (dropPosition && dropPosition !== "into-empty-pinned" && dropPosition !== "into-empty-panel") {
+          executeDrop(dragSource, row, dropPosition);
+        }
+        clearDropIndicator();
+      });
+    }
+    function setupPinnedContainerDrop(container) {
+      container.addEventListener("dragover", (e) => {
+        if (!dragSource || dragSource._tab?.pinned)
+          return;
+        if (e.target !== container)
+          return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const lastRow = container.querySelector(".pfx-tab-row:last-of-type");
+        if (lastRow) {
+          dropTarget = lastRow;
+          dropPosition = "after";
+          showDropIndicator(lastRow, "after");
+        } else {
+          dropTarget = container;
+          dropPosition = "into-empty-pinned";
+        }
+      });
+      container.addEventListener("drop", (e) => {
+        if (!dragSource || dragSource._tab?.pinned)
+          return;
+        if (e.target !== container && dropTarget !== container)
+          return;
+        e.preventDefault();
+        const tab = dragSource._tab;
+        if (!tab) {
+          clearDropIndicator();
+          return;
+        }
+        if (dropTarget === container) {
+          gBrowser.pinTab(tab);
+        } else if (dropTarget?._tab && dropPosition) {
+          executeDrop(dragSource, dropTarget, dropPosition);
+        }
+        clearDropIndicator();
+      });
+    }
+    function setupPanelDrop(p) {
+      p.addEventListener("dragover", (e) => {
+        if (!dragSource)
+          return;
+        if (e.target !== p && e.target !== state.spacer)
+          return;
+        const srcPinned = !!dragSource._tab?.pinned;
+        let anchor = null;
+        if (srcPinned) {
+          anchor = p.querySelector(".pfx-tab-row:last-of-type, .pfx-group-row:last-of-type");
+        } else {
+          const srcSubtree = new Set(subtreeRows(dragSource));
+          const rows = [...p.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
+          for (let i = rows.length - 1;i >= 0; i--) {
+            const candidate = rows[i];
+            if (levelOfRow(candidate) === 0 && !srcSubtree.has(candidate)) {
+              anchor = candidate;
+              break;
+            }
+          }
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (anchor) {
+          dropTarget = anchor;
+          dropPosition = "after";
+          showDropIndicator(anchor, "after");
+        } else {
+          dropTarget = srcPinned ? p : null;
+          dropPosition = "into-empty-panel";
+        }
+      });
+      p.addEventListener("drop", (e) => {
+        if (!dragSource)
+          return;
+        if (e.target !== p && e.target !== state.spacer && dropTarget !== p)
+          return;
+        e.preventDefault();
+        const tab = dragSource._tab;
+        if (!tab) {
+          clearDropIndicator();
+          return;
+        }
+        if (dropTarget === p) {
+          if (tab.pinned)
+            gBrowser.unpinTab(tab);
+        } else if (dropTarget?._tab && dropPosition) {
+          executeDrop(dragSource, dropTarget, dropPosition);
+        }
+        clearDropIndicator();
+      });
+    }
+    function showDropIndicator(targetRow, position) {
+      if (!dropIndicator) {
+        dropIndicator = document.createXULElement("box");
+        dropIndicator.id = "pfx-drop-indicator";
+      }
+      dropIndicator.removeAttribute("pfx-drop-child");
+      dropIndicator.removeAttribute("pfx-pinned");
+      dropIndicator.style.marginInlineStart = "";
+      if (targetRow._tab?.pinned) {
+        dropIndicator.setAttribute("pfx-pinned", "true");
+        if (position === "before")
+          targetRow.before(dropIndicator);
+        else
+          targetRow.after(dropIndicator);
+        return;
+      }
+      if (position === "child") {
+        dropIndicator.setAttribute("pfx-drop-child", "true");
+        targetRow.after(dropIndicator);
+        dropIndicator.style.marginInlineStart = (levelOfRow(targetRow) + 1) * INDENT + 8 + "px";
+      } else if (position === "before") {
+        targetRow.before(dropIndicator);
+        dropIndicator.style.marginInlineStart = levelOfRow(targetRow) * INDENT + 8 + "px";
+      } else {
+        const st = subtreeRows(targetRow);
+        st[st.length - 1].after(dropIndicator);
+        dropIndicator.style.marginInlineStart = levelOfRow(targetRow) * INDENT + 8 + "px";
+      }
+    }
+    function clearDropIndicator() {
+      dropIndicator?.remove();
+      dropTarget = null;
+      dropPosition = null;
+    }
+    function executeDrop(srcRow, tgtRow, position) {
+      const tgtLevel = levelOfRow(tgtRow);
+      if (!dataOf(tgtRow))
+        return;
+      const srcPinned = !!srcRow._tab?.pinned;
+      const tgtPinned = !!tgtRow._tab?.pinned;
+      const isCrossContainer = srcPinned !== tgtPinned;
+      let movedRows;
+      if (isCrossContainer) {
+        movedRows = srcRow._tab ? [srcRow] : [];
+      } else if (selection.size > 1 && selection.has(srcRow)) {
+        movedRows = [...allRows()].filter((r) => selection.has(r));
+      } else {
+        movedRows = subtreeRows(srcRow);
+      }
+      if (!movedRows.length)
+        return;
+      const srcLevel = levelOfRow(movedRows[0]);
+      const newSrcLevel = position === "child" && !tgtPinned ? tgtLevel + 1 : tgtLevel;
+      const delta = newSrcLevel - srcLevel;
+      const newParentForSource = tgtPinned ? null : position === "child" ? tgtRow._tab ? treeData(tgtRow._tab).id : null : tgtRow._tab ? treeData(tgtRow._tab).parentId : null;
+      const movedSet = new Set(movedRows);
+      for (const r of movedRows) {
+        if (!r._tab) {
+          if (r._group)
+            r._group.level = Math.max(0, (r._group.level || 0) + delta);
+          continue;
+        }
+        const td = treeData(r._tab);
+        const parent = tabById(td.parentId ?? 0);
+        if (!parent || !movedSet.has(rowOf.get(parent))) {
+          td.parentId = newParentForSource;
+        }
+      }
+      const movedTabs = movedRows.filter((r) => r._tab).map((r) => r._tab);
+      if (isCrossContainer) {
+        for (const t of movedTabs) {
+          if (tgtPinned && !t.pinned)
+            gBrowser.pinTab(t);
+          else if (!tgtPinned && t.pinned)
+            gBrowser.unpinTab(t);
+        }
+      }
+      const tabsArr = [...gBrowser.tabs];
+      let targetIdx;
+      if (position === "before") {
+        targetIdx = tabsArr.indexOf(tgtRow._tab);
+      } else {
+        const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find((r) => r._tab)?._tab;
+        targetIdx = (tgtSubtreeTab ? tabsArr.indexOf(tgtSubtreeTab) : tabsArr.indexOf(tgtRow._tab)) + 1;
+      }
+      if (targetIdx < 0)
+        targetIdx = tabsArr.length;
+      for (const t of movedTabs)
+        movingTabs.add(t);
+      let insertIdx = targetIdx;
+      for (const t of movedTabs) {
+        const currentIdx = [...gBrowser.tabs].indexOf(t);
+        if (currentIdx < 0)
+          continue;
+        if (currentIdx < insertIdx)
+          insertIdx--;
+        if (currentIdx !== insertIdx)
+          gBrowser.moveTabTo(t, { tabIndex: insertIdx });
+        insertIdx++;
+      }
+      const groupRows = movedRows.filter((r) => r._group);
+      if (groupRows.length) {
+        if (position === "before") {
+          tgtRow.before(...groupRows);
+        } else {
+          const st = subtreeRows(tgtRow);
+          const anchorRows = st.filter((r) => !movedRows.includes(r));
+          const anchor = anchorRows.length ? anchorRows[anchorRows.length - 1] : tgtRow;
+          anchor.after(...groupRows);
+        }
+      }
+      clearSelection();
+      requestAnimationFrame(() => {
+        for (const t of movedTabs)
+          movingTabs.delete(t);
+        for (const t of movedTabs) {
+          const row = rowOf.get(t);
+          if (row)
+            row.toggleAttribute("busy", t.hasAttribute("busy"));
+        }
+        scheduleTreeResync();
+        scheduleSave();
+      });
+    }
+    return { setupDrag, setupPinnedContainerDrop, setupPanelDrop };
+  }
+
   // src/tabs/index.ts
   var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
@@ -247,8 +561,6 @@
   var chord = null;
   var chordTimer = 0;
   var pendingCursorMove = false;
-  var selection = new Set;
-  var movingTabs = new Set;
   var _lastLoadedNodes = [];
   var _inSessionRestore = true;
   var pinAttrRegistered = false;
@@ -439,7 +751,7 @@
       state.contextTab = tab;
       document.getElementById("pfx-tab-menu")?.openPopupAtScreen(e.screenX, e.screenY, true);
     });
-    setupDrag(row);
+    drag.setupDrag(row);
     syncTabRow(tab);
     return row;
   }
@@ -494,7 +806,7 @@
         startRename(row);
       }
     });
-    setupDrag(row);
+    drag.setupDrag(row);
     syncGroupRow(row);
     return row;
   }
@@ -1743,292 +2055,6 @@
     if (last._tab)
       gBrowser.selectedTab = last._tab;
   }
-  var dragSource = null;
-  var dropIndicator = null;
-  var dropTarget = null;
-  var dropPosition = null;
-  function setupDrag(row) {
-    row.draggable = true;
-    row.addEventListener("dragstart", (e) => {
-      if (e.target.classList?.contains("pfx-tab-close")) {
-        e.preventDefault();
-        return;
-      }
-      dragSource = row;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", "");
-      row.setAttribute("pfx-dragging", "true");
-      if (state.pinnedContainer && !row._tab?.pinned && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
-        state.pinnedContainer.hidden = false;
-        state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
-      }
-      if (state.panel && row._tab?.pinned && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-        state.panel.setAttribute("pfx-empty-zone", "true");
-      }
-    });
-    row.addEventListener("dragend", () => {
-      dragSource?.removeAttribute("pfx-dragging");
-      dragSource = null;
-      clearDropIndicator();
-      if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-        state.pinnedContainer.removeAttribute("pfx-empty-zone");
-        if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
-          state.pinnedContainer.hidden = true;
-        }
-      }
-      state.panel?.removeAttribute("pfx-empty-zone");
-    });
-    row.addEventListener("dragover", (e) => {
-      if (!dragSource || dragSource === row)
-        return;
-      if (subtreeRows(dragSource).includes(row))
-        return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const tgtPinned = !!row._tab?.pinned;
-      if (tgtPinned) {
-        const rect = row.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        dropPosition = x < rect.width / 2 ? "before" : "after";
-      } else {
-        const rect = row.getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        const zone = rect.height / 3;
-        if (y < zone)
-          dropPosition = "before";
-        else if (y > zone * 2)
-          dropPosition = "after";
-        else
-          dropPosition = "child";
-      }
-      dropTarget = row;
-      showDropIndicator(row, dropPosition);
-    });
-    row.addEventListener("dragleave", (e) => {
-      if (!row.contains(e.relatedTarget)) {
-        if (dropTarget === row)
-          clearDropIndicator();
-      }
-    });
-    row.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (!dragSource || dragSource === row)
-        return;
-      if (subtreeRows(dragSource).includes(row))
-        return;
-      executeDrop(dragSource, row, dropPosition);
-      clearDropIndicator();
-    });
-  }
-  function setupPinnedContainerDrop(container) {
-    container.addEventListener("dragover", (e) => {
-      if (!dragSource || dragSource._tab?.pinned)
-        return;
-      if (e.target !== container)
-        return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const lastRow = container.querySelector(".pfx-tab-row:last-of-type");
-      if (lastRow) {
-        dropTarget = lastRow;
-        dropPosition = "after";
-        showDropIndicator(lastRow, "after");
-      } else {
-        dropTarget = container;
-        dropPosition = "into-empty-pinned";
-      }
-    });
-    container.addEventListener("drop", (e) => {
-      if (!dragSource || dragSource._tab?.pinned)
-        return;
-      if (e.target !== container && dropTarget !== container)
-        return;
-      e.preventDefault();
-      const tab = dragSource._tab;
-      if (!tab)
-        return;
-      if (dropTarget === container) {
-        gBrowser.pinTab(tab);
-      } else if (dropTarget?._tab) {
-        executeDrop(dragSource, dropTarget, dropPosition);
-      }
-      clearDropIndicator();
-    });
-  }
-  function setupPanelDrop(p) {
-    p.addEventListener("dragover", (e) => {
-      if (!dragSource)
-        return;
-      if (e.target !== p && e.target !== state.spacer)
-        return;
-      const srcPinned = !!dragSource._tab?.pinned;
-      let anchor;
-      if (srcPinned) {
-        anchor = p.querySelector(".pfx-tab-row:last-of-type, .pfx-group-row:last-of-type");
-      } else {
-        const srcSubtree = new Set(subtreeRows(dragSource));
-        const rows = [...p.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
-        for (let i = rows.length - 1;i >= 0; i--) {
-          if (levelOfRow(rows[i]) === 0 && !srcSubtree.has(rows[i])) {
-            anchor = rows[i];
-            break;
-          }
-        }
-      }
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (anchor) {
-        dropTarget = anchor;
-        dropPosition = "after";
-        showDropIndicator(anchor, "after");
-      } else {
-        dropTarget = srcPinned ? p : null;
-        dropPosition = "into-empty-panel";
-      }
-    });
-    p.addEventListener("drop", (e) => {
-      if (!dragSource)
-        return;
-      if (e.target !== p && e.target !== state.spacer && dropTarget !== p)
-        return;
-      e.preventDefault();
-      const tab = dragSource._tab;
-      if (!tab) {
-        clearDropIndicator();
-        return;
-      }
-      if (dropTarget === p) {
-        if (tab.pinned)
-          gBrowser.unpinTab(tab);
-      } else if (dropTarget?._tab) {
-        executeDrop(dragSource, dropTarget, dropPosition);
-      }
-      clearDropIndicator();
-    });
-  }
-  function showDropIndicator(targetRow, position) {
-    if (!dropIndicator) {
-      dropIndicator = document.createXULElement("box");
-      dropIndicator.id = "pfx-drop-indicator";
-    }
-    dropIndicator.removeAttribute("pfx-drop-child");
-    dropIndicator.removeAttribute("pfx-pinned");
-    dropIndicator.style.marginInlineStart = "";
-    if (targetRow._tab?.pinned) {
-      dropIndicator.setAttribute("pfx-pinned", "true");
-      if (position === "before")
-        targetRow.before(dropIndicator);
-      else
-        targetRow.after(dropIndicator);
-      return;
-    }
-    if (position === "child") {
-      dropIndicator.setAttribute("pfx-drop-child", "true");
-      targetRow.after(dropIndicator);
-      dropIndicator.style.marginInlineStart = (levelOfRow(targetRow) + 1) * INDENT + 8 + "px";
-    } else if (position === "before") {
-      targetRow.before(dropIndicator);
-      dropIndicator.style.marginInlineStart = levelOfRow(targetRow) * INDENT + 8 + "px";
-    } else {
-      const st = subtreeRows(targetRow);
-      st[st.length - 1].after(dropIndicator);
-      dropIndicator.style.marginInlineStart = levelOfRow(targetRow) * INDENT + 8 + "px";
-    }
-  }
-  function clearDropIndicator() {
-    dropIndicator?.remove();
-    dropTarget = null;
-    dropPosition = null;
-  }
-  function executeDrop(srcRow, tgtRow, position) {
-    const tgtLevel = levelOfRow(tgtRow);
-    if (!dataOf(tgtRow))
-      return;
-    const srcPinned = !!srcRow._tab?.pinned;
-    const tgtPinned = !!tgtRow._tab?.pinned;
-    const isCrossContainer = srcPinned !== tgtPinned;
-    let movedRows;
-    if (isCrossContainer) {
-      movedRows = srcRow._tab ? [srcRow] : [];
-    } else if (selection.size > 1 && selection.has(srcRow)) {
-      movedRows = allRows().filter((r) => selection.has(r));
-    } else {
-      movedRows = subtreeRows(srcRow);
-    }
-    if (!movedRows.length)
-      return;
-    const srcLevel = levelOfRow(movedRows[0]);
-    const newSrcLevel = position === "child" && !tgtPinned ? tgtLevel + 1 : tgtLevel;
-    const delta = newSrcLevel - srcLevel;
-    const newParentForSource = tgtPinned ? null : position === "child" ? tgtRow._tab ? treeData(tgtRow._tab).id : null : tgtRow._tab ? treeData(tgtRow._tab).parentId : null;
-    const movedSet = new Set(movedRows);
-    for (const r of movedRows) {
-      if (!r._tab) {
-        if (r._group)
-          r._group.level = Math.max(0, (r._group.level || 0) + delta);
-        continue;
-      }
-      const td = treeData(r._tab);
-      const parent = tabById(td.parentId);
-      if (!parent || !movedSet.has(rowOf.get(parent))) {
-        td.parentId = newParentForSource;
-      }
-    }
-    const movedTabs = movedRows.filter((r) => r._tab).map((r) => r._tab);
-    if (isCrossContainer) {
-      for (const t of movedTabs) {
-        if (tgtPinned && !t.pinned)
-          gBrowser.pinTab(t);
-        else if (!tgtPinned && t.pinned)
-          gBrowser.unpinTab(t);
-      }
-    }
-    const tabsArr = [...gBrowser.tabs];
-    let targetIdx;
-    if (position === "before") {
-      targetIdx = tabsArr.indexOf(tgtRow._tab);
-    } else {
-      const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find((r) => r._tab)?._tab;
-      targetIdx = (tgtSubtreeTab ? tabsArr.indexOf(tgtSubtreeTab) : tabsArr.indexOf(tgtRow._tab)) + 1;
-    }
-    if (targetIdx < 0)
-      targetIdx = tabsArr.length;
-    for (const t of movedTabs)
-      movingTabs.add(t);
-    let insertIdx = targetIdx;
-    for (const t of movedTabs) {
-      const currentIdx = [...gBrowser.tabs].indexOf(t);
-      if (currentIdx < 0)
-        continue;
-      if (currentIdx < insertIdx)
-        insertIdx--;
-      if (currentIdx !== insertIdx)
-        gBrowser.moveTabTo(t, { tabIndex: insertIdx });
-      insertIdx++;
-    }
-    const groupRows = movedRows.filter((r) => r._group);
-    if (groupRows.length) {
-      if (position === "before") {
-        tgtRow.before(...groupRows);
-      } else {
-        const st = subtreeRows(tgtRow);
-        const anchor = st.filter((r) => !movedRows.includes(r));
-        (anchor.length ? anchor[anchor.length - 1] : tgtRow).after(...groupRows);
-      }
-    }
-    clearSelection();
-    requestAnimationFrame(() => {
-      for (const t of movedTabs)
-        movingTabs.delete(t);
-      for (const t of movedTabs) {
-        const row = rowOf.get(t);
-        if (row)
-          row.toggleAttribute("busy", t.hasAttribute("busy"));
-      }
-      scheduleTreeResync();
-      scheduleSave();
-    });
-  }
   function cloneAsChild(tab) {
     const parentRow = rowOf.get(tab);
     if (!parentRow)
@@ -2409,6 +2435,18 @@
     tabUrl,
     treeData
   }));
+  var drag = makeDrag({
+    subtreeRows,
+    levelOfRow,
+    dataOf,
+    allRows,
+    treeData,
+    tabById,
+    syncTabRow,
+    clearSelection,
+    scheduleTreeResync,
+    scheduleSave
+  });
   async function loadFromDisk() {
     const parsed = await readTreeFromDisk();
     if (!parsed)
@@ -2611,14 +2649,14 @@
     state.pinnedContainer = document.createXULElement("hbox");
     state.pinnedContainer.id = "pfx-pinned-container";
     state.pinnedContainer.hidden = true;
-    setupPinnedContainerDrop(state.pinnedContainer);
+    drag.setupPinnedContainerDrop(state.pinnedContainer);
     state.panel = document.createXULElement("vbox");
     state.panel.id = "pfx-tab-panel";
     state.spacer = document.createXULElement("box");
     state.spacer.id = "pfx-tab-spacer";
     state.spacer.setAttribute("flex", "1");
     state.panel.appendChild(state.spacer);
-    setupPanelDrop(state.panel);
+    drag.setupPanelDrop(state.panel);
     positionPanel();
     new MutationObserver(() => positionPanel()).observe(sidebarMain, {
       childList: true,

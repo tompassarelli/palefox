@@ -56,3 +56,15 @@ export const savedTabQueue: SavedNode[] = [];
 /** Recently-closed tabs (FIFO, capped by CLOSED_MEMORY in constants.ts). Used
  *  to restore tree hierarchy on Ctrl+Shift+T. */
 export const closedTabs: SavedNode[] = [];
+
+// --- UI selection / move guards ---
+
+/** Rows in the current visual multi-select. Consumed by drag/drop, vim
+ *  range-ops, and clearSelection on context changes. */
+export const selection = new Set<Row>();
+
+/** Tabs currently being moved by palefox via gBrowser.moveTabTo. During a move,
+ *  Firefox transiently toggles `busy` on the tab — we suppress the busy-sync and
+ *  tree-resync for tabs in this set, then do one clean resync after the move
+ *  settles. Pattern cribbed from Sidebery (src/services/tabs.fg.move.ts). */
+export const movingTabs = new Set<Tab>();

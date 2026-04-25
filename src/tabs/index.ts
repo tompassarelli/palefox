@@ -10,6 +10,7 @@ import { INDENT, SAVE_FILE, CHORD_TIMEOUT, CLOSED_MEMORY, PIN_ATTR } from "./con
 import {
   state,
   treeOf, rowOf, hzDisplay, savedTabQueue, closedTabs,
+  selection, movingTabs,
 } from "./state.ts";
 import {
   makeSaver,
@@ -18,6 +19,7 @@ import {
   popSavedForTab as popQueueForTab,
   type Snapshot,
 } from "./persist.ts";
+import { makeDrag } from "./drag.ts";
 
 const pfxLog = createLogger("tabs");
 
@@ -58,16 +60,7 @@ const pfxLog = createLogger("tabs");
   let chordTimer = 0;
   let pendingCursorMove = false;    // move state.cursor to next new tab row
 
-  // Multi-select
-  const selection = new Set();      // rows in the current selection
-
-  // Tabs currently being moved by palefox via gBrowser.moveTabTo. During a
-  // move, Firefox transiently toggles `busy` on the tab (animation state);
-  // if syncTabRow observes `busy=true` and mirrors it to the row, CSS fades
-  // the row's icon. We skip the busy-sync and tree-resync for tabs in this
-  // set for the duration of the move, then do one clean resync after.
-  // Pattern cribbed from Sidebery (src/services/tabs.fg.move.ts:335-371).
-  const movingTabs = new Set();
+  // (selection and movingTabs imported from ./state.ts)
 
   // (closedTabs imported from ./state.ts; capped by CLOSED_MEMORY constant)
 
@@ -281,7 +274,7 @@ const pfxLog = createLogger("tabs");
         ?.openPopupAtScreen(e.screenX, e.screenY, true);
     });
 
-    setupDrag(row);
+    drag.setupDrag(row);
     syncTabRow(tab);
     return row;
   }
@@ -356,7 +349,7 @@ const pfxLog = createLogger("tabs");
       }
     });
 
-    setupDrag(row);
+    drag.setupDrag(row);
     syncGroupRow(row);
     return row;
   }
@@ -1714,356 +1707,6 @@ const pfxLog = createLogger("tabs");
     if (last._tab) gBrowser.selectedTab = last._tab;
   }
 
-  // --- Drag and drop ---
-
-  let dragSource = null;       // row being dragged
-  let dropIndicator = null;    // visual indicator element
-  let dropTarget = null;       // row we're hovering over
-  let dropPosition = null;     // "before" | "after" | "child"
-
-  function setupDrag(row) {
-    row.draggable = true;
-
-    row.addEventListener("dragstart", (e) => {
-      // Don't drag if clicking the close button
-      if (e.target.classList?.contains("pfx-tab-close")) {
-        e.preventDefault();
-        return;
-      }
-      dragSource = row;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", "");
-      row.setAttribute("pfx-dragging", "true");
-      // Reveal an empty pinned drop zone so unpinned tabs can be pinned
-      // by dropping into the area at the top of the sidebar.
-      if (state.pinnedContainer && !row._tab?.pinned
-          && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
-        state.pinnedContainer.hidden = false;
-        state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
-      }
-      // Symmetric: dragging a pinned tab and the tree state.panel has no rows —
-      // reveal a "drop to unpin" zone in the state.panel.
-      if (state.panel && row._tab?.pinned
-          && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-        state.panel.setAttribute("pfx-empty-zone", "true");
-      }
-    });
-
-    row.addEventListener("dragend", () => {
-      dragSource?.removeAttribute("pfx-dragging");
-      dragSource = null;
-      clearDropIndicator();
-      // Restore hidden state on the empty pinned drop zone if still empty.
-      if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-        state.pinnedContainer.removeAttribute("pfx-empty-zone");
-        if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
-          state.pinnedContainer.hidden = true;
-        }
-      }
-      state.panel?.removeAttribute("pfx-empty-zone");
-    });
-
-    row.addEventListener("dragover", (e) => {
-      if (!dragSource || dragSource === row) return;
-      // Don't allow drop onto own subtree
-      if (subtreeRows(dragSource).includes(row)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-
-      const tgtPinned = !!row._tab?.pinned;
-      if (tgtPinned) {
-        // Target is pinned — horizontal layout, before/after only.
-        // (Pinned tabs can't have children.)
-        const rect = row.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        dropPosition = x < rect.width / 2 ? "before" : "after";
-      } else {
-        const rect = row.getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        const zone = rect.height / 3;
-        if (y < zone) dropPosition = "before";
-        else if (y > zone * 2) dropPosition = "after";
-        else dropPosition = "child";
-      }
-      dropTarget = row;
-      showDropIndicator(row, dropPosition);
-    });
-
-    row.addEventListener("dragleave", (e) => {
-      // Only clear if leaving the row entirely (not entering a child)
-      if (!row.contains(e.relatedTarget)) {
-        if (dropTarget === row) clearDropIndicator();
-      }
-    });
-
-    row.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (!dragSource || dragSource === row) return;
-      if (subtreeRows(dragSource).includes(row)) return;
-      executeDrop(dragSource, row, dropPosition);
-      clearDropIndicator();
-    });
-  }
-
-  // Drop handlers on the pinned container itself, for two cases:
-  //   1. The container is empty (no rows to drag-over): pin the source.
-  //   2. Drop in trailing whitespace after the last pinned row: pin and append.
-  function setupPinnedContainerDrop(container) {
-    container.addEventListener("dragover", (e) => {
-      if (!dragSource || dragSource._tab?.pinned) return;
-      // Only handle drops landing directly on the container, not on a child row
-      // (rows have their own dragover handlers).
-      if (e.target !== container) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const lastRow = container.querySelector(".pfx-tab-row:last-of-type");
-      if (lastRow) {
-        dropTarget = lastRow;
-        dropPosition = "after";
-        showDropIndicator(lastRow, "after");
-      } else {
-        dropTarget = container;
-        dropPosition = "into-empty-pinned";
-      }
-    });
-
-    container.addEventListener("drop", (e) => {
-      if (!dragSource || dragSource._tab?.pinned) return;
-      if (e.target !== container && dropTarget !== container) return;
-      e.preventDefault();
-      const tab = dragSource._tab;
-      if (!tab) return;
-      if (dropTarget === container) {
-        // Empty pinned container: just pin. onTabPinned moves the row.
-        gBrowser.pinTab(tab);
-      } else if (dropTarget?._tab) {
-        executeDrop(dragSource, dropTarget, dropPosition);
-      }
-      clearDropIndicator();
-    });
-  }
-
-  // Drop handler on the tree state.panel itself (not its rows). Handles two
-  // distinct drop intents that the per-row handlers don't cover:
-  //   - Pinned-tab drag dropped on state.panel whitespace → unpin and append.
-  //   - Unpinned-tab drag dropped on state.panel whitespace → move to end at root.
-  // Both also cover the empty-panel case (only the state.spacer is present).
-  function setupPanelDrop(p) {
-    p.addEventListener("dragover", (e) => {
-      if (!dragSource) return;
-      // Only handle if the dragover landed on the state.panel itself or the state.spacer
-      // (rows handle their own dragover).
-      if (e.target !== p && e.target !== state.spacer) return;
-
-      // For unpinned drags, find the last root-level row that isn't part of
-      // the source's own subtree — that's the anchor for an "after" drop.
-      // For pinned drags, any last row works as an anchor (executeDrop will
-      // unpin first, then place the row).
-      const srcPinned = !!dragSource._tab?.pinned;
-      let anchor;
-      if (srcPinned) {
-        anchor = p.querySelector(".pfx-tab-row:last-of-type, .pfx-group-row:last-of-type");
-      } else {
-        const srcSubtree = new Set(subtreeRows(dragSource));
-        const rows = [...p.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
-        for (let i = rows.length - 1; i >= 0; i--) {
-          if (levelOfRow(rows[i]) === 0 && !srcSubtree.has(rows[i])) {
-            anchor = rows[i];
-            break;
-          }
-        }
-      }
-
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (anchor) {
-        dropTarget = anchor;
-        dropPosition = "after";
-        showDropIndicator(anchor, "after");
-      } else {
-        // No usable anchor (empty state.panel, or unpinned drag where source is
-        // the only root). For pinned: signal "unpin into empty state.panel".
-        // For unpinned: nothing to do (already at end of root).
-        dropTarget = srcPinned ? p : null;
-        dropPosition = "into-empty-panel";
-      }
-    });
-
-    p.addEventListener("drop", (e) => {
-      if (!dragSource) return;
-      if (e.target !== p && e.target !== state.spacer && dropTarget !== p) return;
-      e.preventDefault();
-      const tab = dragSource._tab;
-      if (!tab) { clearDropIndicator(); return; }
-      if (dropTarget === p) {
-        // Empty state.panel + pinned source: just unpin. onTabUnpinned routes the row.
-        if (tab.pinned) gBrowser.unpinTab(tab);
-      } else if (dropTarget?._tab) {
-        executeDrop(dragSource, dropTarget, dropPosition);
-      }
-      clearDropIndicator();
-    });
-  }
-
-  function showDropIndicator(targetRow, position) {
-    if (!dropIndicator) {
-      dropIndicator = document.createXULElement("box");
-      dropIndicator.id = "pfx-drop-indicator";
-    }
-    dropIndicator.removeAttribute("pfx-drop-child");
-    dropIndicator.removeAttribute("pfx-pinned");
-    dropIndicator.style.marginInlineStart = "";
-
-    // Pinned target: vertical-line indicator before/after the icon.
-    if (targetRow._tab?.pinned) {
-      dropIndicator.setAttribute("pfx-pinned", "true");
-      if (position === "before") targetRow.before(dropIndicator);
-      else targetRow.after(dropIndicator);
-      return;
-    }
-
-    if (position === "child") {
-      dropIndicator.setAttribute("pfx-drop-child", "true");
-      targetRow.after(dropIndicator);
-      dropIndicator.style.marginInlineStart = ((levelOfRow(targetRow) + 1) * INDENT + 8) + "px";
-    } else if (position === "before") {
-      targetRow.before(dropIndicator);
-      dropIndicator.style.marginInlineStart = (levelOfRow(targetRow) * INDENT + 8) + "px";
-    } else {
-      // after — insert after the target's subtree
-      const st = subtreeRows(targetRow);
-      st[st.length - 1].after(dropIndicator);
-      dropIndicator.style.marginInlineStart = (levelOfRow(targetRow) * INDENT + 8) + "px";
-    }
-  }
-
-  function clearDropIndicator() {
-    dropIndicator?.remove();
-    dropTarget = null;
-    dropPosition = null;
-  }
-
-  function executeDrop(srcRow, tgtRow, position) {
-    const tgtLevel = levelOfRow(tgtRow);
-    if (!dataOf(tgtRow)) return;
-
-    const srcPinned = !!srcRow._tab?.pinned;
-    const tgtPinned = !!tgtRow._tab?.pinned;
-    const isCrossContainer = srcPinned !== tgtPinned;
-
-    // Collect rows to move. Cross-container drags only carry the source tab
-    // itself — pinned tabs can't have children, and dragging a pinned tab
-    // out shouldn't drag siblings with it.
-    let movedRows;
-    if (isCrossContainer) {
-      movedRows = srcRow._tab ? [srcRow] : [];
-    } else if (selection.size > 1 && selection.has(srcRow)) {
-      movedRows = allRows().filter(r => selection.has(r));
-    } else {
-      movedRows = subtreeRows(srcRow);
-    }
-    if (!movedRows.length) return;
-
-    const srcLevel = levelOfRow(movedRows[0]);
-    const newSrcLevel = (position === "child" && !tgtPinned) ? tgtLevel + 1 : tgtLevel;
-    const delta = newSrcLevel - srcLevel;
-
-    // Source's new parent: pinned target → null; child → tgt; before/after → tgt's parent.
-    const newParentForSource = tgtPinned
-      ? null
-      : (position === "child"
-          ? (tgtRow._tab ? treeData(tgtRow._tab).id : null)
-          : (tgtRow._tab ? treeData(tgtRow._tab).parentId : null));
-
-    // Update parentId for top-level moved tabs; descendants keep their
-    // existing parentId pointers (they follow the source in the subtree).
-    const movedSet = new Set(movedRows);
-    for (const r of movedRows) {
-      if (!r._tab) {
-        if (r._group) r._group.level = Math.max(0, (r._group.level || 0) + delta);
-        continue;
-      }
-      const td = treeData(r._tab);
-      const parent = tabById(td.parentId);
-      if (!parent || !movedSet.has(rowOf.get(parent))) {
-        td.parentId = newParentForSource;
-      }
-    }
-
-    const movedTabs = movedRows.filter(r => r._tab).map(r => r._tab);
-
-    // Cross-container: apply pin/unpin BEFORE computing targetIdx, since
-    // pinTab/unpinTab moves the tab in gBrowser.tabs. Our onTabPinned/
-    // onTabUnpinned handlers will route the row to the right container.
-    if (isCrossContainer) {
-      for (const t of movedTabs) {
-        if (tgtPinned && !t.pinned) gBrowser.pinTab(t);
-        else if (!tgtPinned && t.pinned) gBrowser.unpinTab(t);
-      }
-    }
-
-    // Move Firefox tabs via gBrowser.moveTab so our state.panel and Firefox's tab
-    // strip stay aligned. TabMove handlers reorder palefox rows in response.
-    // Groups have no Firefox counterpart; we move them via DOM below.
-    const tabsArr = [...gBrowser.tabs];
-
-    // Compute target index in Firefox's tab list.
-    let targetIdx;
-    if (position === "before") {
-      targetIdx = tabsArr.indexOf(tgtRow._tab);
-    } else {
-      // "child" and "after": insert right after tgt's subtree's last Firefox tab.
-      const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find(r => r._tab)?._tab;
-      targetIdx = (tgtSubtreeTab ? tabsArr.indexOf(tgtSubtreeTab) : tabsArr.indexOf(tgtRow._tab)) + 1;
-    }
-    if (targetIdx < 0) targetIdx = tabsArr.length;
-
-    // Mark every tab we're about to move so TabMove handlers and syncTabRow
-    // skip busy-sync / tree-resync while Firefox's move animation runs.
-    // One final clean resync happens below after all moves settle.
-    for (const t of movedTabs) movingTabs.add(t);
-
-    // moveTabTo each moved tab, adjusting indices as we go so the
-    // group lands contiguously in the right spot.
-    let insertIdx = targetIdx;
-    for (const t of movedTabs) {
-      const currentIdx = [...gBrowser.tabs].indexOf(t);
-      if (currentIdx < 0) continue;
-      if (currentIdx < insertIdx) insertIdx--;
-      if (currentIdx !== insertIdx) gBrowser.moveTabTo(t, { tabIndex: insertIdx });
-      insertIdx++;
-    }
-
-    // Move any groups in the selection via DOM (no Firefox counterpart).
-    const groupRows = movedRows.filter(r => r._group);
-    if (groupRows.length) {
-      if (position === "before") {
-        tgtRow.before(...groupRows);
-      } else {
-        const st = subtreeRows(tgtRow);
-        const anchor = st.filter(r => !movedRows.includes(r));
-        (anchor.length ? anchor[anchor.length - 1] : tgtRow).after(...groupRows);
-      }
-    }
-
-    clearSelection();
-
-    // After the browser has had a frame to settle its move animation (and
-    // any transient `busy` attributes), clear the moving set and do one
-    // clean resync + save. requestAnimationFrame is cheap and reliable.
-    requestAnimationFrame(() => {
-      for (const t of movedTabs) movingTabs.delete(t);
-      // Also explicitly clear any lingering `busy` attribute on our rows
-      // (Firefox may have cleared it on the tab but TabAttrModified for
-      // the back-to-back toggle is unreliable for pending/lazy tabs).
-      for (const t of movedTabs) {
-        const row = rowOf.get(t);
-        if (row) row.toggleAttribute("busy", t.hasAttribute("busy"));
-      }
-      scheduleTreeResync();
-      scheduleSave();
-    });
-  }
 
   function cloneAsChild(tab) {
     const parentRow = rowOf.get(tab);
@@ -2490,6 +2133,13 @@ const pfxLog = createLogger("tabs");
     treeData,
   }));
 
+  // Drag/drop — see ./drag.ts for the typed implementation. We pass tree
+  // helpers + sync callbacks here; drag manages its own private cycle state.
+  const drag = makeDrag({
+    subtreeRows, levelOfRow, dataOf, allRows, treeData, tabById,
+    syncTabRow, clearSelection, scheduleTreeResync, scheduleSave,
+  });
+
   async function loadFromDisk() {
     const parsed = await readTreeFromDisk();
     if (!parsed) return;
@@ -2731,7 +2381,7 @@ const pfxLog = createLogger("tabs");
     state.pinnedContainer = document.createXULElement("hbox");
     state.pinnedContainer.id = "pfx-pinned-container";
     state.pinnedContainer.hidden = true;
-    setupPinnedContainerDrop(state.pinnedContainer);
+    drag.setupPinnedContainerDrop(state.pinnedContainer);
 
     state.panel = document.createXULElement("vbox");
     state.panel.id = "pfx-tab-panel";
@@ -2740,7 +2390,7 @@ const pfxLog = createLogger("tabs");
     state.spacer.id = "pfx-tab-spacer";
     state.spacer.setAttribute("flex", "1");
     state.panel.appendChild(state.spacer);
-    setupPanelDrop(state.panel);
+    drag.setupPanelDrop(state.panel);
 
     positionPanel();
 
