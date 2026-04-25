@@ -1,42 +1,47 @@
-// Legacy port from chrome/JS/palefox-tabs.uc.js — being incrementally split
-// into modules in src/tabs/*.ts. Not @ts-nocheck'd: we lean on tsc to catch
-// unbound references after each refactor pass.
-// split into modules incrementally. The build wraps the file in IIFE; the
-// existing init() bootstrap at the bottom handles delayed startup. Module
-// scope is fine because top-level code below has no `return`s outside of
-// nested functions.
+// Orchestrator for src/tabs/* — wires the typed slice modules together and
+// runs init at delayed-startup-finished. All real work lives in:
+//   log.ts, types.ts, constants.ts          — primitives
+//   state.ts                                — shared mutable state
+//   helpers.ts                              — tree walks + tab metadata
+//   persist.ts                              — file I/O for the tree
+//   drag.ts                                 — drag/drop
+//   rows.ts                                 — row creation + sync
+//   layout.ts                               — panel positioning
+//   menu.ts                                 — context menu
+//   vim.ts                                  — vim mode + row-action commands
+//   events.ts                               — Firefox tab event handlers
+//
+// What stays here:
+//   - sidebarMain lookup + IIFE early-out
+//   - clearSelection / selectRange (small selection helpers)
+//   - buildPanel / buildFromSaved (one-shot DOM scaffolding at init)
+//   - loadFromDisk (orchestrates persist.readTreeFromDisk + applies)
+//   - the factory wiring (drag↔rows↔vim cycle handled with let-bindings)
+//   - init() bootstrap
 
-import { createLogger } from "./log.ts";
-import { INDENT, SAVE_FILE, CHORD_TIMEOUT, CLOSED_MEMORY, PIN_ATTR } from "./constants.ts";
-import type { Row, SavedNode, Tab, TreeData } from "./types.ts";
-import {
-  state,
-  treeOf, rowOf, hzDisplay, savedTabQueue, closedTabs,
-  selection, movingTabs,
-} from "./state.ts";
-import {
-  makeSaver,
-  readTreeFromDisk,
-  type Snapshot,
-} from "./persist.ts";
-import { makeDrag } from "./drag.ts";
 import { buildContextMenu } from "./menu.ts";
-import { makeRows } from "./rows.ts";
-import { makeLayout } from "./layout.ts";
-import { makeVim } from "./vim.ts";
+import { makeDrag } from "./drag.ts";
 import { makeEvents } from "./events.ts";
+import { makeLayout } from "./layout.ts";
+import { makeRows } from "./rows.ts";
+import { makeVim } from "./vim.ts";
 import {
-  SS, tryRegisterPinAttr, pinTabId, readPinnedId,
-  treeData, tabById, parentOfTab, levelOf, levelOfRow, dataOf,
-  allTabs, allRows, hasChildren, subtreeRows, isHorizontal,
-  tabUrl,
+  allRows, allTabs, pinTabId, tabUrl, treeData, tryRegisterPinAttr,
 } from "./helpers.ts";
+import { createLogger } from "./log.ts";
+import { makeSaver, readTreeFromDisk } from "./persist.ts";
+import {
+  closedTabs, rowOf, savedTabQueue, selection, state, treeOf,
+} from "./state.ts";
+import type { Row, SavedNode } from "./types.ts";
+
+declare const document: Document;
+declare const gBrowser: any;
+declare const gBrowserInit: any;
+declare const Services: any;
+declare const window: Window;
 
 const pfxLog = createLogger("tabs");
-
-  // (constants moved to ./constants.ts)
-
-  // --- DOM references ---
 
   // Cast non-null; the early return below validates at runtime. Keeping the
   // type as HTMLElement (instead of HTMLElement | null) means inner functions
@@ -47,34 +52,7 @@ const pfxLog = createLogger("tabs");
   // @ts-expect-error TS1108 — intentional early-out from the IIFE.
   if (!sidebarMain) return;
 
-  // (debug log moved to ./log.ts; pfxLog imported above)
-
-  // --- State ---
-  // (treeOf, rowOf, hzDisplay imported from ./state.ts)
-  // (state.panel, state.spacer, state.pinnedContainer, state.contextTab,
-  //  state.cursor, state.nextTabId all live in the imported `state` object)
-  // (vim chord state, modeline, search/refile, cursor handoff — all in ./vim.ts)
-
-  // (selection and movingTabs imported from ./state.ts)
-
-  // (closedTabs imported from ./state.ts; capped by CLOSED_MEMORY constant)
-
-  // (savedTabQueue imported from ./state.ts — ordered queue of saved-tab nodes
-  // left over from last session's tree file. Session-restore tabs arriving later
-  // via onTabOpen consume entries from this queue.)
-  // (lastLoadedNodes + inSessionRestore moved to state.ts; events.ts and
-  // loadFromDisk both touch them.)
-
-  // Pin a tab's palefox id via SessionStore so it survives browser restart /
-  // undoCloseTab / undoCloseWindow. Lets us match live tabs → saved state
-  // exactly by id, bypassing URL-comparison fragility for pending tabs.
-  // SessionStore.setTabValue/getTabValue aren't exposed on the SessionStore
-  // object we can reach from chrome scripts in this Firefox build. Pin via
-  // a DOM attribute instead — Firefox's SessionStore tracks a small set of
-  // tab attributes via persistTabAttribute. If we can register ours there we
-  // get free cross-session persistence; otherwise this is a no-op and we
-  // rely on URL matching. (PIN_ATTR in ./constants.ts)
-  // --- Selection ---
+  // --- Selection (small enough to stay here; vim + drag both consume) ---
 
   function clearSelection() {
     for (const r of selection) r.removeAttribute("pfx-multi");
