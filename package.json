@@ -8,7 +8,8 @@
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test src/",
     "test:integration": "bun run build && bun run tools/test-driver/runner.ts",
-    "bench:integration": "bun run build && bun run tools/test-driver/bench-runner.ts"
+    "bench:integration": "bun run build && bun run tools/test-driver/bench-runner.ts",
+    "firefox:canary": "bun run tools/firefox-canary.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

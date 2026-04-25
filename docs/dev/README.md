@@ -11,13 +11,17 @@ always-loaded primer; everything in this directory is reference you read
 - [**testing.md**](testing.md) — 4-tier test plan, sprint checklist, and
   the rules for which tier covers which surface. Read end-to-end before
   doing test work.
+- [**firefox-upstream-stability.md**](firefox-upstream-stability.md) —
+  the strategy for surviving Firefox upstream churn: manifest, canary,
+  adapter layer, breakage taxonomy, anti-goals.
 - [**multi-session-architecture.md**](multi-session-architecture.md) —
   SQLite temporal substrate (`history.ts`): event log shape, retention,
   hash dedupe, why JSON was retired, FTS deferred.
 - [**sidebar-design-plan.md**](sidebar-design-plan.md) — why we replaced
   Sidebery with a chrome-context implementation.
-- [**firefox-internals.md**](firefox-internals.md) — Firefox APIs,
-  events, and DOM surfaces palefox depends on. Read before any rewrite.
+- [**firefox-internals.md**](firefox-internals.md) — narrative reference
+  for Firefox APIs, events, and DOM surfaces palefox depends on. Pairs
+  with the structured manifest in firefox-upstream-stability.md.
 
 ### State machines & UX dissertations
 

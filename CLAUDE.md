@@ -122,6 +122,30 @@ The sprint checklist in [docs/dev/testing.md](docs/dev/testing.md) is the
 single tracking source — update it as work lands, don't fork tracking into
 chat or commit messages.
 
+### Firefox upstream stability
+
+Palefox treats Firefox internals as an unstable ABI. Every chrome-API
+dependency we have is enumerated in
+[docs/dev/firefox-upstream-stability.md](docs/dev/firefox-upstream-stability.md)
+and exercised by the canary. Operating rules:
+
+- **New chrome-API calls go through `src/firefox/<adapter>.ts`** —
+  feature code imports typed primitives, never touches `gBrowser` /
+  `Services` / `gURLBar` directly. `src/firefox/tabs.ts` is the
+  reference example. Existing call sites are migrated opportunistically
+  when their containing module is touched; no big-bang rewrites.
+- **Run `bun run firefox:canary` before each release** and after any
+  upstream pull. It diffs the Firefox source files we cite against the
+  pinned revision (`tools/firefox-pin.json`) and tells you exactly
+  which Tier 3 tests to re-run.
+- **When you touch a new chrome API, add it to the manifest** in
+  `tools/firefox-canary.ts`. Stability bucket + source path + symbols +
+  tests + failure mode. Each entry pays for itself the first time
+  Firefox upstream moves it.
+- **Anti-goals** — don't model XPCOM in TypeScript, don't build a
+  per-channel test matrix, don't target Firefox ESR. See the strategy
+  doc for why.
+
 ### Cross-process / new-Firefox-API work — TDD is mandatory
 
 When the change involves the e10s boundary, IPC primitives (frame scripts,
