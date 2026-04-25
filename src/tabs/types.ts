@@ -5,12 +5,75 @@
 // we put into WeakMaps, persist to disk, and pass between our own functions.
 // These start narrow and tighten over time as files get migrated off @ts-nocheck.
 
-/** Native Firefox `<tab>` XUL element. Tracked here as `any` because we touch
- *  many XUL-specific bits (label, pinned, owner, linkedBrowser, _tPos, …) and
- *  modelling all of them is more pain than payoff. Tighten in-place if a
- *  specific access pattern starts surfacing real bugs. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Tab = any;
+/** XPCOM nsIURI — the chrome-side URL primitive. We only reach for `.spec`
+ *  (the canonical string form) but the real interface has `host`, `scheme`,
+ *  `pathQueryRef`, etc. Tighten in-place if a call site needs more. */
+export interface nsIURI {
+  /** Canonical string form (e.g. "https://example.com/path?q=1"). */
+  spec: string;
+}
+
+/** Firefox `<browser>` XUL element — the content-area embed that backs a tab.
+ *  Each Tab points at one via `tab.linkedBrowser`. Models only the bits
+ *  palefox reaches for; the real surface is much wider (printPreviewURL,
+ *  reload, goBack, etc.). */
+export interface FirefoxBrowser extends HTMLElement {
+  /** Live URI for the currently-loaded document. May be `about:blank` for
+   *  pending / lazy-restored tabs — fall back to SessionStore.getTabState
+   *  via tabUrl(). */
+  currentURI: nsIURI;
+}
+
+/** Firefox `<tab>` XUL element (MozTabbrowserTab in browser/tabbrowser/content/tab.js).
+ *  Models only the surface palefox actually touches:
+ *
+ *    - User-facing state:  label, pinned, selected, hidden, multiselected, muted, owner
+ *    - Browser linkage:    linkedBrowser (with currentURI.spec)
+ *    - Identity:           userContextId, tabbrowser
+ *    - Lifecycle:          closing, isOpen, visible
+ *    - DOM:                inherits attribute / event APIs from HTMLElement
+ *
+ *  If you find yourself reaching for something not modeled here, prefer
+ *  adding the property over casting back to `any`. */
+export interface Tab extends HTMLElement {
+  /** Display label — what shows in the tab strip / tab tree row. */
+  label: string;
+  /** True iff the `pinned` attribute is set. */
+  pinned: boolean;
+  /** True iff this tab is the active tab. Mirrors `selected` attribute. */
+  selected: boolean;
+  /** Hidden via tab grouping, container tabs, FirefoxView, etc. Read-only:
+   *  the getter narrows the inherited DOM `hidden` to attribute + group
+   *  visibility. */
+  hidden: boolean;
+  /** True iff `multiselected` attribute set (Cmd/Ctrl+click). */
+  multiselected: boolean;
+  /** True iff `muted` attribute set. */
+  muted: boolean;
+  /** True iff sound is currently playing. */
+  soundPlaying: boolean;
+  /** Firefox container ID (0 = default). */
+  userContextId: number;
+  /** Tab that opened this tab (may be null after the opener closes — Firefox
+   *  uses a WeakRef internally and returns null for collected referents). */
+  owner: Tab | null;
+  /** The `<browser>` element backing this tab's content. */
+  linkedBrowser: FirefoxBrowser;
+  /** Reference to the gBrowser singleton. Kept loose since gBrowser itself
+   *  is `any` until Phase 4 of the type rollout. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tabbrowser: any;
+  /** True while the tab's close animation is running. */
+  closing: boolean;
+  /** isConnected && !closing && != FirefoxViewHandler.tab. */
+  readonly isOpen: boolean;
+  /** isOpen && !hidden && (no group OR visible-in-group). */
+  readonly visible: boolean;
+  /** Wrapping `<tab-split-view-wrapper>`, or null if tab isn't in a split view. */
+  readonly splitview: HTMLElement | null;
+  /** Toggle audio mute. Optional reason string for extension-driven mutes. */
+  toggleMuteAudio(aMuteReason?: string): void;
+}
 
 /** Per-tab tree metadata stored in the `treeOf` WeakMap. */
 export type TreeData = {
