@@ -5,7 +5,8 @@
   "scripts": {
     "build": "bun run build.ts",
     "dev": "bun --watch build.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest"
