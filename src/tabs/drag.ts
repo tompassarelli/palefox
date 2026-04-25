@@ -23,6 +23,7 @@ import {
 import {
   allRows,
   dataOf,
+  levelOf,
   levelOfRow,
   subtreeRows,
   tabById,
@@ -62,6 +63,56 @@ export type DragAPI = {
 // =============================================================================
 // IMPLEMENTATION
 // =============================================================================
+
+/** Find the parentId for a tab being dropped onto a group. Groups can't be
+ *  parents (they're labels, not tabs), so we mirror whatever a sibling tab
+ *  at the same visual level as the group already uses for its parentId.
+ *  Looks forward into the group's subtree first (the existing "tabs in this
+ *  group"), then walks back outside the group. Falls back to null (root). */
+function findGroupContextParent(group: Row): number | null {
+  const groupLevel = group._group?.level ?? 0;
+  // Forward: tabs visually inside the group at the group's level.
+  let next = group.nextElementSibling;
+  while (next && next !== state.spacer) {
+    if (next._tab) {
+      const lv = levelOf(next._tab);
+      if (lv < groupLevel) break;
+      if (lv === groupLevel) return treeData(next._tab).parentId;
+    }
+    next = next.nextElementSibling;
+  }
+  // Backward: tabs above the group at the group's level.
+  let prev = group.previousElementSibling;
+  while (prev) {
+    if (prev._tab && levelOf(prev._tab) === groupLevel) {
+      return treeData(prev._tab).parentId;
+    }
+    prev = prev.previousElementSibling;
+  }
+  return null;
+}
+
+/** Closest preceding tab in DOM. Skips groups. */
+function findClosestTabBefore(row: Row): Tab | null {
+  let prev = row.previousElementSibling;
+  while (prev) {
+    if (prev._tab) return prev._tab;
+    prev = prev.previousElementSibling;
+  }
+  return null;
+}
+
+/** Last tab inside the group's visual subtree, or — if the group has no
+ *  tabs in its subtree — the closest preceding tab before the group. */
+function findLastTabInGroupOrBefore(group: Row): Tab | null {
+  const subtreeTabs = subtreeRows(group)
+    .slice(1) // skip the group row itself
+    .filter(r => r._tab)
+    .map(r => r._tab!);
+  if (subtreeTabs.length) return subtreeTabs[subtreeTabs.length - 1]!;
+  return findClosestTabBefore(group);
+}
+
 
 export function makeDrag(deps: DragDeps): DragAPI {
   const { clearSelection, scheduleTreeResync, scheduleSave } = deps;
@@ -326,12 +377,23 @@ export function makeDrag(deps: DragDeps): DragAPI {
     const newSrcLevel = (position === "child" && !tgtPinned) ? tgtLevel + 1 : tgtLevel;
     const delta = newSrcLevel - srcLevel;
 
-    // Source's new parent: pinned target → null; child → tgt; before/after → tgt's parent.
-    const newParentForSource = tgtPinned
-      ? null
-      : (position === "child"
-          ? (tgtRow._tab ? treeData(tgtRow._tab).id : null)
-          : (tgtRow._tab ? treeData(tgtRow._tab).parentId : null));
+    // Resolve source's new parentId. Three cases:
+    //   - pinned target: null (pinned tabs have no parent in our tree)
+    //   - tab target:    standard child/sibling logic from tgtRow._tab
+    //   - group target:  groups can't be parentIds (they're labels, not tabs).
+    //                    We borrow the parentId of any nearby tab at the same
+    //                    level as the group — that gives us a sibling of the
+    //                    tabs visually "in" the group.
+    let newParentForSource: number | null = null;
+    if (!tgtPinned) {
+      if (tgtRow._tab) {
+        newParentForSource = position === "child"
+          ? treeData(tgtRow._tab).id
+          : treeData(tgtRow._tab).parentId;
+      } else if (tgtRow._group) {
+        newParentForSource = findGroupContextParent(tgtRow);
+      }
+    }
 
     // Update parentId for top-level moved tabs; descendants keep their existing
     // parentId pointers (they follow the source in the subtree).
@@ -367,7 +429,25 @@ export function makeDrag(deps: DragDeps): DragAPI {
 
     // Compute target index in Firefox's tab list.
     let targetIdx: number;
-    if (position === "before") {
+    if (tgtRow._group) {
+      // Group target — anchor is "last tab in group's visual subtree" for
+      // after/child, or "last tab BEFORE the group" for before. If neither
+      // exists, fall back to end of tab list.
+      const anchorTab = position === "before"
+        ? findClosestTabBefore(tgtRow)
+        : findLastTabInGroupOrBefore(tgtRow);
+      if (anchorTab) {
+        targetIdx = tabsArr.indexOf(anchorTab) + 1;
+        if (position === "before" && anchorTab) {
+          // For "before", we still want source landing immediately before the
+          // group — which is right after anchorTab. (If anchorTab has subtree
+          // tabs ending right before the group, this still works because
+          // placeRowInFirefoxOrder anchors against the subtree's last row.)
+        }
+      } else {
+        targetIdx = tabsArr.length;
+      }
+    } else if (position === "before") {
       targetIdx = tabsArr.indexOf(tgtRow._tab!);
     } else {
       // "child" and "after": insert right after tgt's subtree's last Firefox tab.

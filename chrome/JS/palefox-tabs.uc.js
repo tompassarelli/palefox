@@ -452,6 +452,43 @@
   }
 
   // src/tabs/drag.ts
+  function findGroupContextParent(group) {
+    const groupLevel = group._group?.level ?? 0;
+    let next = group.nextElementSibling;
+    while (next && next !== state.spacer) {
+      if (next._tab) {
+        const lv = levelOf(next._tab);
+        if (lv < groupLevel)
+          break;
+        if (lv === groupLevel)
+          return treeData(next._tab).parentId;
+      }
+      next = next.nextElementSibling;
+    }
+    let prev = group.previousElementSibling;
+    while (prev) {
+      if (prev._tab && levelOf(prev._tab) === groupLevel) {
+        return treeData(prev._tab).parentId;
+      }
+      prev = prev.previousElementSibling;
+    }
+    return null;
+  }
+  function findClosestTabBefore(row) {
+    let prev = row.previousElementSibling;
+    while (prev) {
+      if (prev._tab)
+        return prev._tab;
+      prev = prev.previousElementSibling;
+    }
+    return null;
+  }
+  function findLastTabInGroupOrBefore(group) {
+    const subtreeTabs = subtreeRows(group).slice(1).filter((r) => r._tab).map((r) => r._tab);
+    if (subtreeTabs.length)
+      return subtreeTabs[subtreeTabs.length - 1];
+    return findClosestTabBefore(group);
+  }
   function makeDrag(deps) {
     const { clearSelection, scheduleTreeResync, scheduleSave } = deps;
     let dragSource = null;
@@ -680,7 +717,14 @@
       const srcLevel = levelOfRow(movedRows[0]);
       const newSrcLevel = position === "child" && !tgtPinned ? tgtLevel + 1 : tgtLevel;
       const delta = newSrcLevel - srcLevel;
-      const newParentForSource = tgtPinned ? null : position === "child" ? tgtRow._tab ? treeData(tgtRow._tab).id : null : tgtRow._tab ? treeData(tgtRow._tab).parentId : null;
+      let newParentForSource = null;
+      if (!tgtPinned) {
+        if (tgtRow._tab) {
+          newParentForSource = position === "child" ? treeData(tgtRow._tab).id : treeData(tgtRow._tab).parentId;
+        } else if (tgtRow._group) {
+          newParentForSource = findGroupContextParent(tgtRow);
+        }
+      }
       const movedSet = new Set(movedRows);
       for (const r of movedRows) {
         if (!r._tab) {
@@ -705,7 +749,15 @@
       }
       const tabsArr = [...gBrowser.tabs];
       let targetIdx;
-      if (position === "before") {
+      if (tgtRow._group) {
+        const anchorTab = position === "before" ? findClosestTabBefore(tgtRow) : findLastTabInGroupOrBefore(tgtRow);
+        if (anchorTab) {
+          targetIdx = tabsArr.indexOf(anchorTab) + 1;
+          if (position === "before" && anchorTab) {}
+        } else {
+          targetIdx = tabsArr.length;
+        }
+      } else if (position === "before") {
         targetIdx = tabsArr.indexOf(tgtRow._tab);
       } else {
         const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find((r) => r._tab)?._tab;
