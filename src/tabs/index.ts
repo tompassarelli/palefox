@@ -102,7 +102,7 @@ const pfxLog = createLogger("tabs");
       while (state.pinnedContainer.firstChild) state.pinnedContainer.firstChild.remove();
     }
     for (const tab of gBrowser.tabs) {
-      const row = rows.createTabRow(tab);
+      const row = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -112,7 +112,7 @@ const pfxLog = createLogger("tabs");
     if (state.pinnedContainer) {
       state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
 
 
@@ -146,7 +146,7 @@ const pfxLog = createLogger("tabs");
     td.collapsed = !!prior.collapsed;
     pinTabId(tab, td.id);
     pfxLog("applySavedToTab", { id: td.id, parentId: td.parentId, priorId: prior.id, priorParentId: prior.parentId });
-    rows.scheduleTreeResync();
+    Rows.scheduleTreeResync();
   }
 
 
@@ -162,7 +162,7 @@ const pfxLog = createLogger("tabs");
       const idx = [...gBrowser.tabs].indexOf(tab);
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
-      const row = rows.createTabRow(tab);
+      const row = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
         state.pinnedContainer.hidden = false;
@@ -170,7 +170,7 @@ const pfxLog = createLogger("tabs");
         state.panel.insertBefore(row, state.spacer);
       }
       if (pendingCursorMove) { pendingCursorMove = false; setCursor(row); }
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -191,7 +191,7 @@ const pfxLog = createLogger("tabs");
     // Create the row and align its DOM position with Firefox's tab index.
     // For the "root" pref, also ask Firefox to put the tab at the end of the
     // strip; the TabMove it fires re-aligns us there.
-    const row = rows.createTabRow(tab);
+    const row = Rows.createTabRow(tab);
     if (tab.pinned && state.pinnedContainer) {
       state.pinnedContainer.appendChild(row);
       state.pinnedContainer.hidden = false;
@@ -212,7 +212,7 @@ const pfxLog = createLogger("tabs");
       pendingCursorMove = false;
       setCursor(row);
     }
-    rows.scheduleTreeResync();
+    Rows.scheduleTreeResync();
     scheduleSave();
   }
 
@@ -238,13 +238,13 @@ const pfxLog = createLogger("tabs");
           if (levelOf(next._tab) <= myLevel) break;
           if (ntd.parentId === closingId) {
             ntd.parentId = newParentId;
-            rows.syncTabRow(next._tab);
+            Rows.syncTabRow(next._tab);
           }
         } else if (next._group) {
           const gLv = next._group.level || 0;
           if (gLv <= myLevel) break;
           next._group.level = Math.max(0, gLv - 1);
-          rows.syncGroupRow(next);
+          Rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
@@ -253,7 +253,7 @@ const pfxLog = createLogger("tabs");
       row.remove();
     }
     rowOf.delete(tab);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -277,9 +277,9 @@ const pfxLog = createLogger("tabs");
       placeRowInFirefoxOrder(tab, row);
     }
     state.pinnedContainer.hidden = false;
-    rows.syncTabRow(tab);
+    Rows.syncTabRow(tab);
     for (const r of allRows()) syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -295,11 +295,11 @@ const pfxLog = createLogger("tabs");
       state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
-    rows.syncTabRow(tab);
+    Rows.syncTabRow(tab);
     if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
       state.pinnedContainer.hidden = true;
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -350,7 +350,7 @@ const pfxLog = createLogger("tabs");
         td.collapsed = !!correction.collapsed;
         td.appliedSavedState = true;
         pinTabId(tab, td.id);
-        rows.scheduleTreeResync();
+        Rows.scheduleTreeResync();
         scheduleSave();
       }
       return;
@@ -389,9 +389,9 @@ const pfxLog = createLogger("tabs");
           n = n.nextElementSibling;
         }
       }
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -486,10 +486,10 @@ const pfxLog = createLogger("tabs");
     }
     const row = rowOf.get(gBrowser.selectedTab);
     if (row && !state.cursor) row.scrollIntoView({ block: "nearest", inline: "nearest" });
-    if (isHorizontal()) rows.updateHorizontalGrid();
+    if (isHorizontal()) Rows.updateHorizontalGrid();
   }
 
-  function onTabAttrModified(e) { rows.syncTabRow(e.target); }
+  function onTabAttrModified(e) { Rows.syncTabRow(e.target); }
 
   // True iff Firefox considers this tab pinned right now. During pinTab(),
   // the tab is moved into pinnedTabsContainer BEFORE the `pinned` attribute
@@ -554,7 +554,7 @@ const pfxLog = createLogger("tabs");
     const tab = e.target;
     const moved = placeRowInFirefoxOrder(tab, rowOf.get(tab));
     if (moved && !movingTabs.has(tab)) {
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
       scheduleSave();
     }
   }
@@ -628,7 +628,7 @@ const pfxLog = createLogger("tabs");
     expandHzTree(root);
 
     hzExpandedRoot = root;
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
 
   // Move to next/previous level-0 tab (column navigation)
@@ -673,8 +673,8 @@ const pfxLog = createLogger("tabs");
   // --- Tree operations (pure DOM) ---
 
   function syncAnyRow(row) {
-    if (row._tab) rows.syncTabRow(row._tab);
-    else rows.syncGroupRow(row);
+    if (row._tab) Rows.syncTabRow(row._tab);
+    else Rows.syncGroupRow(row);
   }
 
   // Find a tab's previous sibling (nearest preceding tab at same level with
@@ -717,7 +717,7 @@ const pfxLog = createLogger("tabs");
       treeData(row._tab).parentId = treeData(prev).id;
       for (const r of subtreeRows(row)) syncAnyRow(r);
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   // Subtree variant is the same under parentId (descendants follow).
@@ -737,7 +737,7 @@ const pfxLog = createLogger("tabs");
       td.parentId = parent ? treeData(parent).parentId : null;
       for (const r of subtreeRows(row)) syncAnyRow(r);
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   const outdentSubtree = outdentRow;
@@ -748,7 +748,7 @@ const pfxLog = createLogger("tabs");
     if (!td.parentId) return;
     td.parentId = null;
     for (const r of subtreeRows(row)) syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -758,7 +758,7 @@ const pfxLog = createLogger("tabs");
     if (!prev?._tab) return;
     treeData(row._tab).parentId = treeData(prev._tab).id;
     for (const r of subtreeRows(row)) syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -773,7 +773,7 @@ const pfxLog = createLogger("tabs");
     if (levelOfRow(nextRow) !== myLevel) return;
 
     subtreeRows(nextRow).at(-1).after(...rows);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -788,7 +788,7 @@ const pfxLog = createLogger("tabs");
     if (!prev || levelOfRow(prev) !== myLevel) return;
 
     prev.before(...subtreeRows(row));
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
 
@@ -888,7 +888,7 @@ const pfxLog = createLogger("tabs");
     if (isHorizontal() && hzExpandedRoot) {
       collapseHzTree(hzExpandedRoot);
       hzExpandedRoot = null;
-      rows.updateVisibility();
+      Rows.updateVisibility();
     }
 
     updateModeline();
@@ -1105,10 +1105,10 @@ const pfxLog = createLogger("tabs");
           blurPanel();
           gBrowser.selectedBrowser.focus();
         } else {
-          rows.toggleCollapse(state.cursor);
+          Rows.toggleCollapse(state.cursor);
         }
         return true;
-      case "Tab": rows.toggleCollapse(state.cursor); return true;
+      case "Tab": Rows.toggleCollapse(state.cursor); return true;
       case "Escape":
         if (refileSource) { cancelRefile(); return true; }
         return true;
@@ -1159,7 +1159,7 @@ const pfxLog = createLogger("tabs");
         if (rows[i]._tab) gBrowser.removeTab(rows[i]._tab);
         else if (rows[i]._group) rows[i].remove();
       }
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -1179,14 +1179,14 @@ const pfxLog = createLogger("tabs");
         if (lv <= myLevel) break;
         if (next._group) {
           next._group.level = Math.max(0, (next._group.level || 0) - 1);
-          rows.syncGroupRow(next);
+          Rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
       const dying = state.cursor;
       moveCursor(1) || moveCursor(-1);
       dying.remove();
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
     }
   }
@@ -1236,7 +1236,7 @@ const pfxLog = createLogger("tabs");
       case "grp":
       case "folder": {
         const label = args.slice(1).join(" ") || "New Group";
-        const row = rows.createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
+        const row = Rows.createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
         if (state.cursor) {
           // Insert after state.cursor's subtree
           const st = subtreeRows(state.cursor);
@@ -1245,7 +1245,7 @@ const pfxLog = createLogger("tabs");
           state.panel.insertBefore(row, state.spacer);
         }
         setCursor(row);
-        rows.updateVisibility();
+        Rows.updateVisibility();
         scheduleSave();
         modelineMsg(`:group ${label}`);
         break;
@@ -1303,8 +1303,8 @@ const pfxLog = createLogger("tabs");
       const st = subtreeRows(parentRow);
       st[st.length - 1].after(cloneRow);
 
-      rows.syncTabRow(clone);
-      rows.updateVisibility();
+      Rows.syncTabRow(clone);
+      Rows.updateVisibility();
       scheduleSave();
     });
     obs.observe(state.panel, { childList: true });
@@ -1319,10 +1319,10 @@ const pfxLog = createLogger("tabs");
 
   function newGroupAbove() {
     if (!state.cursor) return;
-    const row = rows.createGroupRow("New Group", levelOfRow(state.cursor));
+    const row = Rows.createGroupRow("New Group", levelOfRow(state.cursor));
     state.cursor.before(row);
     setCursor(row);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
     // Auto-start rename
     startRename(row);
@@ -1358,7 +1358,7 @@ const pfxLog = createLogger("tabs");
     tgtSub[tgtSub.length - 1].after(...srcRows);
 
     for (const r of srcRows) syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
 
     const label = srcData.name || (refileSource._tab?.label) || "tab";
@@ -1525,7 +1525,7 @@ const pfxLog = createLogger("tabs");
 
   function clearFilter() {
     for (const row of allRows()) row.hidden = false;
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
 
   // --- Inline rename (works on tab rows AND group rows) ---
@@ -1560,8 +1560,8 @@ const pfxLog = createLogger("tabs");
       }
       input.remove();
       label.hidden = false;
-      if (row._tab) rows.syncTabRow(row._tab);
-      else rows.syncGroupRow(row);
+      if (row._tab) Rows.syncTabRow(row._tab);
+      else Rows.syncGroupRow(row);
       state.panel.focus();
     }
 
@@ -1590,24 +1590,24 @@ const pfxLog = createLogger("tabs");
 
   // Drag and rows are mutually dependent at the typed level — rows needs
   // drag.setupDrag to wire DnD on every row it creates; drag needs
-  // rows.scheduleTreeResync to fire after a drop settles. We break the cycle
+  // Rows.scheduleTreeResync to fire after a drop settles. We break the cycle
   // with a late-bound `rows` reference: drag's scheduleTreeResync is a thunk
   // that resolves rows after construction. The thunk is never called during
   // makeDrag itself, only later at drop-completion time.
-  let rows: import("./rows.ts").RowsAPI;
+  let Rows: import("./rows.ts").RowsAPI;
   const drag = makeDrag({
     clearSelection,
-    scheduleTreeResync: () => rows.scheduleTreeResync(),
+    scheduleTreeResync: () => Rows.scheduleTreeResync(),
     scheduleSave,
   });
-  rows = makeRows({
+  Rows = makeRows({
     setupDrag: drag.setupDrag,
     activateVim, selectRange, clearSelection,
     cloneAsChild, startRename, scheduleSave,
   });
   const layout = makeLayout({
     sidebarMain,
-    rows,
+    rows: Rows,
     syncAnyRow,
   });
 
@@ -1720,10 +1720,10 @@ const pfxLog = createLogger("tabs");
     }
 
     const mkGroup = (g) => {
-      const row = rows.createGroupRow(g.name, g.level || 0);
+      const row = Rows.createGroupRow(g.name, g.level || 0);
       row._group.state = g.state || null;
       row._group.collapsed = !!g.collapsed;
-      rows.syncGroupRow(row);
+      Rows.syncGroupRow(row);
       return row;
     };
 
@@ -1735,7 +1735,7 @@ const pfxLog = createLogger("tabs");
     for (const g of leadingGroups) state.panel.insertBefore(mkGroup(g), state.spacer);
 
     for (const tab of gBrowser.tabs) {
-      const row = rows.createTabRow(tab);
+      const row = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -1750,8 +1750,8 @@ const pfxLog = createLogger("tabs");
     }
 
     loadedNodes = null;
-    rows.scheduleTreeResync();
-    rows.updateVisibility();
+    Rows.scheduleTreeResync();
+    Rows.updateVisibility();
     return true;
   }
 
@@ -1822,7 +1822,7 @@ const pfxLog = createLogger("tabs");
     // Clicking content area blurs the state.panel naturally via the blur listener.
 
     // After any session restore (startup auto-restore or Ctrl+Shift+T manual
-    // restore), fire a final tree resync. rows.scheduleTreeResync() defers via
+    // restore), fire a final tree resync. Rows.scheduleTreeResync() defers via
     // Promise microtask — if Firefox creates session tabs asynchronously across
     // multiple tasks, the per-TabOpen microtask resolves parentId chains before
     // all tabs exist. A resync here guarantees a clean pass once everything
@@ -1832,7 +1832,7 @@ const pfxLog = createLogger("tabs");
       pfxLog("sessionstore-windows-restored", { queueLen: savedTabQueue.length, inSessionRestore: _inSessionRestore });
       savedTabQueue.length = 0;
       _inSessionRestore = false;
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
     };
     Services.obs.addObserver(onSessionRestored, "sessionstore-windows-restored");
 

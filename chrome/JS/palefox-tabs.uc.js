@@ -1198,7 +1198,7 @@
         state.pinnedContainer.firstChild.remove();
     }
     for (const tab of gBrowser.tabs) {
-      const row = rows.createTabRow(tab);
+      const row = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -1208,7 +1208,7 @@
     if (state.pinnedContainer) {
       state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
   function popClosedEntry(url) {
     if (!url)
@@ -1231,7 +1231,7 @@
     td.collapsed = !!prior.collapsed;
     pinTabId(tab, td.id);
     pfxLog("applySavedToTab", { id: td.id, parentId: td.parentId, priorId: prior.id, priorParentId: prior.parentId });
-    rows.scheduleTreeResync();
+    Rows.scheduleTreeResync();
   }
   function onTabOpen(e) {
     const tab = e.target;
@@ -1241,7 +1241,7 @@
       const idx = [...gBrowser.tabs].indexOf(tab);
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
-      const row2 = rows.createTabRow(tab);
+      const row2 = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row2);
         state.pinnedContainer.hidden = false;
@@ -1252,7 +1252,7 @@
         pendingCursorMove = false;
         setCursor(row2);
       }
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -1263,7 +1263,7 @@
     } else if (position === "sibling" && anchor) {
       td.parentId = treeData(anchor).parentId;
     }
-    const row = rows.createTabRow(tab);
+    const row = Rows.createTabRow(tab);
     if (tab.pinned && state.pinnedContainer) {
       state.pinnedContainer.appendChild(row);
       state.pinnedContainer.hidden = false;
@@ -1284,7 +1284,7 @@
       pendingCursorMove = false;
       setCursor(row);
     }
-    rows.scheduleTreeResync();
+    Rows.scheduleTreeResync();
     scheduleSave();
   }
   function onTabClose(e) {
@@ -1304,14 +1304,14 @@
             break;
           if (ntd.parentId === closingId) {
             ntd.parentId = newParentId;
-            rows.syncTabRow(next._tab);
+            Rows.syncTabRow(next._tab);
           }
         } else if (next._group) {
           const gLv = next._group.level || 0;
           if (gLv <= myLevel)
             break;
           next._group.level = Math.max(0, gLv - 1);
-          rows.syncGroupRow(next);
+          Rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
@@ -1320,7 +1320,7 @@
       row.remove();
     }
     rowOf.delete(tab);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function onTabPinned(e) {
@@ -1341,10 +1341,10 @@
       placeRowInFirefoxOrder(tab, row);
     }
     state.pinnedContainer.hidden = false;
-    rows.syncTabRow(tab);
+    Rows.syncTabRow(tab);
     for (const r of allRows())
       syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function onTabUnpinned(e) {
@@ -1357,11 +1357,11 @@
       state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
-    rows.syncTabRow(tab);
+    Rows.syncTabRow(tab);
     if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
       state.pinnedContainer.hidden = true;
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function popSavedByUrl2(url) {
@@ -1396,7 +1396,7 @@
         td2.collapsed = !!correction.collapsed;
         td2.appliedSavedState = true;
         pinTabId(tab, td2.id);
-        rows.scheduleTreeResync();
+        Rows.scheduleTreeResync();
         scheduleSave();
       }
       return;
@@ -1428,9 +1428,9 @@
           n = n.nextElementSibling;
         }
       }
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function placeRestoredRow(row, parent, prevSiblingId) {
@@ -1517,10 +1517,10 @@
     if (row && !state.cursor)
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (isHorizontal())
-      rows.updateHorizontalGrid();
+      Rows.updateHorizontalGrid();
   }
   function onTabAttrModified(e) {
-    rows.syncTabRow(e.target);
+    Rows.syncTabRow(e.target);
   }
   function isFxPinned(tab) {
     if (tab.pinned)
@@ -1586,7 +1586,7 @@
     const tab = e.target;
     const moved = placeRowInFirefoxOrder(tab, rowOf.get(tab));
     if (moved && !movingTabs.has(tab)) {
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
       scheduleSave();
     }
   }
@@ -1646,7 +1646,7 @@
       collapseHzTree(hzExpandedRoot);
     expandHzTree(root);
     hzExpandedRoot = root;
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
   function moveToLevel0(delta) {
     if (!state.cursor)
@@ -1687,9 +1687,9 @@
   }
   function syncAnyRow(row) {
     if (row._tab)
-      rows.syncTabRow(row._tab);
+      Rows.syncTabRow(row._tab);
     else
-      rows.syncGroupRow(row);
+      Rows.syncGroupRow(row);
   }
   function prevSiblingTab(row) {
     if (!row?._tab)
@@ -1730,7 +1730,7 @@
       for (const r of subtreeRows(row))
         syncAnyRow(r);
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function outdentRow(row) {
@@ -1749,7 +1749,7 @@
       for (const r of subtreeRows(row))
         syncAnyRow(r);
     }
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function moveToRoot(row) {
@@ -1761,7 +1761,7 @@
     td.parentId = null;
     for (const r of subtreeRows(row))
       syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function makeChildOfAbove(row) {
@@ -1773,7 +1773,7 @@
     treeData(row._tab).parentId = treeData(prev._tab).id;
     for (const r of subtreeRows(row))
       syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function swapDown(row) {
@@ -1788,7 +1788,7 @@
     if (levelOfRow(nextRow) !== myLevel)
       return;
     subtreeRows(nextRow).at(-1).after(...rows);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   function swapUp(row) {
@@ -1802,7 +1802,7 @@
     if (!prev || levelOfRow(prev) !== myLevel)
       return;
     prev.before(...subtreeRows(row));
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
   }
   var pendingCtrlW = false;
@@ -1883,7 +1883,7 @@
     if (isHorizontal() && hzExpandedRoot) {
       collapseHzTree(hzExpandedRoot);
       hzExpandedRoot = null;
-      rows.updateVisibility();
+      Rows.updateVisibility();
     }
     updateModeline();
   }
@@ -2099,11 +2099,11 @@
           blurPanel();
           gBrowser.selectedBrowser.focus();
         } else {
-          rows.toggleCollapse(state.cursor);
+          Rows.toggleCollapse(state.cursor);
         }
         return true;
       case "Tab":
-        rows.toggleCollapse(state.cursor);
+        Rows.toggleCollapse(state.cursor);
         return true;
       case "Escape":
         if (refileSource) {
@@ -2165,7 +2165,7 @@
         else if (rows[i]._group)
           rows[i].remove();
       }
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
       return;
     }
@@ -2183,14 +2183,14 @@
           break;
         if (next._group) {
           next._group.level = Math.max(0, (next._group.level || 0) - 1);
-          rows.syncGroupRow(next);
+          Rows.syncGroupRow(next);
         }
         next = next.nextElementSibling;
       }
       const dying = state.cursor;
       moveCursor(1) || moveCursor(-1);
       dying.remove();
-      rows.updateVisibility();
+      Rows.updateVisibility();
       scheduleSave();
     }
   }
@@ -2242,7 +2242,7 @@
       case "grp":
       case "folder": {
         const label = args.slice(1).join(" ") || "New Group";
-        const row = rows.createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
+        const row = Rows.createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
         if (state.cursor) {
           const st = subtreeRows(state.cursor);
           st[st.length - 1].after(row);
@@ -2250,7 +2250,7 @@
           state.panel.insertBefore(row, state.spacer);
         }
         setCursor(row);
-        rows.updateVisibility();
+        Rows.updateVisibility();
         scheduleSave();
         modelineMsg(`:group ${label}`);
         break;
@@ -2303,8 +2303,8 @@
       treeData(clone).parentId = parentId;
       const st = subtreeRows(parentRow);
       st[st.length - 1].after(cloneRow);
-      rows.syncTabRow(clone);
-      rows.updateVisibility();
+      Rows.syncTabRow(clone);
+      Rows.updateVisibility();
       scheduleSave();
     });
     obs.observe(state.panel, { childList: true });
@@ -2335,7 +2335,7 @@
     tgtSub[tgtSub.length - 1].after(...srcRows);
     for (const r of srcRows)
       syncAnyRow(r);
-    rows.updateVisibility();
+    Rows.updateVisibility();
     scheduleSave();
     const label = srcData.name || refileSource._tab?.label || "tab";
     const tgtLabel = tgtData.name || target._tab?.label || "tab";
@@ -2490,7 +2490,7 @@
   function clearFilter() {
     for (const row of allRows())
       row.hidden = false;
-    rows.updateVisibility();
+    Rows.updateVisibility();
   }
   function startRename(row) {
     if (!row)
@@ -2523,9 +2523,9 @@
       input.remove();
       label.hidden = false;
       if (row._tab)
-        rows.syncTabRow(row._tab);
+        Rows.syncTabRow(row._tab);
       else
-        rows.syncGroupRow(row);
+        Rows.syncGroupRow(row);
       state.panel.focus();
     }
     input.addEventListener("keydown", (e) => {
@@ -2552,13 +2552,13 @@
     tabUrl,
     treeData
   }));
-  var rows;
+  var Rows;
   var drag = makeDrag({
     clearSelection,
-    scheduleTreeResync: () => rows.scheduleTreeResync(),
+    scheduleTreeResync: () => Rows.scheduleTreeResync(),
     scheduleSave
   });
-  rows = makeRows({
+  Rows = makeRows({
     setupDrag: drag.setupDrag,
     activateVim,
     selectRange,
@@ -2569,7 +2569,7 @@
   });
   var layout = makeLayout({
     sidebarMain,
-    rows,
+    rows: Rows,
     syncAnyRow
   });
   async function loadFromDisk() {
@@ -2658,10 +2658,10 @@
       }
     }
     const mkGroup = (g) => {
-      const row = rows.createGroupRow(g.name, g.level || 0);
+      const row = Rows.createGroupRow(g.name, g.level || 0);
       row._group.state = g.state || null;
       row._group.collapsed = !!g.collapsed;
-      rows.syncGroupRow(row);
+      Rows.syncGroupRow(row);
       return row;
     };
     while (state.panel.firstChild !== state.spacer)
@@ -2673,7 +2673,7 @@
     for (const g of leadingGroups)
       state.panel.insertBefore(mkGroup(g), state.spacer);
     for (const tab of gBrowser.tabs) {
-      const row = rows.createTabRow(tab);
+      const row = Rows.createTabRow(tab);
       if (tab.pinned && state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
       } else {
@@ -2689,8 +2689,8 @@
       state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
     loadedNodes = null;
-    rows.scheduleTreeResync();
-    rows.updateVisibility();
+    Rows.scheduleTreeResync();
+    Rows.updateVisibility();
     return true;
   }
   async function init() {
@@ -2742,16 +2742,16 @@
     tc.addEventListener("TabPinned", onTabPinned);
     tc.addEventListener("TabUnpinned", onTabUnpinned);
     state.spacer.addEventListener("click", () => {
-      const rows2 = allRows().filter((r) => !r.hidden);
-      if (rows2.length)
-        activateVim(rows2[rows2.length - 1]);
+      const rows = allRows().filter((r) => !r.hidden);
+      if (rows.length)
+        activateVim(rows[rows.length - 1]);
     });
     const onSessionRestored = () => {
       console.log("palefox-tabs: sessionstore-windows-restored — final tree resync");
       pfxLog("sessionstore-windows-restored", { queueLen: savedTabQueue.length, inSessionRestore: _inSessionRestore });
       savedTabQueue.length = 0;
       _inSessionRestore = false;
-      rows.scheduleTreeResync();
+      Rows.scheduleTreeResync();
     };
     Services.obs.addObserver(onSessionRestored, "sessionstore-windows-restored");
     const onManualRestore = () => {
