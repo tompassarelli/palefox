@@ -10,6 +10,30 @@
 
 import type { Row, SavedNode, Tab, TreeData } from "./types.ts";
 
+// --- Mutable singletons (set in init, read everywhere) ---
+
+/** Shared, mutable singletons for the tabs subsystem. Fields are written from
+ *  init() (DOM refs) or from event/menu handlers (cursor/contextTab/nextTabId).
+ *  Readers see updates because object property reads aren't bindings.
+ *
+ *  Grow this object only when a typed module needs to share writes — single-
+ *  module mutables stay local. */
+export const state: {
+  panel: HTMLElement | null;
+  spacer: HTMLElement | null;
+  pinnedContainer: HTMLElement | null;
+  contextTab: Tab | null;
+  cursor: Row | null;
+  nextTabId: number;
+} = {
+  panel: null,
+  spacer: null,
+  pinnedContainer: null,
+  contextTab: null,
+  cursor: null,
+  nextTabId: 1,
+};
+
 // --- Tab metadata, keyed by native Firefox tab ---
 
 /** Per-tab tree metadata. Set on first treeData(tab) call; mutated by event

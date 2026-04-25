@@ -8,6 +8,7 @@
 import { createLogger } from "./log.ts";
 import { INDENT, SAVE_FILE, CHORD_TIMEOUT, CLOSED_MEMORY, PIN_ATTR } from "./constants.ts";
 import {
+  state,
   treeOf, rowOf, hzDisplay, savedTabQueue, closedTabs,
 } from "./state.ts";
 import {
@@ -48,14 +49,14 @@ const pfxLog = createLogger("tabs");
 
   // --- State ---
   // (treeOf, rowOf, hzDisplay imported from ./state.ts)
-  let panel, spacer, pinnedContainer, contextTab;
+  // (state.panel, state.spacer, state.pinnedContainer, state.contextTab,
+  //  state.cursor, state.nextTabId all live in the imported `state` object)
   let groupCounter = 0;
 
   // Vim mode
-  let cursor = null;                // row with vim cursor
   let chord = null;                 // pending chord key ("d", "g")
   let chordTimer = 0;
-  let pendingCursorMove = false;    // move cursor to next new tab row
+  let pendingCursorMove = false;    // move state.cursor to next new tab row
 
   // Multi-select
   const selection = new Set();      // rows in the current selection
@@ -75,8 +76,6 @@ const pfxLog = createLogger("tabs");
   // via onTabOpen consume entries from this queue.)
   let _lastLoadedNodes = [];   // snapshot of last load's tabNodes; consumed by onManualRestore
   let _inSessionRestore = true;
-
-  let nextTabId = 1;
 
   // Pin a tab's palefox id via SessionStore so it survives browser restart /
   // undoCloseTab / undoCloseWindow. Lets us match live tabs → saved state
@@ -108,12 +107,12 @@ const pfxLog = createLogger("tabs");
     if (!treeOf.has(tab)) {
       let id = readPinnedId(tab);
       if (id) {
-        if (id >= nextTabId) nextTabId = id + 1;
-        pfxLog("treeData:pfxId", { pfxId: id, label: tab.label, nextTabId });
+        if (id >= state.nextTabId) state.nextTabId = id + 1;
+        pfxLog("treeData:pfxId", { pfxId: id, label: tab.label, nextTabId: state.nextTabId });
       } else {
-        id = nextTabId++;
+        id = state.nextTabId++;
         pinTabId(tab, id);
-        pfxLog("treeData:fresh", { id, label: tab.label, nextTabId });
+        pfxLog("treeData:fresh", { id, label: tab.label, nextTabId: state.nextTabId });
       }
       treeOf.set(tab, {
         id, parentId: null, name: null, state: null, collapsed: false,
@@ -171,13 +170,13 @@ const pfxLog = createLogger("tabs");
 
   // --- Helpers ---
 
-  function isHorizontal() { return panel?.hasAttribute("pfx-horizontal"); }
+  function isHorizontal() { return state.panel?.hasAttribute("pfx-horizontal"); }
 
   function allTabs() { return [...gBrowser.tabs]; }
 
   // All rows (tabs + groups) in visual order
   function allRows() {
-    const pinned = pinnedContainer
+    const pinned = state.pinnedContainer
       ? [...pinnedContainer.querySelectorAll(".pfx-tab-row")]
       : [];
     return [...pinned, ...panel.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
@@ -185,7 +184,7 @@ const pfxLog = createLogger("tabs");
 
   function hasChildren(row) {
     const next = row.nextElementSibling;
-    if (!next || next === spacer) return false;
+    if (!next || next === state.spacer) return false;
     return levelOfRow(next) > levelOfRow(row);
   }
 
@@ -196,7 +195,7 @@ const pfxLog = createLogger("tabs");
     const lv = levelOfRow(row);
     const out = [row];
     let next = row.nextElementSibling;
-    while (next && next !== spacer) {
+    while (next && next !== state.spacer) {
       if (levelOfRow(next) <= lv) break;
       out.push(next);
       next = next.nextElementSibling;
@@ -212,7 +211,7 @@ const pfxLog = createLogger("tabs");
   }
 
   function selectRange(toRow) {
-    const fromRow = cursor || rowOf.get(gBrowser.selectedTab);
+    const fromRow = state.cursor || rowOf.get(gBrowser.selectedTab);
     if (!fromRow) return;
     const rows = allRows().filter(r => !r.hidden);
     const fromIdx = rows.indexOf(fromRow);
@@ -277,7 +276,7 @@ const pfxLog = createLogger("tabs");
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      contextTab = tab;
+      state.contextTab = tab;
       document.getElementById("pfx-tab-menu")
         ?.openPopupAtScreen(e.screenX, e.screenY, true);
     });
@@ -401,7 +400,7 @@ const pfxLog = createLogger("tabs");
   // Child rows (grid-row > 1) pop out below the tab bar via overflow:visible.
   // Panel height is pinned to row 1 so children overlay content.
   function updateHorizontalGrid() {
-    if (!isHorizontal() || !panel) return;
+    if (!isHorizontal() || !state.panel) return;
     let col = 0;
     let rowInCol = 0;
     let selectedCol = 0;
@@ -431,23 +430,23 @@ const pfxLog = createLogger("tabs");
       for (let i = 1; i <= col; i++) {
         tracks.push(i === selectedCol ? "minmax(200px, 200px)" : "minmax(0, 200px)");
       }
-      panel.style.gridTemplateColumns = tracks.join(" ");
+      state.panel.style.gridTemplateColumns = tracks.join(" ");
     } else {
-      panel.style.gridTemplateColumns = "";
+      state.panel.style.gridTemplateColumns = "";
     }
-    // Pin panel height to first row so children overlay instead of expanding
+    // Pin state.panel height to first row so children overlay instead of expanding
     requestAnimationFrame(() => {
-      if (!isHorizontal() || !panel) return;
-      const firstRow = panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
+      if (!isHorizontal() || !state.panel) return;
+      const firstRow = state.panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
       if (firstRow) {
-        panel.style.maxHeight = (firstRow.offsetHeight + 2) + "px";
+        state.panel.style.maxHeight = (firstRow.offsetHeight + 2) + "px";
       }
     });
   }
 
   function clearHorizontalGrid() {
-    if (!panel) return;
-    panel.style.maxHeight = "";
+    if (!state.panel) return;
+    state.panel.style.maxHeight = "";
     for (const row of allRows()) {
       row.style.gridColumn = "";
       row.style.gridRow = "";
@@ -458,21 +457,21 @@ const pfxLog = createLogger("tabs");
   // --- Panel management ---
 
   function buildPanel() {
-    if (!panel) return;
-    while (panel.firstChild !== spacer) panel.firstChild.remove();
-    if (pinnedContainer) {
-      while (pinnedContainer.firstChild) pinnedContainer.firstChild.remove();
+    if (!state.panel) return;
+    while (state.panel.firstChild !== state.spacer) state.panel.firstChild.remove();
+    if (state.pinnedContainer) {
+      while (state.pinnedContainer.firstChild) state.pinnedContainer.firstChild.remove();
     }
     for (const tab of gBrowser.tabs) {
       const row = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row);
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row);
       } else {
-        panel.insertBefore(row, spacer);
+        state.panel.insertBefore(row, state.spacer);
       }
     }
-    if (pinnedContainer) {
-      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
+    if (state.pinnedContainer) {
+      state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
     updateVisibility();
   }
@@ -567,11 +566,11 @@ const pfxLog = createLogger("tabs");
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
       const row = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row);
-        pinnedContainer.hidden = false;
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row);
+        state.pinnedContainer.hidden = false;
       } else {
-        panel.insertBefore(row, spacer);
+        state.panel.insertBefore(row, state.spacer);
       }
       if (pendingCursorMove) { pendingCursorMove = false; setCursor(row); }
       updateVisibility();
@@ -596,11 +595,11 @@ const pfxLog = createLogger("tabs");
     // For the "root" pref, also ask Firefox to put the tab at the end of the
     // strip; the TabMove it fires re-aligns us there.
     const row = createTabRow(tab);
-    if (tab.pinned && pinnedContainer) {
-      pinnedContainer.appendChild(row);
-      pinnedContainer.hidden = false;
+    if (tab.pinned && state.pinnedContainer) {
+      state.pinnedContainer.appendChild(row);
+      state.pinnedContainer.hidden = false;
     } else {
-      panel.insertBefore(row, spacer);
+      state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
 
@@ -627,7 +626,7 @@ const pfxLog = createLogger("tabs");
     if (row) {
       const td = dataOf(row);
 
-      // Snapshot identity + parent before we mutate the panel, so we can restore on reopen.
+      // Snapshot identity + parent before we mutate the state.panel, so we can restore on reopen.
       rememberClosedTab(tab, td);
 
       // Reparent direct children to the closing tab's parent (promote one level).
@@ -636,7 +635,7 @@ const pfxLog = createLogger("tabs");
       const newParentId = td?.parentId ?? null;
       const myLevel = levelOf(tab);
       let next = row.nextElementSibling;
-      while (next && next !== spacer) {
+      while (next && next !== state.spacer) {
         if (next._tab) {
           const ntd = treeData(next._tab);
           if (levelOf(next._tab) <= myLevel) break;
@@ -653,7 +652,7 @@ const pfxLog = createLogger("tabs");
         next = next.nextElementSibling;
       }
 
-      if (cursor === row) moveCursor(1) || moveCursor(-1);
+      if (state.cursor === row) moveCursor(1) || moveCursor(-1);
       row.remove();
     }
     rowOf.delete(tab);
@@ -664,7 +663,7 @@ const pfxLog = createLogger("tabs");
   function onTabPinned(e) {
     const tab = e.target;
     const row = rowOf.get(tab);
-    if (!row || !pinnedContainer) return;
+    if (!row || !state.pinnedContainer) return;
     const td = treeData(tab);
     const pinnedId = td.id;
     td.parentId = null;
@@ -674,13 +673,13 @@ const pfxLog = createLogger("tabs");
     }
     row.removeAttribute("style");
     // TabMove fires before TabPinned (during pinTab) and may have already
-    // routed the row to pinnedContainer at the right position. Only fix up
+    // routed the row to state.pinnedContainer at the right position. Only fix up
     // if needed.
-    if (row.parentNode !== pinnedContainer) {
-      pinnedContainer.appendChild(row);
+    if (row.parentNode !== state.pinnedContainer) {
+      state.pinnedContainer.appendChild(row);
       placeRowInFirefoxOrder(tab, row);
     }
-    pinnedContainer.hidden = false;
+    state.pinnedContainer.hidden = false;
     syncTabRow(tab);
     for (const r of allRows()) syncAnyRow(r);
     updateVisibility();
@@ -693,15 +692,15 @@ const pfxLog = createLogger("tabs");
     if (!row) return;
     row.draggable = true;
     // TabMove fires before TabUnpinned and (with the pinned-aware
-    // placeRowInFirefoxOrder) already placed the row in panel. Catch the
-    // case where the row is somehow still in pinnedContainer.
-    if (row.parentNode !== panel) {
-      panel.insertBefore(row, spacer);
+    // placeRowInFirefoxOrder) already placed the row in state.panel. Catch the
+    // case where the row is somehow still in state.pinnedContainer.
+    if (row.parentNode !== state.panel) {
+      state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
     syncTabRow(tab);
-    if (!pinnedContainer.querySelector(".pfx-tab-row")) {
-      pinnedContainer.hidden = true;
+    if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+      state.pinnedContainer.hidden = true;
     }
     updateVisibility();
     scheduleSave();
@@ -783,7 +782,7 @@ const pfxLog = createLogger("tabs");
         const expected = new Set(entry.descendantIds);
         const oldParentId = entry.parentId ?? null;
         let n = row.nextElementSibling;
-        while (n && n !== spacer) {
+        while (n && n !== state.spacer) {
           if (!n._tab) break;
           const ntd = treeData(n._tab);
           if (!expected.has(ntd.id)) break;
@@ -801,7 +800,7 @@ const pfxLog = createLogger("tabs");
 
   // Position a restored row: after its original prev sibling (if that sibling
   // still exists under the same parent), else as first child of the parent /
-  // top of the root, else at end of the parent's subtree / end of the panel.
+  // top of the root, else at end of the parent's subtree / end of the state.panel.
   function placeRestoredRow(row, parent, prevSiblingId) {
     const parentRow = parent ? rowOf.get(parent) : null;
 
@@ -821,16 +820,16 @@ const pfxLog = createLogger("tabs");
     } else {
       // Was the first child / first root: insert at the top of its level
       if (parentRow) { parentRow.after(row); return; }
-      panel.insertBefore(row, panel.firstChild);
+      state.panel.insertBefore(row, state.panel.firstChild);
       return;
     }
 
-    // Fallback: append to end of parent's subtree, or end of panel
+    // Fallback: append to end of parent's subtree, or end of state.panel
     if (parentRow) {
       const st = subtreeRows(parentRow);
       st[st.length - 1].after(row);
     } else {
-      panel.insertBefore(row, spacer);
+      state.panel.insertBefore(row, state.spacer);
     }
   }
 
@@ -861,7 +860,7 @@ const pfxLog = createLogger("tabs");
     // onTabClose promotes these one level up; we'll re-demote on restore.
     const descendantIds = [];
     let n = row.nextElementSibling;
-    while (n && n !== spacer) {
+    while (n && n !== state.spacer) {
       if (n._tab) {
         const lvl = levelOf(n._tab);
         if (lvl <= myLevel) break;
@@ -889,7 +888,7 @@ const pfxLog = createLogger("tabs");
       if (row) row.toggleAttribute("selected", tab.selected);
     }
     const row = rowOf.get(gBrowser.selectedTab);
-    if (row && !cursor) row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (row && !state.cursor) row.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (isHorizontal()) updateHorizontalGrid();
   }
 
@@ -907,18 +906,18 @@ const pfxLog = createLogger("tabs");
   }
 
   // Move a row to the DOM position matching the tab's index in gBrowser.tabs.
-  // Pinned and unpinned tabs live in separate containers (pinnedContainer
-  // vs panel), so we anchor only against same-pinned-state siblings.
+  // Pinned and unpinned tabs live in separate containers (state.pinnedContainer
+  // vs state.panel), so we anchor only against same-pinned-state siblings.
   // Returns true if the row was moved; false if already in place.
   function placeRowInFirefoxOrder(tab, row) {
-    if (!row || !panel) return false;
+    if (!row || !state.panel) return false;
     const tabsArr = [...gBrowser.tabs];
     const myIdx = tabsArr.indexOf(tab);
     if (myIdx < 0) return false;
 
-    // Pinned tabs: reorder within pinnedContainer.
+    // Pinned tabs: reorder within state.pinnedContainer.
     if (isFxPinned(tab)) {
-      if (!pinnedContainer) return false;
+      if (!state.pinnedContainer) return false;
       let prevTab = null;
       for (let i = myIdx - 1; i >= 0; i--) {
         if (isFxPinned(tabsArr[i])) { prevTab = tabsArr[i]; break; }
@@ -927,13 +926,13 @@ const pfxLog = createLogger("tabs");
         const prevRow = rowOf.get(prevTab);
         if (!prevRow || prevRow === row) return false;
         if (prevRow.nextElementSibling !== row) { prevRow.after(row); return true; }
-      } else if (pinnedContainer.firstChild !== row) {
-        pinnedContainer.insertBefore(row, pinnedContainer.firstChild); return true;
+      } else if (state.pinnedContainer.firstChild !== row) {
+        state.pinnedContainer.insertBefore(row, state.pinnedContainer.firstChild); return true;
       }
       return false;
     }
 
-    // Unpinned tabs: place in panel, skipping pinned tabs as anchors.
+    // Unpinned tabs: place in state.panel, skipping pinned tabs as anchors.
     let prevTab = null;
     for (let i = myIdx - 1; i >= 0; i--) {
       if (!isFxPinned(tabsArr[i])) { prevTab = tabsArr[i]; break; }
@@ -944,13 +943,13 @@ const pfxLog = createLogger("tabs");
       const prevSubtree = subtreeRows(prevRow);
       const anchor = prevSubtree[prevSubtree.length - 1];
       if (anchor.nextElementSibling !== row) { anchor.after(row); return true; }
-    } else if (panel.firstChild !== row) {
-      panel.insertBefore(row, panel.firstChild); return true;
+    } else if (state.panel.firstChild !== row) {
+      state.panel.insertBefore(row, state.panel.firstChild); return true;
     }
     return false;
   }
 
-  // Whenever Firefox reorders a tab, keep the palefox panel in sync.
+  // Whenever Firefox reorders a tab, keep the palefox state.panel in sync.
   // If palefox itself initiated the move (tab is in `movingTabs`), we still
   // align the DOM row, but defer resync + save to the end-of-batch cleanup
   // in executeDrop so we don't re-render during Firefox's busy animation.
@@ -963,14 +962,14 @@ const pfxLog = createLogger("tabs");
     }
   }
 
-  // --- Vim cursor ---
+  // --- Vim state.cursor ---
 
   // Track which tree is expanded in horizontal mode
   let hzExpandedRoot = null;
 
   function setCursor(row) {
-    if (cursor) cursor.removeAttribute("pfx-cursor");
-    cursor = row;
+    if (state.cursor) state.cursor.removeAttribute("pfx-cursor");
+    state.cursor = row;
     if (row) {
       row.setAttribute("pfx-cursor", "true");
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1008,17 +1007,17 @@ const pfxLog = createLogger("tabs");
     }
   }
 
-  // Auto-expand the cursor's tree, collapse the previous one.
+  // Auto-expand the state.cursor's tree, collapse the previous one.
   // On collapse, the root shows the last selected tab's visuals.
   function collapseHzTree(root) {
     const d = dataOf(root);
     if (!d || !hasChildren(root)) return;
 
     // Set display override: show the selected tab's visuals on the root
-    if (cursor && cursor._tab && cursor !== root) {
-      const curRoot = treeRoot(cursor);
+    if (state.cursor && state.cursor._tab && state.cursor !== root) {
+      const curRoot = treeRoot(state.cursor);
       if (curRoot === root) {
-        hzDisplay.set(root, cursor._tab);
+        hzDisplay.set(root, state.cursor._tab);
       }
     }
 
@@ -1040,8 +1039,8 @@ const pfxLog = createLogger("tabs");
   }
 
   function updateHorizontalExpansion() {
-    if (!cursor) return;
-    const root = treeRoot(cursor);
+    if (!state.cursor) return;
+    const root = treeRoot(state.cursor);
     if (root === hzExpandedRoot) return;
 
     // Collapse previous tree
@@ -1056,9 +1055,9 @@ const pfxLog = createLogger("tabs");
 
   // Move to next/previous level-0 tab (column navigation)
   function moveToLevel0(delta) {
-    if (!cursor) return false;
+    if (!state.cursor) return false;
     const rows = allRows();
-    const curIdx = rows.indexOf(cursor);
+    const curIdx = rows.indexOf(state.cursor);
     if (curIdx < 0) return false;
     const step = delta > 0 ? 1 : -1;
     for (let i = curIdx + step; i >= 0 && i < rows.length; i += step) {
@@ -1076,16 +1075,16 @@ const pfxLog = createLogger("tabs");
     setCursor(row);
   }
 
-  // Move cursor by delta (+1 = down, -1 = up). Skips hidden rows.
-  // Also selects the tab if the cursor lands on a tab row.
+  // Move state.cursor by delta (+1 = down, -1 = up). Skips hidden rows.
+  // Also selects the tab if the state.cursor lands on a tab row.
   // Returns true if moved.
   function moveCursor(delta) {
-    if (!cursor) return false;
-    let row = delta > 0 ? cursor.nextElementSibling : cursor.previousElementSibling;
-    while (row && (row.hidden || row === spacer)) {
+    if (!state.cursor) return false;
+    let row = delta > 0 ? state.cursor.nextElementSibling : state.cursor.previousElementSibling;
+    while (row && (row.hidden || row === state.spacer)) {
       row = delta > 0 ? row.nextElementSibling : row.previousElementSibling;
     }
-    if (row && row !== spacer) {
+    if (row && row !== state.spacer) {
       setCursor(row);
       if (row._tab) gBrowser.selectedTab = row._tab;
       return true;
@@ -1192,7 +1191,7 @@ const pfxLog = createLogger("tabs");
     const rows = subtreeRows(row);
     const lastRow = rows[rows.length - 1];
     const nextRow = lastRow.nextElementSibling;
-    if (!nextRow || nextRow === spacer) return;
+    if (!nextRow || nextRow === state.spacer) return;
     if (levelOfRow(nextRow) !== myLevel) return;
 
     subtreeRows(nextRow).at(-1).after(...rows);
@@ -1227,7 +1226,7 @@ const pfxLog = createLogger("tabs");
 
   // --- Key gate ---
   //
-  // Keys are only intercepted when the tab panel has focus.
+  // Keys are only intercepted when the tab state.panel has focus.
   // Everything else (content, urlbar, chrome inputs) is untouched.
 
   let pendingCtrlW = false;
@@ -1301,8 +1300,8 @@ const pfxLog = createLogger("tabs");
 
   function focusPanel() {
     panelActive = true;
-    panel.focus();
-    if (!cursor) {
+    state.panel.focus();
+    if (!state.cursor) {
       const row = rowOf.get(gBrowser.selectedTab);
       if (row) setCursor(row);
     }
@@ -1316,7 +1315,7 @@ const pfxLog = createLogger("tabs");
     pendingSpace = false;
     clearTimeout(chordTimer);
 
-    // Collapse horizontal popout when leaving tab panel
+    // Collapse horizontal popout when leaving tab state.panel
     if (isHorizontal() && hzExpandedRoot) {
       collapseHzTree(hzExpandedRoot);
       hzExpandedRoot = null;
@@ -1327,7 +1326,7 @@ const pfxLog = createLogger("tabs");
   }
 
   function setupVimKeys() {
-    panel.setAttribute("tabindex", "0");
+    state.panel.setAttribute("tabindex", "0");
 
     // Capture-phase on document. Uses a boolean flag instead of
     // document.activeElement because Firefox steals focus to the
@@ -1337,7 +1336,7 @@ const pfxLog = createLogger("tabs");
 
       // Auto-deactivate if focus moved to an input (urlbar, findbar, etc.)
       const active = document.activeElement;
-      if (active && active !== panel &&
+      if (active && active !== state.panel &&
           (active.tagName === "INPUT" || active.tagName === "input" ||
            active.tagName === "TEXTAREA" || active.tagName === "textarea" ||
            active.isContentEditable ||
@@ -1364,7 +1363,7 @@ const pfxLog = createLogger("tabs");
         e.stopImmediatePropagation();
         updateModeline();
       } else if (e.key.length === 1) {
-        // Unbound key — deactivate panel
+        // Unbound key — deactivate state.panel
         blurPanel();
         // Plain key (no modifier): focus content for vimium etc.
         // Modifier combo (Ctrl+L, Ctrl+T): let Firefox handle natively
@@ -1374,7 +1373,7 @@ const pfxLog = createLogger("tabs");
       }
     }, true);
 
-    // Clicking content area deactivates panel
+    // Clicking content area deactivates state.panel
     gBrowser.tabpanels.addEventListener("mousedown", () => {
       if (panelActive) blurPanel();
     });
@@ -1395,8 +1394,8 @@ const pfxLog = createLogger("tabs");
   function paneSwitch(key) {
     switch (key) {
       case "h": case "H": // focus sidebar
-        panel.focus();
-        if (!cursor) {
+        state.panel.focus();
+        if (!state.cursor) {
           const r = rowOf.get(gBrowser.selectedTab);
           if (r) setCursor(r);
         }
@@ -1405,11 +1404,11 @@ const pfxLog = createLogger("tabs");
         focusContent();
         return;
       case "w": // toggle
-        if (document.activeElement === panel) {
+        if (document.activeElement === state.panel) {
           focusContent();
         } else {
-          panel.focus();
-          if (!cursor) {
+          state.panel.focus();
+          if (!state.cursor) {
             const r = rowOf.get(gBrowser.selectedTab);
             if (r) setCursor(r);
           }
@@ -1473,40 +1472,40 @@ const pfxLog = createLogger("tabs");
       return true;
     }
 
-    // --- i → focus content, deactivate panel ---
+    // --- i → focus content, deactivate state.panel ---
     if (e.key === "i") { blurPanel(); gBrowser.selectedBrowser.focus(); return true; }
 
     // --- Alt combos: same in both modes ---
     // Alt+h/Left = move to root, Alt+l/Right = make child of above
     // Alt+j/Down = swap down, Alt+k/Up = swap up
     if (e.altKey && (e.key === "h" || e.code === "KeyH" || e.key === "ArrowLeft")) {
-      if (cursor) moveToRoot(cursor);
+      if (state.cursor) moveToRoot(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "l" || e.code === "KeyL" || e.key === "ArrowRight")) {
-      if (cursor) makeChildOfAbove(cursor);
+      if (state.cursor) makeChildOfAbove(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "j" || e.code === "KeyJ" || e.key === "ArrowDown")) {
-      if (cursor) swapDown(cursor);
+      if (state.cursor) swapDown(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "k" || e.code === "KeyK" || e.key === "ArrowUp")) {
-      if (cursor) swapUp(cursor);
+      if (state.cursor) swapUp(state.cursor);
       return true;
     }
 
-    // --- Plain keys (need cursor) ---
-    if (!cursor) {
+    // --- Plain keys (need state.cursor) ---
+    if (!state.cursor) {
       if ("jklhG/rnNx".includes(e.key)) {
         const row = rowOf.get(gBrowser.selectedTab);
         if (row) setCursor(row);
       }
-      if (!cursor) return false;
+      if (!state.cursor) return false;
     }
 
     // Navigation keys (only without Ctrl/Meta modifiers)
-    // Vertical: j/k = move cursor, h/l = outdent/indent
+    // Vertical: j/k = move state.cursor, h/l = outdent/indent
     // Horizontal: h/l = move between columns, j/k = move within tree
     if (!e.ctrlKey && !e.metaKey) {
       if (isHorizontal()) {
@@ -1520,8 +1519,8 @@ const pfxLog = createLogger("tabs");
         switch (e.key) {
           case "j": case "ArrowDown": moveCursor(1); return true;
           case "k": case "ArrowUp": moveCursor(-1); return true;
-          case "h": case "ArrowLeft": outdentRow(cursor); return true;
-          case "l": case "ArrowRight": indentRow(cursor); return true;
+          case "h": case "ArrowLeft": outdentRow(state.cursor); return true;
+          case "l": case "ArrowRight": indentRow(state.cursor); return true;
         }
       }
     }
@@ -1529,24 +1528,24 @@ const pfxLog = createLogger("tabs");
     switch (e.key) {
       case "Enter":
         if (refileSource) {
-          executeRefile(cursor);
+          executeRefile(state.cursor);
           return true;
         }
-        if (cursor._tab) {
-          gBrowser.selectedTab = cursor._tab;
+        if (state.cursor._tab) {
+          gBrowser.selectedTab = state.cursor._tab;
           blurPanel();
           gBrowser.selectedBrowser.focus();
         } else {
-          toggleCollapse(cursor);
+          toggleCollapse(state.cursor);
         }
         return true;
-      case "Tab": toggleCollapse(cursor); return true;
+      case "Tab": toggleCollapse(state.cursor); return true;
       case "Escape":
         if (refileSource) { cancelRefile(); return true; }
         return true;
       // case "o": newTabBelow(); return true;
       // case "O": newGroupAbove(); return true;
-      case "r": startRename(cursor); return true;
+      case "r": startRename(state.cursor); return true;
       case "G": goToBottom(); return true;
       case "/": startSearch(); return true;
       case "n": nextMatch(1); return true;
@@ -1579,13 +1578,13 @@ const pfxLog = createLogger("tabs");
     if (selection.size > 1) {
       const rows = [...selection];
       clearSelection();
-      // Move cursor off the selection first
+      // Move state.cursor off the selection first
       const last = rows[rows.length - 1];
       let next = last.nextElementSibling;
-      while (next && (next.hidden || next === spacer || rows.includes(next))) {
+      while (next && (next.hidden || next === state.spacer || rows.includes(next))) {
         next = next.nextElementSibling;
       }
-      if (next && next !== spacer) setCursor(next);
+      if (next && next !== state.spacer) setCursor(next);
       // Close in reverse to avoid index shifting
       for (let i = rows.length - 1; i >= 0; i--) {
         if (rows[i]._tab) gBrowser.removeTab(rows[i]._tab);
@@ -1596,17 +1595,17 @@ const pfxLog = createLogger("tabs");
       return;
     }
 
-    if (!cursor) return;
-    if (cursor._tab) {
-      gBrowser.removeTab(cursor._tab);
-    } else if (cursor._group) {
+    if (!state.cursor) return;
+    if (state.cursor._tab) {
+      gBrowser.removeTab(state.cursor._tab);
+    } else if (state.cursor._group) {
       // Close group: remove group row. Descendants' displayed levels are
       // derived from their parentId chain, so tabs don't need adjustment.
       // Nested groups in the subtree (which still use stored level) do.
-      const d = cursor._group;
+      const d = state.cursor._group;
       const myLevel = d.level || 0;
-      let next = cursor.nextElementSibling;
-      while (next && next !== spacer) {
+      let next = state.cursor.nextElementSibling;
+      while (next && next !== state.spacer) {
         const lv = levelOfRow(next);
         if (lv <= myLevel) break;
         if (next._group) {
@@ -1615,7 +1614,7 @@ const pfxLog = createLogger("tabs");
         }
         next = next.nextElementSibling;
       }
-      const dying = cursor;
+      const dying = state.cursor;
       moveCursor(1) || moveCursor(-1);
       dying.remove();
       updateVisibility();
@@ -1668,13 +1667,13 @@ const pfxLog = createLogger("tabs");
       case "grp":
       case "folder": {
         const label = args.slice(1).join(" ") || "New Group";
-        const row = createGroupRow(label, cursor ? levelOfRow(cursor) : 0);
-        if (cursor) {
-          // Insert after cursor's subtree
-          const st = subtreeRows(cursor);
+        const row = createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
+        if (state.cursor) {
+          // Insert after state.cursor's subtree
+          const st = subtreeRows(state.cursor);
           st[st.length - 1].after(row);
         } else {
-          panel.insertBefore(row, spacer);
+          state.panel.insertBefore(row, state.spacer);
         }
         setCursor(row);
         updateVisibility();
@@ -1684,12 +1683,12 @@ const pfxLog = createLogger("tabs");
       }
       case "refile":
       case "rf": {
-        if (!cursor) {
-          modelineMsg("No cursor — place cursor on tab to refile", 3000);
+        if (!state.cursor) {
+          modelineMsg("No state.cursor — place state.cursor on tab to refile", 3000);
           break;
         }
-        refileSource = cursor;
-        const srcLabel = dataOf(cursor)?.name || cursor._tab?.label || "tab";
+        refileSource = state.cursor;
+        const srcLabel = dataOf(state.cursor)?.name || state.cursor._tab?.label || "tab";
         modelineMsg(`Refile: "${srcLabel}" → search for target...`);
         // Kick off search after a tick so modeline message shows briefly
         setTimeout(() => startSearch(), 0);
@@ -1737,16 +1736,16 @@ const pfxLog = createLogger("tabs");
       row.setAttribute("pfx-dragging", "true");
       // Reveal an empty pinned drop zone so unpinned tabs can be pinned
       // by dropping into the area at the top of the sidebar.
-      if (pinnedContainer && !row._tab?.pinned
-          && !pinnedContainer.querySelector(".pfx-tab-row")) {
-        pinnedContainer.hidden = false;
-        pinnedContainer.setAttribute("pfx-empty-zone", "true");
+      if (state.pinnedContainer && !row._tab?.pinned
+          && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
+        state.pinnedContainer.hidden = false;
+        state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
       }
-      // Symmetric: dragging a pinned tab and the tree panel has no rows —
-      // reveal a "drop to unpin" zone in the panel.
-      if (panel && row._tab?.pinned
-          && !panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-        panel.setAttribute("pfx-empty-zone", "true");
+      // Symmetric: dragging a pinned tab and the tree state.panel has no rows —
+      // reveal a "drop to unpin" zone in the state.panel.
+      if (state.panel && row._tab?.pinned
+          && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
+        state.panel.setAttribute("pfx-empty-zone", "true");
       }
     });
 
@@ -1755,13 +1754,13 @@ const pfxLog = createLogger("tabs");
       dragSource = null;
       clearDropIndicator();
       // Restore hidden state on the empty pinned drop zone if still empty.
-      if (pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-        pinnedContainer.removeAttribute("pfx-empty-zone");
-        if (!pinnedContainer.querySelector(".pfx-tab-row")) {
-          pinnedContainer.hidden = true;
+      if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
+        state.pinnedContainer.removeAttribute("pfx-empty-zone");
+        if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+          state.pinnedContainer.hidden = true;
         }
       }
-      panel?.removeAttribute("pfx-empty-zone");
+      state.panel?.removeAttribute("pfx-empty-zone");
     });
 
     row.addEventListener("dragover", (e) => {
@@ -1844,17 +1843,17 @@ const pfxLog = createLogger("tabs");
     });
   }
 
-  // Drop handler on the tree panel itself (not its rows). Handles two
+  // Drop handler on the tree state.panel itself (not its rows). Handles two
   // distinct drop intents that the per-row handlers don't cover:
-  //   - Pinned-tab drag dropped on panel whitespace → unpin and append.
-  //   - Unpinned-tab drag dropped on panel whitespace → move to end at root.
-  // Both also cover the empty-panel case (only the spacer is present).
+  //   - Pinned-tab drag dropped on state.panel whitespace → unpin and append.
+  //   - Unpinned-tab drag dropped on state.panel whitespace → move to end at root.
+  // Both also cover the empty-panel case (only the state.spacer is present).
   function setupPanelDrop(p) {
     p.addEventListener("dragover", (e) => {
       if (!dragSource) return;
-      // Only handle if the dragover landed on the panel itself or the spacer
+      // Only handle if the dragover landed on the state.panel itself or the state.spacer
       // (rows handle their own dragover).
-      if (e.target !== p && e.target !== spacer) return;
+      if (e.target !== p && e.target !== state.spacer) return;
 
       // For unpinned drags, find the last root-level row that isn't part of
       // the source's own subtree — that's the anchor for an "after" drop.
@@ -1882,8 +1881,8 @@ const pfxLog = createLogger("tabs");
         dropPosition = "after";
         showDropIndicator(anchor, "after");
       } else {
-        // No usable anchor (empty panel, or unpinned drag where source is
-        // the only root). For pinned: signal "unpin into empty panel".
+        // No usable anchor (empty state.panel, or unpinned drag where source is
+        // the only root). For pinned: signal "unpin into empty state.panel".
         // For unpinned: nothing to do (already at end of root).
         dropTarget = srcPinned ? p : null;
         dropPosition = "into-empty-panel";
@@ -1892,12 +1891,12 @@ const pfxLog = createLogger("tabs");
 
     p.addEventListener("drop", (e) => {
       if (!dragSource) return;
-      if (e.target !== p && e.target !== spacer && dropTarget !== p) return;
+      if (e.target !== p && e.target !== state.spacer && dropTarget !== p) return;
       e.preventDefault();
       const tab = dragSource._tab;
       if (!tab) { clearDropIndicator(); return; }
       if (dropTarget === p) {
-        // Empty panel + pinned source: just unpin. onTabUnpinned routes the row.
+        // Empty state.panel + pinned source: just unpin. onTabUnpinned routes the row.
         if (tab.pinned) gBrowser.unpinTab(tab);
       } else if (dropTarget?._tab) {
         executeDrop(dragSource, dropTarget, dropPosition);
@@ -2003,7 +2002,7 @@ const pfxLog = createLogger("tabs");
       }
     }
 
-    // Move Firefox tabs via gBrowser.moveTab so our panel and Firefox's tab
+    // Move Firefox tabs via gBrowser.moveTab so our state.panel and Firefox's tab
     // strip stay aligned. TabMove handlers reorder palefox rows in response.
     // Groups have no Firefox counterpart; we move them via DOM below.
     const tabsArr = [...gBrowser.tabs];
@@ -2089,7 +2088,7 @@ const pfxLog = createLogger("tabs");
       updateVisibility();
       scheduleSave();
     });
-    obs.observe(panel, { childList: true });
+    obs.observe(state.panel, { childList: true });
   }
 
   function newTabBelow() {
@@ -2100,9 +2099,9 @@ const pfxLog = createLogger("tabs");
   }
 
   function newGroupAbove() {
-    if (!cursor) return;
-    const row = createGroupRow("New Group", levelOfRow(cursor));
-    cursor.before(row);
+    if (!state.cursor) return;
+    const row = createGroupRow("New Group", levelOfRow(state.cursor));
+    state.cursor.before(row);
     setCursor(row);
     updateVisibility();
     scheduleSave();
@@ -2326,16 +2325,16 @@ const pfxLog = createLogger("tabs");
 
     // --- Palefox items ---
     const renameItem = mi("Rename Tab", () => {
-      if (contextTab) startRename(rowOf.get(contextTab));
+      if (state.contextTab) startRename(rowOf.get(state.contextTab));
     });
     const collapseItem = mi("Collapse", () => {
-      if (!contextTab) return;
-      const row = rowOf.get(contextTab);
+      if (!state.contextTab) return;
+      const row = rowOf.get(state.contextTab);
       if (row) toggleCollapse(row);
     });
     const createGroupItem = mi("Create Group", () => {
-      if (!contextTab) return;
-      const row = rowOf.get(contextTab);
+      if (!state.contextTab) return;
+      const row = rowOf.get(state.contextTab);
       if (!row) return;
       const grp = createGroupRow("New Group", levelOfRow(row));
       const st = subtreeRows(row);
@@ -2346,8 +2345,8 @@ const pfxLog = createLogger("tabs");
       startRename(grp);
     });
     const closeKidsItem = mi("Close Children", () => {
-      if (!contextTab) return;
-      const row = rowOf.get(contextTab);
+      if (!state.contextTab) return;
+      const row = rowOf.get(state.contextTab);
       if (!row) return;
       const kids = subtreeRows(row).slice(1);
       for (let i = kids.length - 1; i >= 0; i--) {
@@ -2358,41 +2357,41 @@ const pfxLog = createLogger("tabs");
 
     // --- Native actions ---
     const splitViewItem = mi("Add Split View", () => {
-      if (!contextTab) return;
-      TabContextMenu.contextTab = contextTab;
-      TabContextMenu.contextTabs = [contextTab];
+      if (!state.contextTab) return;
+      TabContextMenu.contextTab = state.contextTab;
+      TabContextMenu.contextTabs = [state.contextTab];
       TabContextMenu.moveTabsToSplitView();
     });
     const reloadItem = mi("Reload Tab", () => {
-      if (contextTab) gBrowser.reloadTab(contextTab);
+      if (state.contextTab) gBrowser.reloadTab(state.contextTab);
     });
     const muteItem = mi("Mute Tab", () => {
-      if (contextTab) contextTab.toggleMuteAudio();
+      if (state.contextTab) state.contextTab.toggleMuteAudio();
     });
     const pinItem = mi("Pin Tab", () => {
-      if (!contextTab) return;
-      if (contextTab.pinned) gBrowser.unpinTab(contextTab);
-      else gBrowser.pinTab(contextTab);
+      if (!state.contextTab) return;
+      if (state.contextTab.pinned) gBrowser.unpinTab(state.contextTab);
+      else gBrowser.pinTab(state.contextTab);
     });
     const duplicateItem = mi("Duplicate Tab", () => {
-      if (contextTab) gBrowser.duplicateTab(contextTab);
+      if (state.contextTab) gBrowser.duplicateTab(state.contextTab);
     });
     const bookmarkItem = mi("Bookmark Tab", () => {
-      if (contextTab) PlacesCommandHook.bookmarkTabs([contextTab]);
+      if (state.contextTab) PlacesCommandHook.bookmarkTabs([state.contextTab]);
     });
     const moveToWindowItem = mi("Move to New Window", () => {
-      if (contextTab) gBrowser.replaceTabWithWindow(contextTab);
+      if (state.contextTab) gBrowser.replaceTabWithWindow(state.contextTab);
     });
     const copyLinkItem = mi("Copy Link", () => {
-      if (!contextTab) return;
-      const url = contextTab.linkedBrowser?.currentURI?.spec;
+      if (!state.contextTab) return;
+      const url = state.contextTab.linkedBrowser?.currentURI?.spec;
       if (url) {
         Cc["@mozilla.org/widget/clipboardhelper;1"]
           .getService(Ci.nsIClipboardHelper).copyString(url);
       }
     });
     const closeItem = mi("Close Tab", () => {
-      if (contextTab) gBrowser.removeTab(contextTab);
+      if (state.contextTab) gBrowser.removeTab(state.contextTab);
     });
     const reopenItem = mi("Reopen Closed Tab", () => {
       undoCloseTab();
@@ -2409,8 +2408,8 @@ const pfxLog = createLogger("tabs");
     );
 
     menu.addEventListener("popupshowing", () => {
-      if (!contextTab) return;
-      const row = rowOf.get(contextTab);
+      if (!state.contextTab) return;
+      const row = rowOf.get(state.contextTab);
       const has = row && hasChildren(row);
       collapseItem.hidden = !has;
       closeKidsItem.hidden = !has;
@@ -2420,12 +2419,12 @@ const pfxLog = createLogger("tabs");
         );
       }
       muteItem.setAttribute("label",
-        contextTab.hasAttribute("muted") ? "Unmute Tab" : "Mute Tab"
+        state.contextTab.hasAttribute("muted") ? "Unmute Tab" : "Mute Tab"
       );
       pinItem.setAttribute("label",
-        contextTab.pinned ? "Unpin Tab" : "Pin Tab"
+        state.contextTab.pinned ? "Unpin Tab" : "Pin Tab"
       );
-      splitViewItem.hidden = !!contextTab.splitview;
+      splitViewItem.hidden = !!state.contextTab.splitview;
     });
 
     document.getElementById("mainPopupSet").appendChild(menu);
@@ -2465,7 +2464,7 @@ const pfxLog = createLogger("tabs");
       label.hidden = false;
       if (row._tab) syncTabRow(row._tab);
       else syncGroupRow(row);
-      panel.focus();
+      state.panel.focus();
     }
 
     input.addEventListener("keydown", (e) => {
@@ -2486,7 +2485,7 @@ const pfxLog = createLogger("tabs");
     rows: () => allRows(),
     savedTabQueue,
     closedTabs,
-    nextTabId,
+    nextTabId: state.nextTabId,
     tabUrl,
     treeData,
   }));
@@ -2495,7 +2494,7 @@ const pfxLog = createLogger("tabs");
     const parsed = await readTreeFromDisk();
     if (!parsed) return;
     try {
-      if (parsed.nextTabId != null) nextTabId = parsed.nextTabId;
+      if (parsed.nextTabId != null) state.nextTabId = parsed.nextTabId;
       closedTabs.length = 0;
       closedTabs.push(...parsed.closedTabs);
 
@@ -2503,19 +2502,19 @@ const pfxLog = createLogger("tabs");
       const tabNodes = parsed.tabNodes.map(s => ({ ...s }));
       _lastLoadedNodes = tabNodes.map(s => ({ ...s }));
 
-      // Belt-and-suspenders: advance nextTabId past every saved node ID before
+      // Belt-and-suspenders: advance state.nextTabId past every saved node ID before
       // any tab calls treeData(). saved.nextTabId covers this normally, but if
       // it was missing/stale, fresh startup tabs (localhost, etc.) would get an
       // ID that collides with a restored session tab's pfx-id attribute, causing
       // the wrong tab to resolve as parent in the tree.
       for (const s of tabNodes) {
-        if (s.id && s.id >= nextTabId) nextTabId = s.id + 1;
+        if (s.id && s.id >= state.nextTabId) state.nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
+      pfxLog("loadFromDisk", { nextTabId: state.nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
 
       const applied = new Set();
       const apply = (tab, s, i) => {
-        const id = s.id || nextTabId++;
+        const id = s.id || state.nextTabId++;
         treeOf.set(tab, {
           id,
           parentId: s.parentId ?? null,
@@ -2580,14 +2579,14 @@ const pfxLog = createLogger("tabs");
 
   let loadedNodes = null;
 
-  // Build the panel from gBrowser.tabs (canonical order). Interleave groups
+  // Build the state.panel from gBrowser.tabs (canonical order). Interleave groups
   // at their saved afterTabId anchors. Unanchored groups go to the top.
   function buildFromSaved() {
-    if (!loadedNodes || !panel) return false;
+    if (!loadedNodes || !state.panel) return false;
 
     const groupNodes = loadedNodes.filter(n => n.type === "group");
 
-    // Bucket groups by their anchor tab id. `null` = "top of panel."
+    // Bucket groups by their anchor tab id. `null` = "top of state.panel."
     const leadingGroups = [];
     const groupsAfter = new Map();
     for (const g of groupNodes) {
@@ -2607,26 +2606,26 @@ const pfxLog = createLogger("tabs");
       return row;
     };
 
-    while (panel.firstChild !== spacer) panel.firstChild.remove();
-    if (pinnedContainer) {
-      while (pinnedContainer.firstChild) pinnedContainer.firstChild.remove();
+    while (state.panel.firstChild !== state.spacer) state.panel.firstChild.remove();
+    if (state.pinnedContainer) {
+      while (state.pinnedContainer.firstChild) state.pinnedContainer.firstChild.remove();
     }
 
-    for (const g of leadingGroups) panel.insertBefore(mkGroup(g), spacer);
+    for (const g of leadingGroups) state.panel.insertBefore(mkGroup(g), state.spacer);
 
     for (const tab of gBrowser.tabs) {
       const row = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row);
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row);
       } else {
-        panel.insertBefore(row, spacer);
+        state.panel.insertBefore(row, state.spacer);
         const tid = treeData(tab).id;
         const groups = groupsAfter.get(tid);
-        if (groups) for (const g of groups) panel.insertBefore(mkGroup(g), spacer);
+        if (groups) for (const g of groups) state.panel.insertBefore(mkGroup(g), state.spacer);
       }
     }
-    if (pinnedContainer) {
-      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
+    if (state.pinnedContainer) {
+      state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
 
     loadedNodes = null;
@@ -2644,7 +2643,7 @@ const pfxLog = createLogger("tabs");
 
   let toolboxResizeObs = null;
 
-  // Content-alignment spacer: in horizontal mode the tab strip starts at the
+  // Content-alignment state.spacer: in horizontal mode the tab strip starts at the
   // window's left edge. Inset it by 10px so tabs don't butt against the edge.
   let alignSpacer = null;
   function setupHorizontalAlignSpacer() {
@@ -2664,7 +2663,7 @@ const pfxLog = createLogger("tabs");
 
   function positionPanel() {
     const vertical = isVertical();
-    panel.toggleAttribute("pfx-horizontal", !vertical);
+    state.panel.toggleAttribute("pfx-horizontal", !vertical);
     document.documentElement.toggleAttribute("pfx-horizontal-tabs", !vertical);
 
     if (toolboxResizeObs) {
@@ -2677,24 +2676,24 @@ const pfxLog = createLogger("tabs");
 
     if (vertical) {
       const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-      panel.toggleAttribute("pfx-icons-only", !expanded);
-      pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
+      state.panel.toggleAttribute("pfx-icons-only", !expanded);
+      state.pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
       if (toolboxInSidebar) {
-        if (toolbox.nextElementSibling !== pinnedContainer) toolbox.after(pinnedContainer);
-        if (pinnedContainer.nextElementSibling !== panel) pinnedContainer.after(panel);
-      } else if (panel.parentNode !== sidebarMain ||
-                 sidebarMain.firstElementChild !== pinnedContainer) {
-        sidebarMain.prepend(panel);
-        sidebarMain.prepend(pinnedContainer);
+        if (toolbox.nextElementSibling !== state.pinnedContainer) toolbox.after(state.pinnedContainer);
+        if (state.pinnedContainer.nextElementSibling !== state.panel) state.pinnedContainer.after(state.panel);
+      } else if (state.panel.parentNode !== sidebarMain ||
+                 sidebarMain.firstElementChild !== state.pinnedContainer) {
+        sidebarMain.prepend(state.panel);
+        sidebarMain.prepend(state.pinnedContainer);
       }
       teardownHorizontalAlignSpacer();
       // If horizontal mode had a popout open, urlbar may be without popover
       setUrlbarTopLayer(true);
     } else {
-      panel.removeAttribute("pfx-icons-only");
+      state.panel.removeAttribute("pfx-icons-only");
       const tabbrowserTabs = document.getElementById("tabbrowser-tabs");
-      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== panel) {
-        tabbrowserTabs.after(panel);
+      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== state.panel) {
+        tabbrowserTabs.after(state.panel);
       }
       setupHorizontalAlignSpacer();
     }
@@ -2713,7 +2712,7 @@ const pfxLog = createLogger("tabs");
     }
 
     // Re-sync all rows when switching modes
-    if (panel) {
+    if (state.panel) {
       if (vertical) {
         clearHorizontalGrid();
       }
@@ -2729,19 +2728,19 @@ const pfxLog = createLogger("tabs");
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
 
-    pinnedContainer = document.createXULElement("hbox");
-    pinnedContainer.id = "pfx-pinned-container";
-    pinnedContainer.hidden = true;
-    setupPinnedContainerDrop(pinnedContainer);
+    state.pinnedContainer = document.createXULElement("hbox");
+    state.pinnedContainer.id = "pfx-pinned-container";
+    state.pinnedContainer.hidden = true;
+    setupPinnedContainerDrop(state.pinnedContainer);
 
-    panel = document.createXULElement("vbox");
-    panel.id = "pfx-tab-panel";
+    state.panel = document.createXULElement("vbox");
+    state.panel.id = "pfx-tab-panel";
 
-    spacer = document.createXULElement("box");
-    spacer.id = "pfx-tab-spacer";
-    spacer.setAttribute("flex", "1");
-    panel.appendChild(spacer);
-    setupPanelDrop(panel);
+    state.spacer = document.createXULElement("box");
+    state.spacer.id = "pfx-tab-spacer";
+    state.spacer.setAttribute("flex", "1");
+    state.panel.appendChild(state.spacer);
+    setupPanelDrop(state.panel);
 
     positionPanel();
 
@@ -2775,13 +2774,13 @@ const pfxLog = createLogger("tabs");
     tc.addEventListener("TabPinned", onTabPinned);
     tc.addEventListener("TabUnpinned", onTabUnpinned);
 
-    // Click on spacer activates vim with last row
-    spacer.addEventListener("click", () => {
+    // Click on state.spacer activates vim with last row
+    state.spacer.addEventListener("click", () => {
       const rows = allRows().filter(r => !r.hidden);
       if (rows.length) activateVim(rows[rows.length - 1]);
     });
 
-    // Clicking content area blurs the panel naturally via the blur listener.
+    // Clicking content area blurs the state.panel naturally via the blur listener.
 
     // After any session restore (startup auto-restore or Ctrl+Shift+T manual
     // restore), fire a final tree resync. scheduleTreeResync() defers via

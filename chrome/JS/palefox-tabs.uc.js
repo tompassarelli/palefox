@@ -58,6 +58,14 @@
   var PIN_ATTR = "pfx-id";
 
   // src/tabs/state.ts
+  var state = {
+    panel: null,
+    spacer: null,
+    pinnedContainer: null,
+    contextTab: null,
+    cursor: null,
+    nextTabId: 1
+  };
   var treeOf = new WeakMap;
   var rowOf = new WeakMap;
   var hzDisplay = new WeakMap;
@@ -235,12 +243,7 @@
       return null;
     }
   })();
-  var panel;
-  var spacer;
-  var pinnedContainer;
-  var contextTab;
   var groupCounter = 0;
-  var cursor = null;
   var chord = null;
   var chordTimer = 0;
   var pendingCursorMove = false;
@@ -248,7 +251,6 @@
   var movingTabs = new Set;
   var _lastLoadedNodes = [];
   var _inSessionRestore = true;
-  var nextTabId = 1;
   var pinAttrRegistered = false;
   function tryRegisterPinAttr() {
     if (pinAttrRegistered || !SS?.persistTabAttribute)
@@ -280,13 +282,13 @@
     if (!treeOf.has(tab)) {
       let id = readPinnedId(tab);
       if (id) {
-        if (id >= nextTabId)
-          nextTabId = id + 1;
-        pfxLog("treeData:pfxId", { pfxId: id, label: tab.label, nextTabId });
+        if (id >= state.nextTabId)
+          state.nextTabId = id + 1;
+        pfxLog("treeData:pfxId", { pfxId: id, label: tab.label, nextTabId: state.nextTabId });
       } else {
-        id = nextTabId++;
+        id = state.nextTabId++;
         pinTabId(tab, id);
-        pfxLog("treeData:fresh", { id, label: tab.label, nextTabId });
+        pfxLog("treeData:fresh", { id, label: tab.label, nextTabId: state.nextTabId });
       }
       treeOf.set(tab, {
         id,
@@ -343,18 +345,18 @@
     return null;
   }
   function isHorizontal() {
-    return panel?.hasAttribute("pfx-horizontal");
+    return state.panel?.hasAttribute("pfx-horizontal");
   }
   function allTabs() {
     return [...gBrowser.tabs];
   }
   function allRows() {
-    const pinned = pinnedContainer ? [...pinnedContainer.querySelectorAll(".pfx-tab-row")] : [];
+    const pinned = state.pinnedContainer ? [...pinnedContainer.querySelectorAll(".pfx-tab-row")] : [];
     return [...pinned, ...panel.querySelectorAll(".pfx-tab-row, .pfx-group-row")];
   }
   function hasChildren(row) {
     const next = row.nextElementSibling;
-    if (!next || next === spacer)
+    if (!next || next === state.spacer)
       return false;
     return levelOfRow(next) > levelOfRow(row);
   }
@@ -364,7 +366,7 @@
     const lv = levelOfRow(row);
     const out = [row];
     let next = row.nextElementSibling;
-    while (next && next !== spacer) {
+    while (next && next !== state.spacer) {
       if (levelOfRow(next) <= lv)
         break;
       out.push(next);
@@ -378,7 +380,7 @@
     selection.clear();
   }
   function selectRange(toRow) {
-    const fromRow = cursor || rowOf.get(gBrowser.selectedTab);
+    const fromRow = state.cursor || rowOf.get(gBrowser.selectedTab);
     if (!fromRow)
       return;
     const rows = allRows().filter((r) => !r.hidden);
@@ -434,7 +436,7 @@
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      contextTab = tab;
+      state.contextTab = tab;
       document.getElementById("pfx-tab-menu")?.openPopupAtScreen(e.screenX, e.screenY, true);
     });
     setupDrag(row);
@@ -523,7 +525,7 @@
     updateHorizontalGrid();
   }
   function updateHorizontalGrid() {
-    if (!isHorizontal() || !panel)
+    if (!isHorizontal() || !state.panel)
       return;
     let col = 0;
     let rowInCol = 0;
@@ -552,23 +554,23 @@
       for (let i = 1;i <= col; i++) {
         tracks.push(i === selectedCol ? "minmax(200px, 200px)" : "minmax(0, 200px)");
       }
-      panel.style.gridTemplateColumns = tracks.join(" ");
+      state.panel.style.gridTemplateColumns = tracks.join(" ");
     } else {
-      panel.style.gridTemplateColumns = "";
+      state.panel.style.gridTemplateColumns = "";
     }
     requestAnimationFrame(() => {
-      if (!isHorizontal() || !panel)
+      if (!isHorizontal() || !state.panel)
         return;
-      const firstRow = panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
+      const firstRow = state.panel.querySelector(".pfx-tab-row:not([hidden]), .pfx-group-row:not([hidden])");
       if (firstRow) {
-        panel.style.maxHeight = firstRow.offsetHeight + 2 + "px";
+        state.panel.style.maxHeight = firstRow.offsetHeight + 2 + "px";
       }
     });
   }
   function clearHorizontalGrid() {
-    if (!panel)
+    if (!state.panel)
       return;
-    panel.style.maxHeight = "";
+    state.panel.style.maxHeight = "";
     for (const row of allRows()) {
       row.style.gridColumn = "";
       row.style.gridRow = "";
@@ -576,24 +578,24 @@
     }
   }
   function buildPanel() {
-    if (!panel)
+    if (!state.panel)
       return;
-    while (panel.firstChild !== spacer)
-      panel.firstChild.remove();
-    if (pinnedContainer) {
-      while (pinnedContainer.firstChild)
-        pinnedContainer.firstChild.remove();
+    while (state.panel.firstChild !== state.spacer)
+      state.panel.firstChild.remove();
+    if (state.pinnedContainer) {
+      while (state.pinnedContainer.firstChild)
+        state.pinnedContainer.firstChild.remove();
     }
     for (const tab of gBrowser.tabs) {
       const row = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row);
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row);
       } else {
-        panel.insertBefore(row, spacer);
+        state.panel.insertBefore(row, state.spacer);
       }
     }
-    if (pinnedContainer) {
-      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
+    if (state.pinnedContainer) {
+      state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
     updateVisibility();
   }
@@ -607,10 +609,10 @@
       try {
         const raw = SS.getTabState(tab);
         if (raw) {
-          const state = JSON.parse(raw);
-          const entries = state.entries;
+          const state2 = JSON.parse(raw);
+          const entries = state2.entries;
           if (Array.isArray(entries) && entries.length) {
-            const idx = Math.max(0, Math.min(entries.length - 1, (state.index || 1) - 1));
+            const idx = Math.max(0, Math.min(entries.length - 1, (state2.index || 1) - 1));
             const entryUrl = entries[idx]?.url;
             if (entryUrl)
               return entryUrl;
@@ -668,11 +670,11 @@
       console.log(`palefox-tabs: onTabOpen matched — tab[${idx}] url="${tabUrl(tab)}" → saved id=${prior.id} parentId=${prior.parentId} origIdx=${prior._origIdx}`);
       applySavedToTab(tab, prior);
       const row2 = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row2);
-        pinnedContainer.hidden = false;
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row2);
+        state.pinnedContainer.hidden = false;
       } else {
-        panel.insertBefore(row2, spacer);
+        state.panel.insertBefore(row2, state.spacer);
       }
       if (pendingCursorMove) {
         pendingCursorMove = false;
@@ -690,11 +692,11 @@
       td.parentId = treeData(anchor).parentId;
     }
     const row = createTabRow(tab);
-    if (tab.pinned && pinnedContainer) {
-      pinnedContainer.appendChild(row);
-      pinnedContainer.hidden = false;
+    if (tab.pinned && state.pinnedContainer) {
+      state.pinnedContainer.appendChild(row);
+      state.pinnedContainer.hidden = false;
     } else {
-      panel.insertBefore(row, spacer);
+      state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
     if (position === "root") {
@@ -723,7 +725,7 @@
       const newParentId = td?.parentId ?? null;
       const myLevel = levelOf(tab);
       let next = row.nextElementSibling;
-      while (next && next !== spacer) {
+      while (next && next !== state.spacer) {
         if (next._tab) {
           const ntd = treeData(next._tab);
           if (levelOf(next._tab) <= myLevel)
@@ -741,7 +743,7 @@
         }
         next = next.nextElementSibling;
       }
-      if (cursor === row)
+      if (state.cursor === row)
         moveCursor(1) || moveCursor(-1);
       row.remove();
     }
@@ -752,7 +754,7 @@
   function onTabPinned(e) {
     const tab = e.target;
     const row = rowOf.get(tab);
-    if (!row || !pinnedContainer)
+    if (!row || !state.pinnedContainer)
       return;
     const td = treeData(tab);
     const pinnedId = td.id;
@@ -762,11 +764,11 @@
         treeData(t).parentId = null;
     }
     row.removeAttribute("style");
-    if (row.parentNode !== pinnedContainer) {
-      pinnedContainer.appendChild(row);
+    if (row.parentNode !== state.pinnedContainer) {
+      state.pinnedContainer.appendChild(row);
       placeRowInFirefoxOrder(tab, row);
     }
-    pinnedContainer.hidden = false;
+    state.pinnedContainer.hidden = false;
     syncTabRow(tab);
     for (const r of allRows())
       syncAnyRow(r);
@@ -779,13 +781,13 @@
     if (!row)
       return;
     row.draggable = true;
-    if (row.parentNode !== panel) {
-      panel.insertBefore(row, spacer);
+    if (row.parentNode !== state.panel) {
+      state.panel.insertBefore(row, state.spacer);
       placeRowInFirefoxOrder(tab, row);
     }
     syncTabRow(tab);
-    if (!pinnedContainer.querySelector(".pfx-tab-row")) {
-      pinnedContainer.hidden = true;
+    if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+      state.pinnedContainer.hidden = true;
     }
     updateVisibility();
     scheduleSave();
@@ -842,7 +844,7 @@
         const expected = new Set(entry.descendantIds);
         const oldParentId = entry.parentId ?? null;
         let n = row.nextElementSibling;
-        while (n && n !== spacer) {
+        while (n && n !== state.spacer) {
           if (!n._tab)
             break;
           const ntd = treeData(n._tab);
@@ -876,14 +878,14 @@
         parentRow.after(row);
         return;
       }
-      panel.insertBefore(row, panel.firstChild);
+      state.panel.insertBefore(row, state.panel.firstChild);
       return;
     }
     if (parentRow) {
       const st = subtreeRows(parentRow);
       st[st.length - 1].after(row);
     } else {
-      panel.insertBefore(row, spacer);
+      state.panel.insertBefore(row, state.spacer);
     }
   }
   function rememberClosedTab(tab, td) {
@@ -911,7 +913,7 @@
     }
     const descendantIds = [];
     let n = row.nextElementSibling;
-    while (n && n !== spacer) {
+    while (n && n !== state.spacer) {
       if (n._tab) {
         const lvl = levelOf(n._tab);
         if (lvl <= myLevel)
@@ -940,7 +942,7 @@
         row2.toggleAttribute("selected", tab.selected);
     }
     const row = rowOf.get(gBrowser.selectedTab);
-    if (row && !cursor)
+    if (row && !state.cursor)
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (isHorizontal())
       updateHorizontalGrid();
@@ -955,14 +957,14 @@
     return !!ptc && tab.parentNode === ptc;
   }
   function placeRowInFirefoxOrder(tab, row) {
-    if (!row || !panel)
+    if (!row || !state.panel)
       return false;
     const tabsArr = [...gBrowser.tabs];
     const myIdx = tabsArr.indexOf(tab);
     if (myIdx < 0)
       return false;
     if (isFxPinned(tab)) {
-      if (!pinnedContainer)
+      if (!state.pinnedContainer)
         return false;
       let prevTab2 = null;
       for (let i = myIdx - 1;i >= 0; i--) {
@@ -979,8 +981,8 @@
           prevRow.after(row);
           return true;
         }
-      } else if (pinnedContainer.firstChild !== row) {
-        pinnedContainer.insertBefore(row, pinnedContainer.firstChild);
+      } else if (state.pinnedContainer.firstChild !== row) {
+        state.pinnedContainer.insertBefore(row, state.pinnedContainer.firstChild);
         return true;
       }
       return false;
@@ -1002,8 +1004,8 @@
         anchor.after(row);
         return true;
       }
-    } else if (panel.firstChild !== row) {
-      panel.insertBefore(row, panel.firstChild);
+    } else if (state.panel.firstChild !== row) {
+      state.panel.insertBefore(row, state.panel.firstChild);
       return true;
     }
     return false;
@@ -1018,9 +1020,9 @@
   }
   var hzExpandedRoot = null;
   function setCursor(row) {
-    if (cursor)
-      cursor.removeAttribute("pfx-cursor");
-    cursor = row;
+    if (state.cursor)
+      state.cursor.removeAttribute("pfx-cursor");
+    state.cursor = row;
     if (row) {
       row.setAttribute("pfx-cursor", "true");
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1056,10 +1058,10 @@
     const d = dataOf(root);
     if (!d || !hasChildren(root))
       return;
-    if (cursor && cursor._tab && cursor !== root) {
-      const curRoot = treeRoot(cursor);
+    if (state.cursor && state.cursor._tab && state.cursor !== root) {
+      const curRoot = treeRoot(state.cursor);
       if (curRoot === root) {
-        hzDisplay.set(root, cursor._tab);
+        hzDisplay.set(root, state.cursor._tab);
       }
     }
     d.collapsed = true;
@@ -1078,9 +1080,9 @@
       setUrlbarTopLayer(false);
   }
   function updateHorizontalExpansion() {
-    if (!cursor)
+    if (!state.cursor)
       return;
-    const root = treeRoot(cursor);
+    const root = treeRoot(state.cursor);
     if (root === hzExpandedRoot)
       return;
     if (hzExpandedRoot)
@@ -1090,10 +1092,10 @@
     updateVisibility();
   }
   function moveToLevel0(delta) {
-    if (!cursor)
+    if (!state.cursor)
       return false;
     const rows = allRows();
-    const curIdx = rows.indexOf(cursor);
+    const curIdx = rows.indexOf(state.cursor);
     if (curIdx < 0)
       return false;
     const step = delta > 0 ? 1 : -1;
@@ -1112,13 +1114,13 @@
     setCursor(row);
   }
   function moveCursor(delta) {
-    if (!cursor)
+    if (!state.cursor)
       return false;
-    let row = delta > 0 ? cursor.nextElementSibling : cursor.previousElementSibling;
-    while (row && (row.hidden || row === spacer)) {
+    let row = delta > 0 ? state.cursor.nextElementSibling : state.cursor.previousElementSibling;
+    while (row && (row.hidden || row === state.spacer)) {
       row = delta > 0 ? row.nextElementSibling : row.previousElementSibling;
     }
-    if (row && row !== spacer) {
+    if (row && row !== state.spacer) {
       setCursor(row);
       if (row._tab)
         gBrowser.selectedTab = row._tab;
@@ -1224,7 +1226,7 @@
     const rows = subtreeRows(row);
     const lastRow = rows[rows.length - 1];
     const nextRow = lastRow.nextElementSibling;
-    if (!nextRow || nextRow === spacer)
+    if (!nextRow || nextRow === state.spacer)
       return;
     if (levelOfRow(nextRow) !== myLevel)
       return;
@@ -1319,8 +1321,8 @@
   var panelActive = false;
   function focusPanel() {
     panelActive = true;
-    panel.focus();
-    if (!cursor) {
+    state.panel.focus();
+    if (!state.cursor) {
       const row = rowOf.get(gBrowser.selectedTab);
       if (row)
         setCursor(row);
@@ -1341,12 +1343,12 @@
     updateModeline();
   }
   function setupVimKeys() {
-    panel.setAttribute("tabindex", "0");
+    state.panel.setAttribute("tabindex", "0");
     document.addEventListener("keydown", (e) => {
       if (!panelActive)
         return;
       const active = document.activeElement;
-      if (active && active !== panel && (active.tagName === "INPUT" || active.tagName === "input" || active.tagName === "TEXTAREA" || active.tagName === "textarea" || active.isContentEditable || active.closest?.("#urlbar") || active.closest?.("findbar"))) {
+      if (active && active !== state.panel && (active.tagName === "INPUT" || active.tagName === "input" || active.tagName === "TEXTAREA" || active.tagName === "textarea" || active.isContentEditable || active.closest?.("#urlbar") || active.closest?.("findbar"))) {
         blurPanel();
         return;
       }
@@ -1385,8 +1387,8 @@
     switch (key) {
       case "h":
       case "H":
-        panel.focus();
-        if (!cursor) {
+        state.panel.focus();
+        if (!state.cursor) {
           const r = rowOf.get(gBrowser.selectedTab);
           if (r)
             setCursor(r);
@@ -1397,11 +1399,11 @@
         focusContent();
         return;
       case "w":
-        if (document.activeElement === panel) {
+        if (document.activeElement === state.panel) {
           focusContent();
         } else {
-          panel.focus();
-          if (!cursor) {
+          state.panel.focus();
+          if (!state.cursor) {
             const r = rowOf.get(gBrowser.selectedTab);
             if (r)
               setCursor(r);
@@ -1472,32 +1474,32 @@
       return true;
     }
     if (e.altKey && (e.key === "h" || e.code === "KeyH" || e.key === "ArrowLeft")) {
-      if (cursor)
-        moveToRoot(cursor);
+      if (state.cursor)
+        moveToRoot(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "l" || e.code === "KeyL" || e.key === "ArrowRight")) {
-      if (cursor)
-        makeChildOfAbove(cursor);
+      if (state.cursor)
+        makeChildOfAbove(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "j" || e.code === "KeyJ" || e.key === "ArrowDown")) {
-      if (cursor)
-        swapDown(cursor);
+      if (state.cursor)
+        swapDown(state.cursor);
       return true;
     }
     if (e.altKey && (e.key === "k" || e.code === "KeyK" || e.key === "ArrowUp")) {
-      if (cursor)
-        swapUp(cursor);
+      if (state.cursor)
+        swapUp(state.cursor);
       return true;
     }
-    if (!cursor) {
+    if (!state.cursor) {
       if ("jklhG/rnNx".includes(e.key)) {
         const row = rowOf.get(gBrowser.selectedTab);
         if (row)
           setCursor(row);
       }
-      if (!cursor)
+      if (!state.cursor)
         return false;
     }
     if (!e.ctrlKey && !e.metaKey) {
@@ -1532,11 +1534,11 @@
             return true;
           case "h":
           case "ArrowLeft":
-            outdentRow(cursor);
+            outdentRow(state.cursor);
             return true;
           case "l":
           case "ArrowRight":
-            indentRow(cursor);
+            indentRow(state.cursor);
             return true;
         }
       }
@@ -1544,19 +1546,19 @@
     switch (e.key) {
       case "Enter":
         if (refileSource) {
-          executeRefile(cursor);
+          executeRefile(state.cursor);
           return true;
         }
-        if (cursor._tab) {
-          gBrowser.selectedTab = cursor._tab;
+        if (state.cursor._tab) {
+          gBrowser.selectedTab = state.cursor._tab;
           blurPanel();
           gBrowser.selectedBrowser.focus();
         } else {
-          toggleCollapse(cursor);
+          toggleCollapse(state.cursor);
         }
         return true;
       case "Tab":
-        toggleCollapse(cursor);
+        toggleCollapse(state.cursor);
         return true;
       case "Escape":
         if (refileSource) {
@@ -1565,7 +1567,7 @@
         }
         return true;
       case "r":
-        startRename(cursor);
+        startRename(state.cursor);
         return true;
       case "G":
         goToBottom();
@@ -1607,10 +1609,10 @@
       clearSelection();
       const last = rows[rows.length - 1];
       let next = last.nextElementSibling;
-      while (next && (next.hidden || next === spacer || rows.includes(next))) {
+      while (next && (next.hidden || next === state.spacer || rows.includes(next))) {
         next = next.nextElementSibling;
       }
-      if (next && next !== spacer)
+      if (next && next !== state.spacer)
         setCursor(next);
       for (let i = rows.length - 1;i >= 0; i--) {
         if (rows[i]._tab)
@@ -1622,15 +1624,15 @@
       scheduleSave();
       return;
     }
-    if (!cursor)
+    if (!state.cursor)
       return;
-    if (cursor._tab) {
-      gBrowser.removeTab(cursor._tab);
-    } else if (cursor._group) {
-      const d = cursor._group;
+    if (state.cursor._tab) {
+      gBrowser.removeTab(state.cursor._tab);
+    } else if (state.cursor._group) {
+      const d = state.cursor._group;
       const myLevel = d.level || 0;
-      let next = cursor.nextElementSibling;
-      while (next && next !== spacer) {
+      let next = state.cursor.nextElementSibling;
+      while (next && next !== state.spacer) {
         const lv = levelOfRow(next);
         if (lv <= myLevel)
           break;
@@ -1640,7 +1642,7 @@
         }
         next = next.nextElementSibling;
       }
-      const dying = cursor;
+      const dying = state.cursor;
       moveCursor(1) || moveCursor(-1);
       dying.remove();
       updateVisibility();
@@ -1695,12 +1697,12 @@
       case "grp":
       case "folder": {
         const label = args.slice(1).join(" ") || "New Group";
-        const row = createGroupRow(label, cursor ? levelOfRow(cursor) : 0);
-        if (cursor) {
-          const st = subtreeRows(cursor);
+        const row = createGroupRow(label, state.cursor ? levelOfRow(state.cursor) : 0);
+        if (state.cursor) {
+          const st = subtreeRows(state.cursor);
           st[st.length - 1].after(row);
         } else {
-          panel.insertBefore(row, spacer);
+          state.panel.insertBefore(row, state.spacer);
         }
         setCursor(row);
         updateVisibility();
@@ -1710,12 +1712,12 @@
       }
       case "refile":
       case "rf": {
-        if (!cursor) {
-          modelineMsg("No cursor — place cursor on tab to refile", 3000);
+        if (!state.cursor) {
+          modelineMsg("No state.cursor — place state.cursor on tab to refile", 3000);
           break;
         }
-        refileSource = cursor;
-        const srcLabel = dataOf(cursor)?.name || cursor._tab?.label || "tab";
+        refileSource = state.cursor;
+        const srcLabel = dataOf(state.cursor)?.name || state.cursor._tab?.label || "tab";
         modelineMsg(`Refile: "${srcLabel}" → search for target...`);
         setTimeout(() => startSearch(), 0);
         break;
@@ -1756,25 +1758,25 @@
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", "");
       row.setAttribute("pfx-dragging", "true");
-      if (pinnedContainer && !row._tab?.pinned && !pinnedContainer.querySelector(".pfx-tab-row")) {
-        pinnedContainer.hidden = false;
-        pinnedContainer.setAttribute("pfx-empty-zone", "true");
+      if (state.pinnedContainer && !row._tab?.pinned && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
+        state.pinnedContainer.hidden = false;
+        state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
       }
-      if (panel && row._tab?.pinned && !panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-        panel.setAttribute("pfx-empty-zone", "true");
+      if (state.panel && row._tab?.pinned && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
+        state.panel.setAttribute("pfx-empty-zone", "true");
       }
     });
     row.addEventListener("dragend", () => {
       dragSource?.removeAttribute("pfx-dragging");
       dragSource = null;
       clearDropIndicator();
-      if (pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-        pinnedContainer.removeAttribute("pfx-empty-zone");
-        if (!pinnedContainer.querySelector(".pfx-tab-row")) {
-          pinnedContainer.hidden = true;
+      if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
+        state.pinnedContainer.removeAttribute("pfx-empty-zone");
+        if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+          state.pinnedContainer.hidden = true;
         }
       }
-      panel?.removeAttribute("pfx-empty-zone");
+      state.panel?.removeAttribute("pfx-empty-zone");
     });
     row.addEventListener("dragover", (e) => {
       if (!dragSource || dragSource === row)
@@ -1857,7 +1859,7 @@
     p.addEventListener("dragover", (e) => {
       if (!dragSource)
         return;
-      if (e.target !== p && e.target !== spacer)
+      if (e.target !== p && e.target !== state.spacer)
         return;
       const srcPinned = !!dragSource._tab?.pinned;
       let anchor;
@@ -1887,7 +1889,7 @@
     p.addEventListener("drop", (e) => {
       if (!dragSource)
         return;
-      if (e.target !== p && e.target !== spacer && dropTarget !== p)
+      if (e.target !== p && e.target !== state.spacer && dropTarget !== p)
         return;
       e.preventDefault();
       const tab = dragSource._tab;
@@ -2046,7 +2048,7 @@
       updateVisibility();
       scheduleSave();
     });
-    obs.observe(panel, { childList: true });
+    obs.observe(state.panel, { childList: true });
   }
   var refileSource = null;
   function executeRefile(target) {
@@ -2242,20 +2244,20 @@
     }
     const sep = () => document.createXULElement("menuseparator");
     const renameItem = mi("Rename Tab", () => {
-      if (contextTab)
-        startRename(rowOf.get(contextTab));
+      if (state.contextTab)
+        startRename(rowOf.get(state.contextTab));
     });
     const collapseItem = mi("Collapse", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      const row = rowOf.get(contextTab);
+      const row = rowOf.get(state.contextTab);
       if (row)
         toggleCollapse(row);
     });
     const createGroupItem = mi("Create Group", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      const row = rowOf.get(contextTab);
+      const row = rowOf.get(state.contextTab);
       if (!row)
         return;
       const grp = createGroupRow("New Group", levelOfRow(row));
@@ -2267,9 +2269,9 @@
       startRename(grp);
     });
     const closeKidsItem = mi("Close Children", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      const row = rowOf.get(contextTab);
+      const row = rowOf.get(state.contextTab);
       if (!row)
         return;
       const kids = subtreeRows(row).slice(1);
@@ -2281,69 +2283,69 @@
       }
     });
     const splitViewItem = mi("Add Split View", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      TabContextMenu.contextTab = contextTab;
-      TabContextMenu.contextTabs = [contextTab];
+      TabContextMenu.contextTab = state.contextTab;
+      TabContextMenu.contextTabs = [state.contextTab];
       TabContextMenu.moveTabsToSplitView();
     });
     const reloadItem = mi("Reload Tab", () => {
-      if (contextTab)
-        gBrowser.reloadTab(contextTab);
+      if (state.contextTab)
+        gBrowser.reloadTab(state.contextTab);
     });
     const muteItem = mi("Mute Tab", () => {
-      if (contextTab)
-        contextTab.toggleMuteAudio();
+      if (state.contextTab)
+        state.contextTab.toggleMuteAudio();
     });
     const pinItem = mi("Pin Tab", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      if (contextTab.pinned)
-        gBrowser.unpinTab(contextTab);
+      if (state.contextTab.pinned)
+        gBrowser.unpinTab(state.contextTab);
       else
-        gBrowser.pinTab(contextTab);
+        gBrowser.pinTab(state.contextTab);
     });
     const duplicateItem = mi("Duplicate Tab", () => {
-      if (contextTab)
-        gBrowser.duplicateTab(contextTab);
+      if (state.contextTab)
+        gBrowser.duplicateTab(state.contextTab);
     });
     const bookmarkItem = mi("Bookmark Tab", () => {
-      if (contextTab)
-        PlacesCommandHook.bookmarkTabs([contextTab]);
+      if (state.contextTab)
+        PlacesCommandHook.bookmarkTabs([state.contextTab]);
     });
     const moveToWindowItem = mi("Move to New Window", () => {
-      if (contextTab)
-        gBrowser.replaceTabWithWindow(contextTab);
+      if (state.contextTab)
+        gBrowser.replaceTabWithWindow(state.contextTab);
     });
     const copyLinkItem = mi("Copy Link", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      const url = contextTab.linkedBrowser?.currentURI?.spec;
+      const url = state.contextTab.linkedBrowser?.currentURI?.spec;
       if (url) {
         Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(url);
       }
     });
     const closeItem = mi("Close Tab", () => {
-      if (contextTab)
-        gBrowser.removeTab(contextTab);
+      if (state.contextTab)
+        gBrowser.removeTab(state.contextTab);
     });
     const reopenItem = mi("Reopen Closed Tab", () => {
       undoCloseTab();
     });
     menu.append(renameItem, collapseItem, createGroupItem, closeKidsItem, sep(), splitViewItem, reloadItem, muteItem, pinItem, duplicateItem, sep(), bookmarkItem, copyLinkItem, moveToWindowItem, sep(), closeItem, reopenItem);
     menu.addEventListener("popupshowing", () => {
-      if (!contextTab)
+      if (!state.contextTab)
         return;
-      const row = rowOf.get(contextTab);
+      const row = rowOf.get(state.contextTab);
       const has = row && hasChildren(row);
       collapseItem.hidden = !has;
       closeKidsItem.hidden = !has;
       if (has) {
         collapseItem.setAttribute("label", dataOf(row).collapsed ? "Expand" : "Collapse");
       }
-      muteItem.setAttribute("label", contextTab.hasAttribute("muted") ? "Unmute Tab" : "Mute Tab");
-      pinItem.setAttribute("label", contextTab.pinned ? "Unpin Tab" : "Pin Tab");
-      splitViewItem.hidden = !!contextTab.splitview;
+      muteItem.setAttribute("label", state.contextTab.hasAttribute("muted") ? "Unmute Tab" : "Mute Tab");
+      pinItem.setAttribute("label", state.contextTab.pinned ? "Unpin Tab" : "Pin Tab");
+      splitViewItem.hidden = !!state.contextTab.splitview;
     });
     document.getElementById("mainPopupSet").appendChild(menu);
   }
@@ -2381,7 +2383,7 @@
         syncTabRow(row._tab);
       else
         syncGroupRow(row);
-      panel.focus();
+      state.panel.focus();
     }
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -2403,7 +2405,7 @@
     rows: () => allRows(),
     savedTabQueue,
     closedTabs,
-    nextTabId,
+    nextTabId: state.nextTabId,
     tabUrl,
     treeData
   }));
@@ -2413,20 +2415,20 @@
       return;
     try {
       if (parsed.nextTabId != null)
-        nextTabId = parsed.nextTabId;
+        state.nextTabId = parsed.nextTabId;
       closedTabs.length = 0;
       closedTabs.push(...parsed.closedTabs);
       const tabs = allTabs();
       const tabNodes = parsed.tabNodes.map((s) => ({ ...s }));
       _lastLoadedNodes = tabNodes.map((s) => ({ ...s }));
       for (const s of tabNodes) {
-        if (s.id && s.id >= nextTabId)
-          nextTabId = s.id + 1;
+        if (s.id && s.id >= state.nextTabId)
+          state.nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
+      pfxLog("loadFromDisk", { nextTabId: state.nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
       const applied = new Set;
       const apply = (tab, s, i) => {
-        const id = s.id || nextTabId++;
+        const id = s.id || state.nextTabId++;
         treeOf.set(tab, {
           id,
           parentId: s.parentId ?? null,
@@ -2478,7 +2480,7 @@
   }
   var loadedNodes = null;
   function buildFromSaved() {
-    if (!loadedNodes || !panel)
+    if (!loadedNodes || !state.panel)
       return false;
     const groupNodes = loadedNodes.filter((n) => n.type === "group");
     const leadingGroups = [];
@@ -2499,29 +2501,29 @@
       syncGroupRow(row);
       return row;
     };
-    while (panel.firstChild !== spacer)
-      panel.firstChild.remove();
-    if (pinnedContainer) {
-      while (pinnedContainer.firstChild)
-        pinnedContainer.firstChild.remove();
+    while (state.panel.firstChild !== state.spacer)
+      state.panel.firstChild.remove();
+    if (state.pinnedContainer) {
+      while (state.pinnedContainer.firstChild)
+        state.pinnedContainer.firstChild.remove();
     }
     for (const g of leadingGroups)
-      panel.insertBefore(mkGroup(g), spacer);
+      state.panel.insertBefore(mkGroup(g), state.spacer);
     for (const tab of gBrowser.tabs) {
       const row = createTabRow(tab);
-      if (tab.pinned && pinnedContainer) {
-        pinnedContainer.appendChild(row);
+      if (tab.pinned && state.pinnedContainer) {
+        state.pinnedContainer.appendChild(row);
       } else {
-        panel.insertBefore(row, spacer);
+        state.panel.insertBefore(row, state.spacer);
         const tid = treeData(tab).id;
         const groups = groupsAfter.get(tid);
         if (groups)
           for (const g of groups)
-            panel.insertBefore(mkGroup(g), spacer);
+            state.panel.insertBefore(mkGroup(g), state.spacer);
       }
     }
-    if (pinnedContainer) {
-      pinnedContainer.hidden = !pinnedContainer.querySelector(".pfx-tab-row");
+    if (state.pinnedContainer) {
+      state.pinnedContainer.hidden = !state.pinnedContainer.querySelector(".pfx-tab-row");
     }
     loadedNodes = null;
     scheduleTreeResync();
@@ -2551,7 +2553,7 @@
   }
   function positionPanel() {
     const vertical = isVertical();
-    panel.toggleAttribute("pfx-horizontal", !vertical);
+    state.panel.toggleAttribute("pfx-horizontal", !vertical);
     document.documentElement.toggleAttribute("pfx-horizontal-tabs", !vertical);
     if (toolboxResizeObs) {
       toolboxResizeObs.disconnect();
@@ -2561,24 +2563,24 @@
     const toolboxInSidebar = toolbox?.parentNode === sidebarMain;
     if (vertical) {
       const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
-      panel.toggleAttribute("pfx-icons-only", !expanded);
-      pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
+      state.panel.toggleAttribute("pfx-icons-only", !expanded);
+      state.pinnedContainer.toggleAttribute("pfx-icons-only", !expanded);
       if (toolboxInSidebar) {
-        if (toolbox.nextElementSibling !== pinnedContainer)
-          toolbox.after(pinnedContainer);
-        if (pinnedContainer.nextElementSibling !== panel)
-          pinnedContainer.after(panel);
-      } else if (panel.parentNode !== sidebarMain || sidebarMain.firstElementChild !== pinnedContainer) {
-        sidebarMain.prepend(panel);
-        sidebarMain.prepend(pinnedContainer);
+        if (toolbox.nextElementSibling !== state.pinnedContainer)
+          toolbox.after(state.pinnedContainer);
+        if (state.pinnedContainer.nextElementSibling !== state.panel)
+          state.pinnedContainer.after(state.panel);
+      } else if (state.panel.parentNode !== sidebarMain || sidebarMain.firstElementChild !== state.pinnedContainer) {
+        sidebarMain.prepend(state.panel);
+        sidebarMain.prepend(state.pinnedContainer);
       }
       teardownHorizontalAlignSpacer();
       setUrlbarTopLayer(true);
     } else {
-      panel.removeAttribute("pfx-icons-only");
+      state.panel.removeAttribute("pfx-icons-only");
       const tabbrowserTabs = document.getElementById("tabbrowser-tabs");
-      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== panel) {
-        tabbrowserTabs.after(panel);
+      if (tabbrowserTabs && tabbrowserTabs.nextElementSibling !== state.panel) {
+        tabbrowserTabs.after(state.panel);
       }
       setupHorizontalAlignSpacer();
     }
@@ -2593,7 +2595,7 @@
     } else {
       document.documentElement.style.removeProperty("--pfx-toolbox-height");
     }
-    if (panel) {
+    if (state.panel) {
       if (vertical) {
         clearHorizontalGrid();
       }
@@ -2606,17 +2608,17 @@
     tryRegisterPinAttr();
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
-    pinnedContainer = document.createXULElement("hbox");
-    pinnedContainer.id = "pfx-pinned-container";
-    pinnedContainer.hidden = true;
-    setupPinnedContainerDrop(pinnedContainer);
-    panel = document.createXULElement("vbox");
-    panel.id = "pfx-tab-panel";
-    spacer = document.createXULElement("box");
-    spacer.id = "pfx-tab-spacer";
-    spacer.setAttribute("flex", "1");
-    panel.appendChild(spacer);
-    setupPanelDrop(panel);
+    state.pinnedContainer = document.createXULElement("hbox");
+    state.pinnedContainer.id = "pfx-pinned-container";
+    state.pinnedContainer.hidden = true;
+    setupPinnedContainerDrop(state.pinnedContainer);
+    state.panel = document.createXULElement("vbox");
+    state.panel.id = "pfx-tab-panel";
+    state.spacer = document.createXULElement("box");
+    state.spacer.id = "pfx-tab-spacer";
+    state.spacer.setAttribute("flex", "1");
+    state.panel.appendChild(state.spacer);
+    setupPanelDrop(state.panel);
     positionPanel();
     new MutationObserver(() => positionPanel()).observe(sidebarMain, {
       childList: true,
@@ -2643,7 +2645,7 @@
     tc.addEventListener("SSTabRestoring", onTabRestoring);
     tc.addEventListener("TabPinned", onTabPinned);
     tc.addEventListener("TabUnpinned", onTabUnpinned);
-    spacer.addEventListener("click", () => {
+    state.spacer.addEventListener("click", () => {
       const rows = allRows().filter((r) => !r.hidden);
       if (rows.length)
         activateVim(rows[rows.length - 1]);
