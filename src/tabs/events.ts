@@ -351,6 +351,9 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
       row.remove();
     }
     rowOf.delete(tab);
+    if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+      state.pinnedContainer.hidden = true;
+    }
     rows.updateVisibility();
     scheduleSave();
   }
@@ -360,12 +363,24 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
     const row = rowOf.get(tab);
     if (!row) return;
     const td = treeData(tab);
-    const pinnedId = td.id;
-    td.parentId = null;
-    // Promote any direct children of this tab to root (pinned tabs can't have children).
-    for (const t of gBrowser.tabs as Iterable<Tab>) {
-      if (treeData(t).parentId === pinnedId) treeData(t).parentId = null;
+    // Drop parentId only if the parent isn't (or can't be) pinned — otherwise
+    // we'd visually orphan ourselves across the divider. Groups can't be pinned.
+    if (td.parentId != null) {
+      if (typeof td.parentId === "string") {
+        td.parentId = null;
+      } else {
+        const parent = tabById(td.parentId);
+        if (!parent || !parent.pinned) td.parentId = null;
+      }
     }
+    // Cascade-pin direct children so the subtree follows. Each child's own
+    // TabPinned event recurses into its grandkids.
+    const kids: Tab[] = [];
+    for (const t of gBrowser.tabs as Iterable<Tab>) {
+      if (!t.pinned && treeData(t).parentId === td.id) kids.push(t);
+    }
+    for (const kid of kids) gBrowser.pinTab(kid);
+
     row.removeAttribute("style");
     if (row.parentNode !== state.pinnedContainer) {
       state.pinnedContainer.appendChild(row);
@@ -382,6 +397,20 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
     const tab = (e.target as Tab);
     const row = rowOf.get(tab);
     if (!row) return;
+    const td = treeData(tab);
+    // Symmetric: if our parent stayed pinned, drop the link so we don't
+    // visually orphan across the divider.
+    if (td.parentId != null && typeof td.parentId === "number") {
+      const parent = tabById(td.parentId);
+      if (parent && parent.pinned) td.parentId = null;
+    }
+    // Cascade-unpin direct children so the subtree comes with us.
+    const kids: Tab[] = [];
+    for (const t of gBrowser.tabs as Iterable<Tab>) {
+      if (t.pinned && treeData(t).parentId === td.id) kids.push(t);
+    }
+    for (const kid of kids) gBrowser.unpinTab(kid);
+
     row.draggable = true;
     if (row.parentNode !== state.panel) {
       state.panel.insertBefore(row, state.spacer);

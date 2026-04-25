@@ -65,65 +65,63 @@
 /* #endregion tab panel */
 
 
-/* #region pinned tabs — icon grid at top of sidebar */
+/* #region pinned tabs — vertical list above the unpinned tree, floating divider */
 
 #pfx-pinned-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 4px var(--pfx-sidebar-inset);
-  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
-  align-items: center;
+  padding: 2px 0;
 }
 #pfx-pinned-container[hidden] {
   display: none !important;
 }
+/* Floating divider: thin inset line, breathing room top + bottom.
+ * Suppressed in the empty-zone state — there's nothing to separate. */
+#pfx-pinned-container::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin: 10px var(--pfx-sidebar-inset);
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+#pfx-pinned-container[pfx-empty-zone]::after {
+  display: none;
+}
 
 /* Empty drop zone — shown during drag of unpinned tabs */
 #pfx-pinned-container[pfx-empty-zone] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 40px;
   border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 4px;
   margin: 4px var(--pfx-sidebar-inset);
   padding: 4px;
-  justify-content: center;
   opacity: 0.7;
 }
 #pfx-pinned-container[pfx-empty-zone]::before {
   content: "drop to pin";
   font-size: 11px;
   opacity: 0.6;
-  align-self: center;
 }
 
-#pfx-pinned-container .pfx-tab-row {
-  width: 24px;
-  height: 24px;
-  padding: 4px !important;
-  padding-inline-start: 4px !important;
-  justify-content: center;
-  margin: 0;
-  min-height: unset;
-  box-sizing: content-box;
-  flex-shrink: 0;
-}
-#pfx-pinned-container .pfx-tab-label,
-#pfx-pinned-container .pfx-tab-close {
+/* Icons-only sidebar — match the tree panel's icons-only treatment so pinned
+ * and unpinned rows collapse identically. */
+#pfx-pinned-container[pfx-icons-only] .pfx-tab-label,
+#pfx-pinned-container[pfx-icons-only] .pfx-tab-close {
   display: none !important;
-}
-#pfx-pinned-container .pfx-tab-icon {
-  margin: 0;
-}
-/* Collapsed (icons-only) sidebar: stack pinned tabs vertically, one per row. */
-#pfx-pinned-container[pfx-icons-only] {
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
 }
 #pfx-pinned-container[pfx-icons-only] .pfx-tab-row {
   width: 24px;
   height: 24px;
   padding: 4px !important;
+  padding-inline-start: 4px !important;
+  justify-content: center;
+  margin: 2px auto;
+  min-height: unset;
+  box-sizing: content-box;
+}
+#pfx-pinned-container[pfx-icons-only] .pfx-tab-icon {
+  margin: 0;
 }
 
 /* Symmetric drop zone in the tree panel — shown when dragging
@@ -335,12 +333,6 @@
   margin-top: -1px;
   margin-bottom: -1px;
 }
-#pfx-drop-indicator[pfx-pinned] {
-  height: 32px;
-  width: 2px;
-  margin: 0;
-  flex-shrink: 0;
-}
 
 /* #endregion drag and drop */
 
@@ -348,6 +340,10 @@
 /* #region horizontal mode — replace native tab strip */
 
 :root[pfx-horizontal-tabs] #tabbrowser-tabs {
+  display: none !important;
+}
+/* Pinned container has no good home in horizontal mode yet — hide for now. */
+:root[pfx-horizontal-tabs] #pfx-pinned-container {
   display: none !important;
 }
 :root[pfx-horizontal-tabs] #TabsToolbar {

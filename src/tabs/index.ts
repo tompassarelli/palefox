@@ -302,7 +302,7 @@ const pfxLog = createLogger("tabs");
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
 
-    state.pinnedContainer = document.createXULElement("hbox");
+    state.pinnedContainer = document.createXULElement("vbox");
     state.pinnedContainer.id = "pfx-pinned-container";
     state.pinnedContainer.hidden = true;
     drag.setupPinnedContainerDrop(state.pinnedContainer);

@@ -573,22 +573,15 @@
           return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        const tgtPinned = !!row._tab?.pinned;
-        if (tgtPinned) {
-          const rect = row.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          dropPosition = x < rect.width / 2 ? "before" : "after";
-        } else {
-          const rect = row.getBoundingClientRect();
-          const y = e.clientY - rect.top;
-          const zone = rect.height / 3;
-          if (y < zone)
-            dropPosition = "before";
-          else if (y > zone * 2)
-            dropPosition = "after";
-          else
-            dropPosition = "child";
-        }
+        const rect = row.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const zone = rect.height / 3;
+        if (y < zone)
+          dropPosition = "before";
+        else if (y > zone * 2)
+          dropPosition = "after";
+        else
+          dropPosition = "child";
         dropTarget = row;
         if (row._group) {
           log2("dragover/group", {
@@ -746,16 +739,7 @@
         dropIndicator.id = "pfx-drop-indicator";
       }
       dropIndicator.removeAttribute("pfx-drop-child");
-      dropIndicator.removeAttribute("pfx-pinned");
       dropIndicator.style.marginInlineStart = "";
-      if (targetRow._tab?.pinned) {
-        dropIndicator.setAttribute("pfx-pinned", "true");
-        if (position === "before")
-          targetRow.before(dropIndicator);
-        else
-          targetRow.after(dropIndicator);
-        return;
-      }
       if (position === "child") {
         dropIndicator.setAttribute("pfx-drop-child", "true");
         targetRow.after(dropIndicator);
@@ -805,7 +789,7 @@
         return;
       }
       const srcLevel = levelOfRow(movedRows[0]);
-      const newSrcLevel = position === "child" && !tgtPinned ? tgtLevel + 1 : tgtLevel;
+      const newSrcLevel = position === "child" ? tgtLevel + 1 : tgtLevel;
       const delta = newSrcLevel - srcLevel;
       log2("executeDrop:plan", {
         movedRowsCount: movedRows.length,
@@ -816,18 +800,14 @@
       });
       let newParentForSource = null;
       let parentBranch;
-      if (!tgtPinned) {
-        if (tgtRow._tab) {
-          parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
-          newParentForSource = position === "child" ? treeData(tgtRow._tab).id : treeData(tgtRow._tab).parentId;
-        } else if (tgtRow._group) {
-          parentBranch = "group→groupId";
-          newParentForSource = findGroupContextParent(tgtRow);
-        } else {
-          parentBranch = "no-tab-no-group→null";
-        }
+      if (tgtRow._tab) {
+        parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
+        newParentForSource = position === "child" ? treeData(tgtRow._tab).id : treeData(tgtRow._tab).parentId;
+      } else if (tgtRow._group) {
+        parentBranch = "group→groupId";
+        newParentForSource = findGroupContextParent(tgtRow);
       } else {
-        parentBranch = "pinned→null";
+        parentBranch = "no-tab-no-group→null";
       }
       log2("executeDrop:newParent", { branch: parentBranch, newParentForSource });
       const movedSet = new Set(movedRows);
@@ -1359,6 +1339,9 @@
         row.remove();
       }
       rowOf.delete(tab);
+      if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
+        state.pinnedContainer.hidden = true;
+      }
       rows.updateVisibility();
       scheduleSave();
     }
@@ -1368,12 +1351,22 @@
       if (!row)
         return;
       const td = treeData(tab);
-      const pinnedId = td.id;
-      td.parentId = null;
-      for (const t of gBrowser.tabs) {
-        if (treeData(t).parentId === pinnedId)
-          treeData(t).parentId = null;
+      if (td.parentId != null) {
+        if (typeof td.parentId === "string") {
+          td.parentId = null;
+        } else {
+          const parent = tabById(td.parentId);
+          if (!parent || !parent.pinned)
+            td.parentId = null;
+        }
       }
+      const kids = [];
+      for (const t of gBrowser.tabs) {
+        if (!t.pinned && treeData(t).parentId === td.id)
+          kids.push(t);
+      }
+      for (const kid of kids)
+        gBrowser.pinTab(kid);
       row.removeAttribute("style");
       if (row.parentNode !== state.pinnedContainer) {
         state.pinnedContainer.appendChild(row);
@@ -1391,6 +1384,19 @@
       const row = rowOf.get(tab);
       if (!row)
         return;
+      const td = treeData(tab);
+      if (td.parentId != null && typeof td.parentId === "number") {
+        const parent = tabById(td.parentId);
+        if (parent && parent.pinned)
+          td.parentId = null;
+      }
+      const kids = [];
+      for (const t of gBrowser.tabs) {
+        if (t.pinned && treeData(t).parentId === td.id)
+          kids.push(t);
+      }
+      for (const kid of kids)
+        gBrowser.unpinTab(kid);
       row.draggable = true;
       if (row.parentNode !== state.panel) {
         state.panel.insertBefore(row, state.spacer);
@@ -2095,7 +2101,7 @@
       scheduleSave();
     }
     function makeChildOfAbove(row) {
-      if (!row?._tab || row._tab.pinned)
+      if (!row?._tab)
         return;
       const prev = row.previousElementSibling;
       if (!prev)
@@ -3234,7 +3240,7 @@
     tryRegisterPinAttr();
     await loadFromDisk();
     await new Promise((r) => requestAnimationFrame(r));
-    state.pinnedContainer = document.createXULElement("hbox");
+    state.pinnedContainer = document.createXULElement("vbox");
     state.pinnedContainer.id = "pfx-pinned-container";
     state.pinnedContainer.hidden = true;
     drag.setupPinnedContainerDrop(state.pinnedContainer);

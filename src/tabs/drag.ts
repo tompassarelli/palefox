@@ -200,19 +200,12 @@ export function makeDrag(deps: DragDeps): DragAPI {
       e.preventDefault();
       (e as DragEvent).dataTransfer!.dropEffect = "move";
 
-      const tgtPinned = !!row._tab?.pinned;
-      if (tgtPinned) {
-        const rect = row.getBoundingClientRect();
-        const x = (e as MouseEvent).clientX - rect.left;
-        dropPosition = x < rect.width / 2 ? "before" : "after";
-      } else {
-        const rect = row.getBoundingClientRect();
-        const y = (e as MouseEvent).clientY - rect.top;
-        const zone = rect.height / 3;
-        if (y < zone) dropPosition = "before";
-        else if (y > zone * 2) dropPosition = "after";
-        else dropPosition = "child";
-      }
+      const rect = row.getBoundingClientRect();
+      const y = (e as MouseEvent).clientY - rect.top;
+      const zone = rect.height / 3;
+      if (y < zone) dropPosition = "before";
+      else if (y > zone * 2) dropPosition = "after";
+      else dropPosition = "child";
       dropTarget = row;
       // Only log on group targets (where the drag-onto-group bug lives) or
       // on transitions to keep the log tight during rapid-fire dragover.
@@ -389,16 +382,7 @@ export function makeDrag(deps: DragDeps): DragAPI {
       dropIndicator.id = "pfx-drop-indicator";
     }
     dropIndicator.removeAttribute("pfx-drop-child");
-    dropIndicator.removeAttribute("pfx-pinned");
     dropIndicator.style.marginInlineStart = "";
-
-    // Pinned target: vertical-line indicator before/after the icon.
-    if (targetRow._tab?.pinned) {
-      dropIndicator.setAttribute("pfx-pinned", "true");
-      if (position === "before") targetRow.before(dropIndicator);
-      else targetRow.after(dropIndicator);
-      return;
-    }
 
     if (position === "child") {
       dropIndicator.setAttribute("pfx-drop-child", "true");
@@ -454,7 +438,7 @@ export function makeDrag(deps: DragDeps): DragAPI {
     }
 
     const srcLevel = levelOfRow(movedRows[0]!);
-    const newSrcLevel = (position === "child" && !tgtPinned) ? tgtLevel + 1 : tgtLevel;
+    const newSrcLevel = position === "child" ? tgtLevel + 1 : tgtLevel;
     const delta = newSrcLevel - srcLevel;
 
     log("executeDrop:plan", {
@@ -466,20 +450,16 @@ export function makeDrag(deps: DragDeps): DragAPI {
     // parentId can be number (tab parent), string (group parent), or null.
     let newParentForSource: number | string | null = null;
     let parentBranch: string;
-    if (!tgtPinned) {
-      if (tgtRow._tab) {
-        parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
-        newParentForSource = position === "child"
-          ? treeData(tgtRow._tab).id
-          : treeData(tgtRow._tab).parentId;
-      } else if (tgtRow._group) {
-        parentBranch = "group→groupId";
-        newParentForSource = findGroupContextParent(tgtRow);
-      } else {
-        parentBranch = "no-tab-no-group→null";
-      }
+    if (tgtRow._tab) {
+      parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
+      newParentForSource = position === "child"
+        ? treeData(tgtRow._tab).id
+        : treeData(tgtRow._tab).parentId;
+    } else if (tgtRow._group) {
+      parentBranch = "group→groupId";
+      newParentForSource = findGroupContextParent(tgtRow);
     } else {
-      parentBranch = "pinned→null";
+      parentBranch = "no-tab-no-group→null";
     }
     log("executeDrop:newParent", { branch: parentBranch, newParentForSource });
 

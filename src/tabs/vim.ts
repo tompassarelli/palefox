@@ -325,7 +325,7 @@ export function makeVim(deps: VimDeps): VimAPI {
   }
 
   function makeChildOfAbove(row: Row): void {
-    if (!row?._tab || row._tab.pinned) return;
+    if (!row?._tab) return;
     const prev = row.previousElementSibling;
     if (!prev) return;
     if (prev._group) {
