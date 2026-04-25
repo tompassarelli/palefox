@@ -101,21 +101,36 @@ export function treeData(tab: Tab): TreeData {
   return treeOf.get(tab)!;
 }
 
-/** Look up a tab by palefox-id. Returns null if no match. O(N) over tabs. */
-export function tabById(id: number | null | undefined): Tab | null {
-  if (!id) return null;
+/** Look up a tab by palefox-id. Returns null if no match, or if `id` is a
+ *  string (group id) — those don't refer to tabs. O(N) over tabs. */
+export function tabById(id: number | string | null | undefined): Tab | null {
+  if (id == null || typeof id !== "number" || !id) return null;
   for (const t of gBrowser.tabs as Iterable<Tab>) {
     if (treeOf.get(t)?.id === id) return t;
   }
   return null;
 }
 
-/** Direct parent tab via parentId. Returns null if root or parent missing. */
+/** Look up a group row by its string id ("g1", "g2", …). Walks allRows. O(N). */
+export function groupById(id: string): Row | null {
+  if (!id) return null;
+  for (const row of allRows()) {
+    if (row._group?.id === id) return row;
+  }
+  return null;
+}
+
+/** Direct parent tab via parentId. Returns null if root, parent is a group,
+ *  or the parent tab is missing. */
 export function parentOfTab(tab: Tab): Tab | null {
   return tabById(treeData(tab).parentId);
 }
 
-/** Depth in the tree = number of parent-chain hops to root. Cycle-guarded. */
+/** Depth in the tree = number of parent-chain hops to root. Cycle-guarded.
+ *  Handles two parent kinds:
+ *    - numeric parentId → walk the tab chain (one level per hop)
+ *    - string parentId  → tab is "in" a group; level = group.level + 1
+ *      plus any tab-chain that led here. */
 export function levelOf(tab: Tab): number {
   let lv = 0;
   let t: Tab | null = tab;
@@ -123,7 +138,13 @@ export function levelOf(tab: Tab): number {
   while (t && !seen.has(t)) {
     seen.add(t);
     const pid = treeData(t).parentId;
-    if (!pid) break;
+    if (pid == null) break;
+    if (typeof pid === "string") {
+      // Group parent — terminate the walk; level is group.level + 1 + lv.
+      const group = groupById(pid);
+      if (!group || !group._group) break; // orphaned (group removed)
+      return lv + 1 + (group._group.level || 0);
+    }
     const p = tabById(pid);
     if (!p) break;
     lv++;

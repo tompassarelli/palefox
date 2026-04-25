@@ -141,11 +141,20 @@
     return treeOf.get(tab);
   }
   function tabById(id) {
-    if (!id)
+    if (id == null || typeof id !== "number" || !id)
       return null;
     for (const t of gBrowser.tabs) {
       if (treeOf.get(t)?.id === id)
         return t;
+    }
+    return null;
+  }
+  function groupById(id) {
+    if (!id)
+      return null;
+    for (const row of allRows()) {
+      if (row._group?.id === id)
+        return row;
     }
     return null;
   }
@@ -159,8 +168,14 @@
     while (t && !seen.has(t)) {
       seen.add(t);
       const pid = treeData(t).parentId;
-      if (!pid)
+      if (pid == null)
         break;
+      if (typeof pid === "string") {
+        const group = groupById(pid);
+        if (!group || !group._group)
+          break;
+        return lv + 1 + (group._group.level || 0);
+      }
       const p = tabById(pid);
       if (!p)
         break;
@@ -397,6 +412,12 @@
       if (!row || !row._group)
         return;
       const myLevel = row._group.level || 0;
+      const groupId = row._group.id;
+      for (const tab of gBrowser.tabs) {
+        const td = treeData(tab);
+        if (td.parentId === groupId)
+          td.parentId = null;
+      }
       let next = row.nextElementSibling;
       while (next && next !== state.spacer) {
         const lv = levelOfRow(next);
@@ -477,40 +498,12 @@
     return { kind: "?" };
   }
   function findGroupContextParent(group) {
-    const groupLevel = group._group?.level ?? 0;
-    let next = group.nextElementSibling;
-    while (next && next !== state.spacer) {
-      if (next._tab) {
-        const lv = levelOf(next._tab);
-        if (lv <= groupLevel)
-          break;
-        const result = treeData(next._tab).parentId;
-        log2("findGroupContextParent:forward", {
-          groupLevel,
-          foundTab: next._tab.label,
-          foundLevel: lv,
-          resultParentId: result
-        });
-        return result;
-      }
-      next = next.nextElementSibling;
-    }
-    let prev = group.previousElementSibling;
-    while (prev) {
-      if (prev._tab && levelOf(prev._tab) === groupLevel) {
-        const result = treeData(prev._tab).id;
-        log2("findGroupContextParent:backward", {
-          groupLevel,
-          foundTab: prev._tab.label,
-          foundLevel: groupLevel,
-          resultParentId: result
-        });
-        return result;
-      }
-      prev = prev.previousElementSibling;
-    }
-    log2("findGroupContextParent:fallback", { groupLevel, resultParentId: null });
-    return null;
+    const id = group._group?.id ?? null;
+    log2("findGroupContextParent", {
+      groupId: id,
+      groupLevel: group._group?.level ?? 0
+    });
+    return id;
   }
   function findClosestTabBefore(row) {
     let prev = row.previousElementSibling;
@@ -828,7 +821,7 @@
           parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
           newParentForSource = position === "child" ? treeData(tgtRow._tab).id : treeData(tgtRow._tab).parentId;
         } else if (tgtRow._group) {
-          parentBranch = "group→findGroupContextParent";
+          parentBranch = "group→groupId";
           newParentForSource = findGroupContextParent(tgtRow);
         } else {
           parentBranch = "no-tab-no-group→null";
@@ -2049,12 +2042,19 @@
         d.level++;
         rows.syncAnyRow(row);
       } else if (row._tab) {
-        const prev = prevSiblingTab(row);
-        if (!prev)
-          return;
-        treeData(row._tab).parentId = treeData(prev).id;
-        for (const r of subtreeRows(row))
-          rows.syncAnyRow(r);
+        const prev = row.previousElementSibling;
+        if (prev?._group) {
+          treeData(row._tab).parentId = prev._group.id;
+          for (const r of subtreeRows(row))
+            rows.syncAnyRow(r);
+        } else {
+          const sibling = prevSiblingTab(row);
+          if (!sibling)
+            return;
+          treeData(row._tab).parentId = treeData(sibling).id;
+          for (const r of subtreeRows(row))
+            rows.syncAnyRow(r);
+        }
       }
       rows.updateVisibility();
       scheduleSave();
@@ -2068,10 +2068,14 @@
         rows.syncAnyRow(row);
       } else if (row._tab) {
         const td = treeData(row._tab);
-        if (!td.parentId)
+        if (td.parentId == null)
           return;
-        const parent = tabById(td.parentId);
-        td.parentId = parent ? treeData(parent).parentId : null;
+        if (typeof td.parentId === "string") {
+          td.parentId = null;
+        } else {
+          const parent = tabById(td.parentId);
+          td.parentId = parent ? treeData(parent).parentId : null;
+        }
         for (const r of subtreeRows(row))
           rows.syncAnyRow(r);
       }
@@ -2096,11 +2100,13 @@
       const prev = row.previousElementSibling;
       if (!prev)
         return;
-      if (!prev._tab) {
-        indentRow(row);
+      if (prev._group) {
+        treeData(row._tab).parentId = prev._group.id;
+      } else if (prev._tab) {
+        treeData(row._tab).parentId = treeData(prev._tab).id;
+      } else {
         return;
       }
-      treeData(row._tab).parentId = treeData(prev._tab).id;
       for (const r of subtreeRows(row))
         rows.syncAnyRow(r);
       rows.updateVisibility();
@@ -2537,6 +2543,12 @@
       } else if (state.cursor._group) {
         const d = state.cursor._group;
         const myLevel = d.level || 0;
+        const groupId = d.id;
+        for (const tab of gBrowser.tabs) {
+          const td = treeData(tab);
+          if (td.parentId === groupId)
+            td.parentId = null;
+        }
         let next = state.cursor.nextElementSibling;
         while (next && next !== state.spacer) {
           const lv = levelOfRow(next);

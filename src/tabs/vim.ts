@@ -256,8 +256,12 @@ export function makeVim(deps: VimDeps): VimAPI {
     return null;
   }
 
-  /** Indent: reparent to the previous sibling. Whole subtree implicitly
-   *  shifts because depth derives from parentId chain. */
+  /** Indent: reparent to the previous row. Whole subtree implicitly shifts
+   *  because depth derives from parentId chain. Three cases:
+   *    - row above is a group → set parentId to the group's id (tab nests
+   *      inside the group at level group.level + 1)
+   *    - row above is a tab sibling at same level → become its child
+   *    - neither → no-op (nothing to indent into) */
   function indentRow(row: Row): void {
     if (row._group) {
       const allR = allRows();
@@ -269,16 +273,25 @@ export function makeVim(deps: VimDeps): VimAPI {
       d.level++;
       rows.syncAnyRow(row);
     } else if (row._tab) {
-      const prev = prevSiblingTab(row);
-      if (!prev) return;
-      treeData(row._tab).parentId = treeData(prev).id;
-      for (const r of subtreeRows(row)) rows.syncAnyRow(r);
+      // Walk back: first row encountered determines the indent target.
+      const prev = row.previousElementSibling;
+      if (prev?._group) {
+        treeData(row._tab).parentId = prev._group.id;
+        for (const r of subtreeRows(row)) rows.syncAnyRow(r);
+      } else {
+        const sibling = prevSiblingTab(row);
+        if (!sibling) return;
+        treeData(row._tab).parentId = treeData(sibling).id;
+        for (const r of subtreeRows(row)) rows.syncAnyRow(r);
+      }
     }
     rows.updateVisibility();
     scheduleSave();
   }
 
-  /** Outdent: reparent to grandparent. Subtree follows. */
+  /** Outdent: reparent to grandparent. Subtree follows. Handles tab parents
+   *  (walk one level up) and group parents (walk to group's container if it
+   *  has one, else fall back to root). */
   function outdentRow(row: Row): void {
     if (row._group) {
       const d = row._group;
@@ -287,9 +300,14 @@ export function makeVim(deps: VimDeps): VimAPI {
       rows.syncAnyRow(row);
     } else if (row._tab) {
       const td = treeData(row._tab);
-      if (!td.parentId) return;
-      const parent = tabById(td.parentId);
-      td.parentId = parent ? treeData(parent).parentId : null;
+      if (td.parentId == null) return;
+      if (typeof td.parentId === "string") {
+        // Currently parented to a group — outdent leaves the group entirely.
+        td.parentId = null;
+      } else {
+        const parent = tabById(td.parentId);
+        td.parentId = parent ? treeData(parent).parentId : null;
+      }
       for (const r of subtreeRows(row)) rows.syncAnyRow(r);
     }
     rows.updateVisibility();
@@ -310,15 +328,14 @@ export function makeVim(deps: VimDeps): VimAPI {
     if (!row?._tab || row._tab.pinned) return;
     const prev = row.previousElementSibling;
     if (!prev) return;
-    // If the immediate previous row is a group (or any non-tab row), fall
-    // through to indentRow's semantics — find the previous TAB sibling at
-    // the same level via prevSiblingTab and become its child. This is what
-    // the user expects when a group sits between source and intended parent.
-    if (!prev._tab) {
-      indentRow(row);
+    if (prev._group) {
+      // Make a child of the group above.
+      treeData(row._tab).parentId = prev._group.id;
+    } else if (prev._tab) {
+      treeData(row._tab).parentId = treeData(prev._tab).id;
+    } else {
       return;
     }
-    treeData(row._tab).parentId = treeData(prev._tab).id;
     for (const r of subtreeRows(row)) rows.syncAnyRow(r);
     rows.updateVisibility();
     scheduleSave();
@@ -734,6 +751,15 @@ export function makeVim(deps: VimDeps): VimAPI {
     } else if (state.cursor._group) {
       const d = state.cursor._group;
       const myLevel = d.level || 0;
+      const groupId = d.id;
+      // Reparent any tab whose parentId points at this group → null. Without
+      // this, levelOf() would silently fail the lookup; doing it explicitly
+      // keeps the saved tree consistent with what's on screen.
+      for (const tab of gBrowser.tabs) {
+        const td = treeData(tab);
+        if (td.parentId === groupId) td.parentId = null;
+      }
+      // Decrement nested groups in the subtree by one level.
       let next = state.cursor.nextElementSibling;
       while (next && next !== state.spacer) {
         const lv = levelOfRow(next);

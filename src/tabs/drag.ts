@@ -92,59 +92,17 @@ export type DragAPI = {
 // IMPLEMENTATION
 // =============================================================================
 
-/** Find the parentId for a tab being dropped INTO a group (child / after).
- *  Groups can't be parents (they're labels, not tabs), but the user expects
- *  the dropped tab to appear visually nested inside the group's section —
- *  which means level groupLevel + 1.
- *
- *  Two ways to derive that parentId:
- *    1. Forward walk into the group's subtree — tabs there are already at
- *       lv > groupLevel; their parentId is the level-groupLevel container
- *       we want to inherit.
- *    2. Back walk — find the closest preceding tab at exactly groupLevel.
- *       That tab is the level-groupLevel container; its id is what we want
- *       (source becomes its child at lv = groupLevel + 1).
- *
- *  Falls back to null if neither yields a result (group is detached at
- *  level 0 with no preceding tab — treat source as root). */
-function findGroupContextParent(group: Row): number | null {
-  const groupLevel = group._group?.level ?? 0;
-
-  // Forward: any tab inside the group's visual subtree (lv > groupLevel).
-  let next = group.nextElementSibling;
-  while (next && next !== state.spacer) {
-    if (next._tab) {
-      const lv = levelOf(next._tab);
-      if (lv <= groupLevel) break; // exited the group's subtree
-      const result = treeData(next._tab).parentId;
-      log("findGroupContextParent:forward", {
-        groupLevel,
-        foundTab: next._tab.label,
-        foundLevel: lv,
-        resultParentId: result,
-      });
-      return result;
-    }
-    next = next.nextElementSibling;
-  }
-
-  // Backward: tab at exactly groupLevel — return its id (source is child).
-  let prev = group.previousElementSibling;
-  while (prev) {
-    if (prev._tab && levelOf(prev._tab) === groupLevel) {
-      const result = treeData(prev._tab).id;
-      log("findGroupContextParent:backward", {
-        groupLevel,
-        foundTab: prev._tab.label,
-        foundLevel: groupLevel,
-        resultParentId: result,
-      });
-      return result;
-    }
-    prev = prev.previousElementSibling;
-  }
-  log("findGroupContextParent:fallback", { groupLevel, resultParentId: null });
-  return null;
+/** Parent-id for a tab dropped INTO a group ("child" or "after" position).
+ *  With group-as-parent supported in TreeData.parentId, the answer is just
+ *  the group's own string id. The dropped tab becomes "in the group" at
+ *  level group.level + 1; levelOf computes that via the string-parent path. */
+function findGroupContextParent(group: Row): string | null {
+  const id = group._group?.id ?? null;
+  log("findGroupContextParent", {
+    groupId: id,
+    groupLevel: group._group?.level ?? 0,
+  });
+  return id;
 }
 
 /** Closest preceding tab in DOM. Skips groups. */
@@ -505,7 +463,8 @@ export function makeDrag(deps: DragDeps): DragAPI {
       srcLevel, newSrcLevel, delta,
     });
 
-    let newParentForSource: number | null = null;
+    // parentId can be number (tab parent), string (group parent), or null.
+    let newParentForSource: number | string | null = null;
     let parentBranch: string;
     if (!tgtPinned) {
       if (tgtRow._tab) {
@@ -514,7 +473,7 @@ export function makeDrag(deps: DragDeps): DragAPI {
           ? treeData(tgtRow._tab).id
           : treeData(tgtRow._tab).parentId;
       } else if (tgtRow._group) {
-        parentBranch = "group→findGroupContextParent";
+        parentBranch = "group→groupId";
         newParentForSource = findGroupContextParent(tgtRow);
       } else {
         parentBranch = "no-tab-no-group→null";

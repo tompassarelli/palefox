@@ -16,8 +16,11 @@ export type Tab = any;
 export type TreeData = {
   /** Stable palefox tab ID. Persisted across sessions via SessionStore.persistTabAttribute. */
   id: number;
-  /** ID of the parent tab, or null if this is a root tab. Pinned tabs are always null. */
-  parentId: number | null;
+  /** ID of the parent — number = tab id, string = group id ("g1", "g2", …),
+   *  null = root. Pinned tabs are always null. Tabs with a string parentId
+   *  are visually nested inside a group; their level derives as
+   *  group.level + 1 (see helpers.levelOf). */
+  parentId: number | string | null;
   /** Custom rename label, or null to fall back to tab.label. */
   name: string | null;
   /** Informational tag like "child" or "sibling" — set by spawn-position handlers. */
@@ -48,7 +51,8 @@ export type Row = HTMLElement & {
 /** Serialized form of a tab or group node, persisted in palefox-tab-tree.json. */
 export type SavedNode = {
   id: number;
-  parentId: number | null;
+  /** Mirrors TreeData.parentId — number for tab parent, string for group parent. */
+  parentId: number | string | null;
   /** Present for group entries; absent for tabs. */
   type?: "group";
   name?: string | null;

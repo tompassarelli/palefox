@@ -10,7 +10,7 @@
 // by the time popupshowing runs the relevant target is available.
 
 import { rowOf, state } from "./state.ts";
-import { dataOf, hasChildren, levelOfRow, subtreeRows } from "./helpers.ts";
+import { dataOf, hasChildren, levelOfRow, subtreeRows, treeData } from "./helpers.ts";
 import type { Row } from "./types.ts";
 
 declare const Cc: any;
@@ -217,10 +217,17 @@ export function buildGroupContextMenu(deps: GroupMenuDeps): HTMLElement {
   const closeGroupItem = mi("Close Group", () => {
     const row = state.contextGroupRow;
     if (!row || !row._group) return;
-    // Decrement nested groups in the visual subtree by one level (matches
-    // the existing closeFocused() behavior for groups). Tabs derive their
-    // depth from parentId, so they don't need adjustment.
     const myLevel = row._group.level || 0;
+    const groupId = row._group.id;
+    // Reparent tabs whose parentId points at this group to null — otherwise
+    // levelOf would treat them as orphans (group lookup fails) and silently
+    // drop them to root anyway, but doing it explicitly keeps the saved
+    // tree consistent.
+    for (const tab of gBrowser.tabs) {
+      const td = treeData(tab);
+      if (td.parentId === groupId) td.parentId = null;
+    }
+    // Decrement nested groups in the visual subtree by one level.
     let next = row.nextElementSibling;
     while (next && next !== state.spacer) {
       const lv = levelOfRow(next);
