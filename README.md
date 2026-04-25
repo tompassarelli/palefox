@@ -21,7 +21,7 @@
 
 - **Tree-style tabs** — custom tab panel with deep nesting, groups, drag-and-drop reordering, and multi-select
 - **Horizontal Tabs** — custom tab panel that supports trees and complementary UX
-- **Vim keybindings** — navigate, refile, search, and manipulate tabs without leaving the keyboard
+- **Vim & Emacs inspired** — modal navigation, refile, search, and manipulation without leaving the keyboard
 - **Compact mode** — sidebar autohides off-screen, revealed on left-edge hover with spring animation
 - **Collapse layout** — sidebar shrinks to icons-only strip, toolbox returns to horizontal bar
 - **Sidebar button** — left-click toggles compact mode, right-click opens layout options (compact, collapse, tab orientation)
