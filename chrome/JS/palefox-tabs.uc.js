@@ -3581,6 +3581,41 @@
         vim.activateVim(visible[visible.length - 1]);
     });
     window.addEventListener("unload", teardownEvents, { once: true });
+    if (Services.prefs.getBoolPref("pfx.test.exposeAPI", false)) {
+      window.pfxTest = {
+        state,
+        treeOf,
+        rowOf,
+        cursorId() {
+          const r = state.cursor;
+          if (!r?._tab)
+            return null;
+          return treeOf.get(r._tab)?.id ?? null;
+        },
+        snapshotTree() {
+          const out = [];
+          for (const t of gBrowser.tabs) {
+            const td = treeOf.get(t);
+            if (!td)
+              continue;
+            out.push({
+              id: td.id,
+              parentId: td.parentId,
+              name: td.name,
+              collapsed: td.collapsed,
+              pinned: !!t.pinned,
+              url: t.linkedBrowser?.currentURI?.spec ?? "",
+              label: t.label
+            });
+          }
+          return out;
+        },
+        vim,
+        rows: Rows,
+        scheduleSave
+      };
+      console.log("palefox-tabs: pfxTest debug API exposed");
+    }
     console.log("palefox-tabs: initialized");
   }
   if (gBrowserInit.delayedStartupFinished) {

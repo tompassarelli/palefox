@@ -166,6 +166,69 @@ const tests: IntegrationTest[] = [
   },
 
   {
+    name: "pfxTest debug API: snapshotTree returns one entry per live tab",
+    async run(mn) {
+      // Open tabs so we have something to snapshot.
+      await mn.executeScript(`
+        const sp = Services.scriptSecurityManager.getSystemPrincipal();
+        gBrowser.addTab("about:blank", { triggeringPrincipal: sp });
+        gBrowser.addTab("about:blank", { triggeringPrincipal: sp });
+      `);
+      await waitFor(mn, `return gBrowser.tabs.length >= 3;`);
+
+      const result = await mn.executeScript<{
+        apiPresent: boolean;
+        snapshotLen: number;
+        cursorId: number | null;
+        firstEntryHasId: boolean;
+      }>(`
+        if (!window.pfxTest) return { apiPresent: false, snapshotLen: 0, cursorId: null, firstEntryHasId: false };
+        const snap = window.pfxTest.snapshotTree();
+        return {
+          apiPresent: true,
+          snapshotLen: snap.length,
+          cursorId: window.pfxTest.cursorId(),
+          firstEntryHasId: snap.length > 0 && typeof snap[0].id === "number",
+        };
+      `);
+
+      if (!result.apiPresent) {
+        throw new Error("window.pfxTest not exposed — gate pref not active in profile");
+      }
+      if (result.snapshotLen < 3) {
+        throw new Error(`expected snapshotTree() to have 3+ entries, got ${result.snapshotLen}`);
+      }
+      if (!result.firstEntryHasId) {
+        throw new Error("snapshotTree() entries missing numeric id field");
+      }
+    },
+  },
+
+  {
+    name: "pfxTest debug API: cursorId tracks vim cursor moves",
+    async run(mn) {
+      // Activate vim on first row.
+      await mn.executeScript(SCRIPT_CLICK_FIRST);
+      await waitFor(mn, `return window.pfxTest?.cursorId?.() != null;`);
+
+      const before = await mn.executeScript<number | null>(
+        `return window.pfxTest.cursorId();`,
+      );
+
+      // Move cursor down via j.
+      await mn.executeScript(pressKey("j"));
+      await waitFor(mn, `return window.pfxTest.cursorId() !== ${JSON.stringify(before)};`);
+
+      const after = await mn.executeScript<number | null>(
+        `return window.pfxTest.cursorId();`,
+      );
+      if (after === before) {
+        throw new Error(`cursorId unchanged after j press. before=${before} after=${after}`);
+      }
+    },
+  },
+
+  {
     name: "vim: Escape deactivates panel (pfx-cursor cleared on blur)",
     async run(mn) {
       await mn.executeScript(SCRIPT_CLICK_FIRST);

@@ -61,4 +61,13 @@ declare global {
     hidden?: boolean;
     isContentEditable?: boolean;
   }
+
+  // Test-only debug API. Only present when `pfx.test.exposeAPI` pref is
+  // true (set in test-profile user.js by tools/test-driver/profile.ts).
+  // Production builds never expose this. Typed as `any` because the
+  // surface is intentionally fluid; tests assert on shape themselves.
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pfxTest?: any;
+  }
 }

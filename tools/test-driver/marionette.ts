@@ -41,6 +41,14 @@ export interface MarionetteClient {
   /** WebDriver:ExecuteScript — runs `script` in current context, returns
    *  whatever `return` value the script produces (must be JSON-serializable). */
   executeScript<T = unknown>(script: string, args?: readonly unknown[]): Promise<T>;
+  /** WebDriver:GetWindowHandle — current chrome window handle (opaque ID). */
+  getWindowHandle(): Promise<string>;
+  /** WebDriver:GetWindowHandles — all open chrome window handles. */
+  getWindowHandles(): Promise<string[]>;
+  /** WebDriver:SwitchToWindow — make `handle` the target of executeScript. */
+  switchToWindow(handle: string): Promise<void>;
+  /** WebDriver:CloseWindow — close current window. Returns remaining handles. */
+  closeWindow(): Promise<string[]>;
   /** WebDriver:DeleteSession — tears down. */
   deleteSession(): Promise<void>;
   /** Close the underlying socket. Call after deleteSession. */
@@ -189,6 +197,26 @@ async function initClient(socket: Socket): Promise<MarionetteClient> {
         newSandbox: false,
       });
       return r.value;
+    },
+    async getWindowHandle() {
+      // Marionette wraps single-value returns in { value: ... } here, just
+      // like ExecuteScript. Unwrap.
+      const r = await send<string | { value: string }>("WebDriver:GetWindowHandle", {});
+      return typeof r === "string" ? r : r.value;
+    },
+    async getWindowHandles() {
+      const r = await send<string[] | { value: string[] }>("WebDriver:GetWindowHandles", {});
+      return Array.isArray(r) ? r : r.value;
+    },
+    async switchToWindow(handle: string) {
+      await send<unknown>("WebDriver:SwitchToWindow", { handle });
+    },
+    async closeWindow() {
+      // WebDriver:CloseWindow closes the active *tab*, not the chrome window.
+      // For our case (palefox is a chrome-window-level extension) we want
+      // to close the entire window, hence Marionette:CloseChromeWindow.
+      const r = await send<string[] | { value: string[] }>("WebDriver:CloseChromeWindow", {});
+      return Array.isArray(r) ? r : r.value;
     },
     async deleteSession() {
       try {

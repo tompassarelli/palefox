@@ -34,6 +34,10 @@ export interface TestContext {
   /** Path to the ephemeral profile directory. Stable across restarts within
    *  one test run; auto-cleaned at the end. */
   readonly profilePath: string;
+  /** True iff the runner is launching Firefox without --headless. Tests that
+   *  need toolbar UI / real hover should `if (!ctx.headed) throw new Error(...)`
+   *  to skip noisily under headless rather than silently passing. */
+  readonly headed: boolean;
   /** Kill Firefox, respawn with the SAME profile, reconnect Marionette, set
    *  chrome context. Returns the new client; the prior client is dead.
    *
@@ -62,6 +66,9 @@ export interface RunnerOptions {
   /** Substring filter on test names; non-matches are skipped. Useful for
    *  fast iteration on a single test. Case-insensitive. */
   grep?: string;
+  /** Drop --headless from spawn args. Necessary for tests that depend on
+   *  toolbar UI (#sidebar-button etc.) or real input events / hover state. */
+  headed?: boolean;
 }
 
 interface JsonEvent {
@@ -106,6 +113,7 @@ async function spawnFirefox(opts: {
   profilePath: string;
   marionettePort: number;
   verbose?: boolean;
+  headed?: boolean;
 }): Promise<ChildProcess> {
   // --remote-allow-system-access is required for privileged ("chrome")
   // context script eval — landed in Firefox 128+ as a safety gate. Without
@@ -113,7 +121,7 @@ async function spawnFirefox(opts: {
   const args = [
     "--profile", opts.profilePath,
     "--marionette",
-    "--headless",
+    ...(opts.headed ? [] : ["--headless"]),
     "--no-remote",
     "--remote-allow-system-access",
     `-marionette-port`, String(opts.marionettePort),
@@ -176,7 +184,8 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
 
   async function bootFirefox(profilePath: string): Promise<MarionetteClient> {
     firefox = await spawnFirefox({
-      firefoxBin, profilePath, marionettePort, verbose: opts.verbose,
+      firefoxBin, profilePath, marionettePort,
+      verbose: opts.verbose, headed: opts.headed,
     });
     const client = await connectMarionette({ port: marionettePort });
     await client.newSession();
@@ -196,6 +205,7 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
         const tStart = Date.now();
         const ctx: TestContext = {
           profilePath: profile.path,
+          headed: !!opts.headed,
           async restartFirefox() {
             try { await mn!.deleteSession(); } catch {}
             mn!.disconnect();
@@ -240,13 +250,14 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const verbose = args.includes("--verbose");
+  const headed = args.includes("--headed");
   // --grep <substring> OR --grep=<substring>
   let grep: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--grep" && args[i + 1]) { grep = args[i + 1]; i++; continue; }
     if (args[i]!.startsWith("--grep=")) { grep = args[i]!.slice("--grep=".length); }
   }
-  runAll({ verbose, grep })
+  runAll({ verbose, grep, headed })
     .then(({ fail }) => process.exit(fail > 0 ? 1 : 0))
     .catch((e) => {
       logErr(`fatal: ${(e as Error).stack ?? e}`);

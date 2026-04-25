@@ -200,18 +200,44 @@ Mark items as you ship them. Do NOT skip a sprint to start a later one.
       persistence round-trip test.
 - [x] **Single-test filter:** `bun run test:integration -- --grep "hover"`
       (substring match, case-insensitive).
-- [x] **Integration tests added:**
+- [x] **Integration tests:**
       - `compact.ts` — 8 tests (bootstrap, pref observer, hover strip,
         horizontal mode, verticalTabs auto-swap, popup pin, dismiss,
         destroy)
       - `persist.ts` — 2 tests (tree-file write on tab events, file
         survives Firefox restart)
-      - `vim.ts` — 5 tests (activation via row click, j/k navigation,
-        gg/G chords, Escape deactivation)
+      - `vim.ts` — 7 tests (activation via row click, j/k navigation,
+        gg/G chords, Escape deactivation, pfxTest snapshotTree, pfxTest
+        cursorId tracking)
       - `drag.ts` — 3 tests (full drag chain reorders gBrowser.tabs,
         cancelled drag leaves order intact, [pfx-dragging] attribute
         lifecycle)
+      - `multiwindow.ts` — 3 tests (OpenBrowserWindow spawns palefox-
+        loaded second window, compact pref propagates across windows,
+        closing one leaves the other functional)
 - [x] Failure-mode docs (see Troubleshooting section below).
+
+### Expansion (post-Sprint-4) — capabilities the substrate enables
+
+- [x] **`pfxTest` debug API** (`window.pfxTest`, gated on
+      `pfx.test.exposeAPI` pref — only set in test profiles). Exposes
+      `state`, `treeOf`, `rowOf`, `cursorId()`, `snapshotTree()`,
+      `vim`, `rows`, `scheduleSave`. Production builds never expose it.
+- [x] **Headed mode toggle:** `bun run test:integration -- --headed`
+      drops `--headless` from spawn args. `ctx.headed` is exposed on
+      tests so they can self-skip (`if (!ctx.headed) throw new Error(...)`)
+      when they require headed mode.
+- [x] **Multi-window support in Marionette client:** `getWindowHandle`,
+      `getWindowHandles`, `switchToWindow`, `closeWindow`. Use
+      `OpenBrowserWindow()` from chrome scope to create new windows.
+      **Note:** Marionette's `WebDriver:CloseWindow` closes a *tab*; for
+      whole-chrome-window close use `WebDriver:CloseChromeWindow`
+      (already abstracted by our `closeWindow()` helper).
+- [x] **Performance benchmarks:** `bun run bench:integration` runs
+      `tests/bench/*.ts` files. Each bench reports min/median/max/mean
+      across N iterations as JSON. Currently covers: compact pref-flip
+      latencies (on/off) + `snapshotTree` cost. Override iterations via
+      `PFX_BENCH_ITERATIONS=100`.
 
 ---
 

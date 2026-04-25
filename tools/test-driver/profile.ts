@@ -65,6 +65,9 @@ user_pref("sidebar.verticalTabs", true);
 user_pref("sidebar.revamp", true);
 // Palefox debug logging on so failed runs leave a trail
 user_pref("pfx.debug", true);
+// Expose window.pfxTest for direct internal-state access in tests. Only
+// active when this pref is set; production builds never expose it.
+user_pref("pfx.test.exposeAPI", true);
 // Skip the legacy compatibility shield warning
 user_pref("xpinstall.signatures.required", false);
 // Disable telemetry / data submission for clean profiles

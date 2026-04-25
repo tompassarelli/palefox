@@ -33,7 +33,7 @@ import { makeSaver, readTreeFromDisk } from "./persist.ts";
 import {
   closedTabs, rowOf, savedTabQueue, selection, state, treeOf,
 } from "./state.ts";
-import type { Row, SavedNode } from "./types.ts";
+import type { Row, SavedNode, Tab } from "./types.ts";
 
 declare const document: Document;
 declare const gBrowser: any;
@@ -364,6 +364,50 @@ const pfxLog = createLogger("tabs");
     });
 
     window.addEventListener("unload", teardownEvents, { once: true });
+
+    // Test-only debug API. Gated on `pfx.test.exposeAPI` so production
+    // builds (where the pref is absent / false) don't expose internals.
+    // Tests in tests/integration/* set this pref via the ephemeral
+    // profile's user.js; see tools/test-driver/profile.ts.
+    if (Services.prefs.getBoolPref("pfx.test.exposeAPI", false)) {
+      window.pfxTest = {
+        // Live state references (NOT snapshots — readers see future writes)
+        state,
+        treeOf,
+        rowOf,
+        // Cursor inspection — returns the pfx-id (TreeData.id) at the cursor
+        // or null if no cursor / cursor on a non-tab row.
+        cursorId() {
+          const r = state.cursor;
+          if (!r?._tab) return null;
+          return treeOf.get(r._tab)?.id ?? null;
+        },
+        // Snapshot of all live tabs with their TreeData. Useful for asserting
+        // tree structure post-event without DOM probing.
+        snapshotTree(): Array<Record<string, unknown>> {
+          const out: Array<Record<string, unknown>> = [];
+          for (const t of gBrowser.tabs as Iterable<Tab>) {
+            const td = treeOf.get(t);
+            if (!td) continue;
+            out.push({
+              id: td.id,
+              parentId: td.parentId,
+              name: td.name,
+              collapsed: td.collapsed,
+              pinned: !!t.pinned,
+              url: t.linkedBrowser?.currentURI?.spec ?? "",
+              label: t.label,
+            });
+          }
+          return out;
+        },
+        // Direct API access — use sparingly.
+        vim,
+        rows: Rows,
+        scheduleSave,
+      };
+      console.log("palefox-tabs: pfxTest debug API exposed");
+    }
 
     console.log("palefox-tabs: initialized");
   }
