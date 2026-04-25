@@ -210,6 +210,18 @@ export function makeDrag(deps: DragDeps): DragAPI {
     });
 
     row.addEventListener("dragend", () => {
+      log("dragend/row", {
+        listenerOnRow: rowDesc(row),
+        sourceWas: dragSource ? rowDesc(dragSource) : "already-null",
+        dropTargetWas: dropTarget instanceof HTMLElement && (dropTarget as Row)._tab
+          ? rowDesc(dropTarget as Row)
+          : dropTarget instanceof HTMLElement && (dropTarget as Row)._group
+          ? rowDesc(dropTarget as Row)
+          : (dropTarget as any) === state.panel ? "panel"
+          : (dropTarget as any) === state.pinnedContainer ? "pinnedContainer"
+          : "other",
+        dropPositionWas: dropPosition,
+      });
       dragSource?.removeAttribute("pfx-dragging");
       dragSource = null;
       clearDropIndicator();
@@ -265,16 +277,36 @@ export function makeDrag(deps: DragDeps): DragAPI {
     });
 
     row.addEventListener("drop", (e) => {
+      // Log entry FIRST — before any early-return — so we can see if drop is
+      // even firing on the row. The dragSource/source-equals-row gates come after.
+      log("drop/row:fired", {
+        listenerOnRow: rowDesc(row),
+        eventTarget: (e.target as Element)?.className || (e.target as Element)?.tagName,
+        hasDragSource: !!dragSource,
+        sourceEqualsRow: dragSource === row,
+      });
       e.preventDefault();
-      if (!dragSource || dragSource === row) return;
-      if (subtreeRows(dragSource).includes(row)) return;
-      log("drop", {
+      if (!dragSource) {
+        log("drop/row:abort", { reason: "no-dragSource" });
+        return;
+      }
+      if (dragSource === row) {
+        log("drop/row:abort", { reason: "source-equals-row" });
+        return;
+      }
+      if (subtreeRows(dragSource).includes(row)) {
+        log("drop/row:abort", { reason: "row-in-source-subtree" });
+        return;
+      }
+      log("drop/row:proceeding", {
         target: rowDesc(row),
         source: rowDesc(dragSource),
         position: dropPosition,
       });
       if (dropPosition && dropPosition !== "into-empty-pinned" && dropPosition !== "into-empty-panel") {
         executeDrop(dragSource, row, dropPosition);
+      } else {
+        log("drop/row:abort", { reason: "no-or-empty-zone-position", dropPosition });
       }
       clearDropIndicator();
     });
@@ -302,6 +334,11 @@ export function makeDrag(deps: DragDeps): DragAPI {
     });
 
     container.addEventListener("drop", (e) => {
+      log("drop/pinnedContainer:fired", {
+        eventTarget: (e.target as Element)?.id || (e.target as Element)?.className || (e.target as Element)?.tagName,
+        hasDragSource: !!dragSource,
+        srcPinned: !!dragSource?._tab?.pinned,
+      });
       if (!dragSource || dragSource._tab?.pinned) return;
       if (e.target !== container && dropTarget !== container) return;
       e.preventDefault();
@@ -365,6 +402,12 @@ export function makeDrag(deps: DragDeps): DragAPI {
     });
 
     p.addEventListener("drop", (e) => {
+      log("drop/panel:fired", {
+        eventTarget: (e.target as Element)?.id || (e.target as Element)?.className || (e.target as Element)?.tagName,
+        eventTargetIsPanel: e.target === p,
+        eventTargetIsSpacer: e.target === state.spacer,
+        hasDragSource: !!dragSource,
+      });
       if (!dragSource) return;
       if (e.target !== p && e.target !== state.spacer && dropTarget !== p) return;
       e.preventDefault();

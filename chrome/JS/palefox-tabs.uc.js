@@ -556,6 +556,12 @@
         }
       });
       row.addEventListener("dragend", () => {
+        log2("dragend/row", {
+          listenerOnRow: rowDesc(row),
+          sourceWas: dragSource ? rowDesc(dragSource) : "already-null",
+          dropTargetWas: dropTarget instanceof HTMLElement && dropTarget._tab ? rowDesc(dropTarget) : dropTarget instanceof HTMLElement && dropTarget._group ? rowDesc(dropTarget) : dropTarget === state.panel ? "panel" : dropTarget === state.pinnedContainer ? "pinnedContainer" : "other",
+          dropPositionWas: dropPosition
+        });
         dragSource?.removeAttribute("pfx-dragging");
         dragSource = null;
         clearDropIndicator();
@@ -608,18 +614,34 @@
         }
       });
       row.addEventListener("drop", (e) => {
+        log2("drop/row:fired", {
+          listenerOnRow: rowDesc(row),
+          eventTarget: e.target?.className || e.target?.tagName,
+          hasDragSource: !!dragSource,
+          sourceEqualsRow: dragSource === row
+        });
         e.preventDefault();
-        if (!dragSource || dragSource === row)
+        if (!dragSource) {
+          log2("drop/row:abort", { reason: "no-dragSource" });
           return;
-        if (subtreeRows(dragSource).includes(row))
+        }
+        if (dragSource === row) {
+          log2("drop/row:abort", { reason: "source-equals-row" });
           return;
-        log2("drop", {
+        }
+        if (subtreeRows(dragSource).includes(row)) {
+          log2("drop/row:abort", { reason: "row-in-source-subtree" });
+          return;
+        }
+        log2("drop/row:proceeding", {
           target: rowDesc(row),
           source: rowDesc(dragSource),
           position: dropPosition
         });
         if (dropPosition && dropPosition !== "into-empty-pinned" && dropPosition !== "into-empty-panel") {
           executeDrop(dragSource, row, dropPosition);
+        } else {
+          log2("drop/row:abort", { reason: "no-or-empty-zone-position", dropPosition });
         }
         clearDropIndicator();
       });
@@ -643,6 +665,11 @@
         }
       });
       container.addEventListener("drop", (e) => {
+        log2("drop/pinnedContainer:fired", {
+          eventTarget: e.target?.id || e.target?.className || e.target?.tagName,
+          hasDragSource: !!dragSource,
+          srcPinned: !!dragSource?._tab?.pinned
+        });
         if (!dragSource || dragSource._tab?.pinned)
           return;
         if (e.target !== container && dropTarget !== container)
@@ -694,6 +721,12 @@
         }
       });
       p.addEventListener("drop", (e) => {
+        log2("drop/panel:fired", {
+          eventTarget: e.target?.id || e.target?.className || e.target?.tagName,
+          eventTargetIsPanel: e.target === p,
+          eventTargetIsSpacer: e.target === state.spacer,
+          hasDragSource: !!dragSource
+        });
         if (!dragSource)
           return;
         if (e.target !== p && e.target !== state.spacer && dropTarget !== p)
