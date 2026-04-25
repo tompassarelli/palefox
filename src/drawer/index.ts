@@ -617,7 +617,7 @@ function init() {
     const pfxButton = document.createXULElement("toolbarbutton");
     pfxButton.id = "pfx-sidebar-button";
     pfxButton.className = sidebarButton.className;
-    pfxButton.setAttribute("tooltiptext", "Toggle sidebar");
+    pfxButton.setAttribute("tooltiptext", "Toggle compact mode (right-click for more)");
     pfxButton.setAttribute("context", "toolbar-context-menu");
     // Copy CUI attributes so Firefox's popupshowing logic recognizes
     // our button as a real toolbar widget
@@ -655,7 +655,38 @@ function init() {
       collapseItem.setAttribute("label", "Collapse Layout");
       collapseItem.hidden = true;
       collapseItem.addEventListener("command", () => {
-        sidebarButton.click();
+        // The native sidebar-button is display:none, so .click() and
+        // .doCommand() don't propagate through Firefox's UI plumbing. Call
+        // the sidebar API directly. SidebarController is the modern revamp
+        // API; SidebarUI is the legacy fallback.
+        try {
+          const win = window;
+          if (win.SidebarController) {
+            // toggleExpanded handles vertical-tabs launcher; toggle handles
+            // the bookmarks/history widget show/hide. Try whichever exists.
+            if (typeof win.SidebarController.toggleExpanded === "function") {
+              win.SidebarController.toggleExpanded();
+              return;
+            }
+            if (typeof win.SidebarController.toggle === "function") {
+              win.SidebarController.toggle();
+              return;
+            }
+          }
+          if (win.SidebarUI && typeof win.SidebarUI.toggle === "function") {
+            win.SidebarUI.toggle();
+            return;
+          }
+          // Last resort: fire the global command directly.
+          const cmd = document.getElementById("cmd_toggleSidebar");
+          if (cmd && typeof cmd.doCommand === "function") {
+            cmd.doCommand();
+            return;
+          }
+          sidebarButton.click();
+        } catch (e) {
+          console.error("palefox: sidebar toggle failed", e);
+        }
       });
 
       const layoutItem = document.createXULElement("menuitem");
@@ -725,13 +756,14 @@ function init() {
 
           // Ground-truth check: is the sidebar actually rendered? The
           // sidebar-launcher-expanded attribute tracks the vertical-tabs
-          // drawer state, but in horizontal mode visibility is governed
-          // by different Firefox mechanisms — checking hidden + width
-          // works across both.
+          // drawer state. In horizontal mode the bookmarks/history sidebar
+          // lives outside #sidebar-main, so use SidebarController.isOpen
+          // (the modern revamp API) when it's available.
           const sidebarActive = vertical
             ? sidebarMain.hasAttribute("sidebar-launcher-expanded")
-            : (!sidebarMain.hidden
-               && sidebarMain.getBoundingClientRect().width > 0);
+            : (window.SidebarController?.isOpen
+               ?? (!sidebarMain.hidden
+                   && sidebarMain.getBoundingClientRect().width > 0));
           const labels = vertical
             ? { on: "Collapse Layout", off: "Expand Layout" }
             : { on: "Disable Sidebar", off: "Enable Sidebar" };

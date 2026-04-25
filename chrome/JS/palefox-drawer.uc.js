@@ -423,7 +423,7 @@
       const pfxButton = document.createXULElement("toolbarbutton");
       pfxButton.id = "pfx-sidebar-button";
       pfxButton.className = sidebarButton.className;
-      pfxButton.setAttribute("tooltiptext", "Toggle sidebar");
+      pfxButton.setAttribute("tooltiptext", "Toggle compact mode (right-click for more)");
       pfxButton.setAttribute("context", "toolbar-context-menu");
       for (const attr of [
         "cui-areatype",
@@ -455,7 +455,31 @@
         collapseItem.setAttribute("label", "Collapse Layout");
         collapseItem.hidden = true;
         collapseItem.addEventListener("command", () => {
-          sidebarButton.click();
+          try {
+            const win = window;
+            if (win.SidebarController) {
+              if (typeof win.SidebarController.toggleExpanded === "function") {
+                win.SidebarController.toggleExpanded();
+                return;
+              }
+              if (typeof win.SidebarController.toggle === "function") {
+                win.SidebarController.toggle();
+                return;
+              }
+            }
+            if (win.SidebarUI && typeof win.SidebarUI.toggle === "function") {
+              win.SidebarUI.toggle();
+              return;
+            }
+            const cmd = document.getElementById("cmd_toggleSidebar");
+            if (cmd && typeof cmd.doCommand === "function") {
+              cmd.doCommand();
+              return;
+            }
+            sidebarButton.click();
+          } catch (e) {
+            console.error("palefox: sidebar toggle failed", e);
+          }
         });
         const layoutItem = document.createXULElement("menuitem");
         layoutItem.id = "pfx-toggle-tab-layout";
@@ -495,7 +519,7 @@
               removeFromToolbar.hidden = true;
             const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
             layoutItem.setAttribute("label", vertical ? "Horizontal Tabs" : "Vertical Tabs");
-            const sidebarActive = vertical ? sidebarMain.hasAttribute("sidebar-launcher-expanded") : !sidebarMain.hidden && sidebarMain.getBoundingClientRect().width > 0;
+            const sidebarActive = vertical ? sidebarMain.hasAttribute("sidebar-launcher-expanded") : window.SidebarController?.isOpen ?? (!sidebarMain.hidden && sidebarMain.getBoundingClientRect().width > 0);
             const labels = vertical ? { on: "Collapse Layout", off: "Expand Layout" } : { on: "Disable Sidebar", off: "Enable Sidebar" };
             collapseItem.setAttribute("label", sidebarActive ? labels.on : labels.off);
           }
