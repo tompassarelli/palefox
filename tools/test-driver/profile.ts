@@ -58,7 +58,11 @@ user_pref("startup.homepage_welcome_url.additional", "");
 user_pref("startup.homepage_override_url", "");
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.tabs.warnOnCloseOtherTabs", false);
-user_pref("browser.sessionstore.resume_from_crash", false);
+// Restore previous session on startup — needed for tree-reconciliation
+// tests that kill Firefox and expect tabs to come back.
+//   browser.startup.page = 3 → "Restore previous session"
+user_pref("browser.startup.page", 3);
+user_pref("browser.sessionstore.resume_from_crash", true);
 user_pref("toolkit.startup.max_resumed_crashes", -1);
 // Vertical tabs (palefox default-on territory)
 user_pref("sidebar.verticalTabs", true);

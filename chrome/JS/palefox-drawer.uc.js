@@ -348,6 +348,12 @@
           return;
         }
         clearFlash();
+        if (_collapseProtectedUntil > Date.now()) {
+          dbg("onSidebarEnter:cancel-collapse-protection", {
+            remainingMs: _collapseProtectedUntil - Date.now()
+          });
+          _collapseProtectedUntil = 0;
+        }
         requestAnimationFrame(() => {
           if (_ignoreNextHover) {
             dbg("onSidebarEnter:abort", { reason: "ignore-next-hover-rAF", targetId });
@@ -408,6 +414,9 @@
         if (target.closest("panel"))
           return;
         clearFlashToolbox();
+        if (_collapseProtectedHzUntil > Date.now()) {
+          _collapseProtectedHzUntil = 0;
+        }
         requestAnimationFrame(() => {
           if (_ignoreNextHover)
             return;

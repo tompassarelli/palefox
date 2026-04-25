@@ -390,6 +390,20 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
         return;
       }
       clearFlash();
+      // A confirmed `:hover` after the hoverHackDelay tick is *evidence of
+      // user intent* — they came back. Cancel any in-flight collapse
+      // protection so the reveal isn't dropped under our feet. The
+      // protection exists to suppress *spurious / programmatic* reveals
+      // mid-collapse (Wayland mouseleave bug, programmatic pfx-flash);
+      // it should NOT block a genuine cursor return. Without this the
+      // user sees a "lockout" — the sidebar stays hidden until they move
+      // out and back in slowly enough to land after the protection window.
+      if (_collapseProtectedUntil > Date.now()) {
+        dbg("onSidebarEnter:cancel-collapse-protection", {
+          remainingMs: _collapseProtectedUntil - Date.now(),
+        });
+        _collapseProtectedUntil = 0;
+      }
       requestAnimationFrame(() => {
         if (_ignoreNextHover) {
           dbg("onSidebarEnter:abort", { reason: "ignore-next-hover-rAF", targetId });
@@ -457,6 +471,12 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
       if (!target.matches(":hover")) return;
       if (target.closest("panel")) return;
       clearFlashToolbox();
+      // Confirmed cursor return — cancel collapse protection so the reveal
+      // isn't dropped. Same rationale as onSidebarEnter; see that function
+      // for the long form.
+      if (_collapseProtectedHzUntil > Date.now()) {
+        _collapseProtectedHzUntil = 0;
+      }
       requestAnimationFrame(() => {
         if (_ignoreNextHover) return;
         if (navigatorToolbox.hasAttribute("pfx-has-hover")) return;

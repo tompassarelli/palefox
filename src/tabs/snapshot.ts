@@ -1,87 +1,60 @@
-// Persistence — read/write the tab tree to <profile>/palefox-tab-tree.json.
+// Snapshot building + session-restore queue helpers. Pure, no IO.
 //
 // Public API (interface):
-//   serializeState(snapshot)       → string         pure JSON string
-//   parseLoaded(text)              → LoadedState | null
-//   writeTreeToDisk(snapshot)      → Promise<void>
-//   readTreeFromDisk()             → Promise<LoadedState | null>
-//   makeSaver(getSnapshot, onError?) → () => void   coalesced scheduleSave
-//   popSavedByUrl(queue, url)      → SavedNode | null   splice-mutates
-//   popSavedByIndex(queue, idx)    → SavedNode | null   splice-mutates
-//   popSavedForTab(queue, tab, …)  → SavedNode | null   splice-mutates
+//   buildEnvelope(snapshot)        → SnapshotEnvelope     pure struct
+//   makeSaver(getSnapshot, history, onError?) → () => void  coalesced scheduleSave
+//   popSavedByUrl(queue, url)      → SavedNode | null       splice-mutates
+//   popSavedByIndex(queue, idx)    → SavedNode | null       splice-mutates
+//   popSavedForTab(queue, ctx)     → SavedNode | null       splice-mutates
 //
-// Notes:
-//   - serializeState/parseLoaded are pure. Easy to unit-test in isolation.
-//   - The pop helpers mutate their queue argument, matching the existing
-//     behavior. They're explicitly typed with a non-readonly array.
-//   - makeSaver owns the inFlight/pending coalescing flags privately; each
-//     call to makeSaver returns a fresh closure (one per logical save target).
+// Storage layer is src/tabs/history.ts (SQLite). This module just builds
+// the envelope to hand off and exposes the queue helpers used during
+// session-restore reconciliation.
 
-import { SAVE_FILE, CLOSED_MEMORY } from "./constants.ts";
+import { CLOSED_MEMORY } from "./constants.ts";
+import type { HistoryAPI, SnapshotEnvelope } from "./history.ts";
 import type { Row, SavedNode, Tab, TreeData } from "./types.ts";
-
-declare const PathUtils: any;
-declare const Services: any;
-declare const Ci: any;
-declare const IOUtils: any;
 
 // =============================================================================
 // INTERFACE
 // =============================================================================
 
-/** Snapshot of the live tree at a moment in time. Captured by the orchestrator
- *  and passed to writeTreeToDisk; the persist module never reaches into globals. */
+/** Live state at a moment in time. Captured by the orchestrator and passed
+ *  to buildEnvelope. The snapshot module never reaches into globals. */
 export type Snapshot = {
   /** Live Firefox tabs in canonical (gBrowser.tabs) order. */
   readonly tabs: readonly Tab[];
-  /** Walks all rows in DOM order — used to find groups and their anchor tabs. */
+  /** Walks all rows in DOM order — used to find groups + their anchor tabs. */
   readonly rows: () => Iterable<Row>;
-  /** Saved-tab queue carried over from last session, for leftovers on save. */
+  /** Saved-tab queue carried over from prior session, for leftovers on save. */
   readonly savedTabQueue: readonly SavedNode[];
-  /** Recently-closed tab memory, persisted as part of the tree file. */
+  /** Recently-closed tab memory, persisted alongside the live tree. */
   readonly closedTabs: readonly SavedNode[];
   /** Next palefox-id counter — saved so freshly opened tabs can't collide
-   *  with restored-session IDs across a restart. */
+   *  with restored-session ids. */
   readonly nextTabId: number;
-  /** Returns the persisted URL for a tab — a few code paths know better
-   *  ways to resolve URLs for pending/lazy tabs. */
+  /** Returns the persisted URL for a tab — code paths know better ways
+   *  to resolve URLs for pending/lazy tabs. */
   readonly tabUrl: (tab: Tab) => string;
   /** Returns the tree-data for a tab (must already exist). */
   readonly treeData: (tab: Tab) => TreeData;
-};
-
-/** Fully-decoded tree file from disk. Doesn't apply itself — the orchestrator
- *  threads it into live state. */
-export type LoadedState = {
-  /** All persisted nodes (tabs + groups), preserving original order. */
-  readonly nodes: readonly SavedNode[];
-  /** Just the tab nodes, in canonical order. */
-  readonly tabNodes: readonly SavedNode[];
-  /** Recently-closed tabs (capped by CLOSED_MEMORY). */
-  readonly closedTabs: readonly SavedNode[];
-  /** Persisted next-tab-id counter, or null if missing/stale. */
-  readonly nextTabId: number | null;
 };
 
 // =============================================================================
 // IMPLEMENTATION
 // =============================================================================
 
-function profilePath(): string {
-  return PathUtils.join(
-    Services.dirsvc.get("ProfD", Ci.nsIFile).path,
-    SAVE_FILE,
-  );
-}
-
-/** Pure: build the JSON string we'll write. Deterministic given snapshot. */
-export function serializeState(snapshot: Snapshot): string {
-  // Tabs in canonical Firefox tab order. Positional matching at load time
-  // depends on this ordering being stable.
-  const tabEntries = snapshot.tabs.map((tab) => {
+/** Pure: build the envelope we'll hand to history.appendEvent. Deterministic
+ *  given snapshot — same shape as the file format we used to write, just
+ *  structured rather than stringified (the SQLite layer handles encoding). */
+export function buildEnvelope(snapshot: Snapshot): SnapshotEnvelope {
+  // Tabs in canonical Firefox order. Positional matching at load time
+  // depends on this ordering being stable. SavedNode's `type` field is
+  // `"group"` or absent — tab entries omit `type` (interpreted as "tab"
+  // at the loader by `type !== "group"`).
+  const tabEntries: SavedNode[] = snapshot.tabs.map((tab) => {
     const d = snapshot.treeData(tab);
     return {
-      type: "tab" as const,
       id: d.id,
       parentId: d.parentId ?? null,
       url: snapshot.tabUrl(tab),
@@ -115,93 +88,29 @@ export function serializeState(snapshot: Snapshot): string {
 
   // Preserve unconsumed saved-state entries so periodic saves during a blank
   // window don't clobber them before the real window is restored. Drop any
-  // whose URL collides with a live tab to prevent duplicates corrupting the
-  // correction path on subsequent restores.
+  // whose URL collides with a live tab so we don't double-up on restore.
   const liveUrls = new Set(tabEntries.map(e => e.url).filter(Boolean));
-  const leftovers = snapshot.savedTabQueue
-    .filter(s => !s.url || !liveUrls.has(s.url))
-    .map(s => ({ ...s, type: "tab" as const }));
+  const leftovers: SavedNode[] = snapshot.savedTabQueue
+    .filter((s) => !s.url || !liveUrls.has(s.url))
+    .map((s) => ({ ...s }));
 
-  const out = [...tabEntries, ...groupEntries, ...leftovers];
-
-  return JSON.stringify({
-    nodes: out,
-    closedTabs: snapshot.closedTabs,
-    nextTabId: snapshot.nextTabId,
-  });
-}
-
-/** Pure: parse a tree-file's text into a typed structure. Returns null if the
- *  file is malformed or has no nodes array. Tolerant of legacy formats. */
-export function parseLoaded(text: string): LoadedState | null {
-  let raw: any;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (!raw || !Array.isArray(raw.nodes)) return null;
-
-  const tabNodes: SavedNode[] = raw.nodes
-    .filter((n: any) => n.type === "tab" || n.type === undefined)
-    .map((n: any) => ({ ...n }));
-
-  // Legacy migration: derive parentId from level+order via a stack walk if
-  // parentId is missing on tab nodes. Mutates the tabNodes array in place
-  // (these are fresh copies from the spread above, so it's local-only).
-  {
-    const stack: { level: number; id: number }[] = [];
-    for (const n of tabNodes) {
-      const lv = n.level || 0;
-      while (stack.length && stack[stack.length - 1]!.level >= lv) stack.pop();
-      if (n.parentId === undefined) {
-        n.parentId = stack.length ? stack[stack.length - 1]!.id : null;
-      }
-      if (n.id) stack.push({ level: lv, id: n.id });
-    }
-  }
-
+  const out: SavedNode[] = [...tabEntries, ...groupEntries, ...leftovers];
   return {
-    nodes: raw.nodes,
-    tabNodes,
-    closedTabs: Array.isArray(raw.closedTabs)
-      ? raw.closedTabs.slice(-CLOSED_MEMORY)
-      : [],
-    nextTabId: Number.isInteger(raw.nextTabId) ? raw.nextTabId : null,
+    nodes: out,
+    closedTabs: snapshot.closedTabs.slice(-CLOSED_MEMORY),
+    nextTabId: snapshot.nextTabId,
   };
-}
-
-export async function writeTreeToDisk(snapshot: Snapshot): Promise<void> {
-  try {
-    await IOUtils.writeUTF8(profilePath(), serializeState(snapshot));
-  } catch (e) {
-    console.error("palefox-tabs: writeTreeToDisk failed", e);
-    throw e;
-  }
-}
-
-export async function readTreeFromDisk(): Promise<LoadedState | null> {
-  const path = profilePath();
-  let text: string;
-  try {
-    text = await IOUtils.readUTF8(path);
-  } catch (e: any) {
-    console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
-    return null;
-  }
-  const parsed = parseLoaded(text);
-  if (!parsed) {
-    console.log("palefox-tabs: save file exists but failed to parse");
-  }
-  return parsed;
 }
 
 /** Build a coalesced save scheduler. The closure captures inFlight/pending
  *  flags privately and pulls a fresh snapshot for every write — so rapid-fire
  *  schedule calls collapse to one in-flight + (at most) one pending write,
- *  always recording the latest state. */
+ *  always recording the latest state. The actual write goes through
+ *  history.appendEvent, which dedupes by content hash; calling this with
+ *  a no-op state mutation is free. */
 export function makeSaver(
   getSnapshot: () => Snapshot,
+  history: HistoryAPI,
   onError: (err: unknown) => void = (e) => console.error("palefox-tabs: save chain", e),
 ): () => void {
   let inFlight = false;
@@ -214,7 +123,7 @@ export function makeSaver(
     inFlight = true;
     (async () => {
       try {
-        await writeTreeToDisk(getSnapshot());
+        await history.appendEvent(buildEnvelope(getSnapshot()));
       } catch (e) {
         onError(e);
       }
@@ -230,7 +139,7 @@ export function makeSaver(
 
 // --- Queue helpers --------------------------------------------------------
 //
-// These splice-mutate the queue, matching the existing semantics. The legacy
+// These splice-mutate the queue, matching the legacy behavior. The legacy
 // caller wants the queue shrunk in place. Marked clearly in JSDoc so future
 // readers don't expect FP-style return-new-array semantics.
 

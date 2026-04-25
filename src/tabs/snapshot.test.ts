@@ -1,41 +1,34 @@
-// Pure-function tests for persist.ts.
+// Pure-function tests for snapshot.ts.
 //
-// The persist module is split so the on-disk-touching functions (writeTreeToDisk,
-// readTreeFromDisk) wrap pure (de)serialization helpers (serializeState,
-// parseLoaded) plus pure queue manipulators. Those pure pieces are what we
-// test here — no chrome globals, no IO. Nothing in this file requires JSDOM
-// or a Firefox harness; it runs under plain `bun test`.
+// snapshot.ts replaces the old persist.ts file IO. What stayed pure is
+// what gets tested here — no chrome globals, no SQLite. Nothing in this
+// file requires JSDOM or a Firefox harness; it runs under plain `bun test`.
 //
 // What's covered:
-//   serializeState → JSON.parse round-trip
+//   buildEnvelope — pure construction of the SnapshotEnvelope passed to
+//                   history.appendEvent
 //     - tabs in canonical order with their TreeData
 //     - groups with afterTabId anchored to the most recent preceding tab
 //     - savedTabQueue leftovers preserved (and de-duped against live URLs)
-//   parseLoaded
-//     - happy path (modern tree-file)
-//     - malformed JSON / missing nodes → null
-//     - legacy migration: derives parentId from level+order when missing
+//     - closedTabs capped by CLOSED_MEMORY
 //   popSavedByUrl / popSavedByIndex / popSavedForTab queue helpers
 //     - splice-mutates queue
 //     - prefers pfx-id, falls back to URL, then FIFO under inSessionRestore
 
 import { describe, expect, test } from "bun:test";
 
+import { CLOSED_MEMORY } from "./constants.ts";
 import {
-  parseLoaded,
+  buildEnvelope,
   popSavedByIndex,
   popSavedByUrl,
   popSavedForTab,
-  serializeState,
   type Snapshot,
-} from "./persist.ts";
+} from "./snapshot.ts";
 import type { Row, SavedNode, Tab, TreeData } from "./types.ts";
 
 // === Test helpers ============================================================
 
-/** Cast a plain object to a Tab — persist.ts only ever uses the tab as an
- *  opaque key into the snapshot's treeData/tabUrl maps. The actual properties
- *  on Tab are irrelevant for these tests. */
 function fakeTab(name: string): Tab {
   return { __testTab: name } as unknown as Tab;
 }
@@ -48,9 +41,6 @@ function fakeTabRow(tab: Tab): Row {
   return { _tab: tab } as unknown as Row;
 }
 
-/** Build a Snapshot from a tabs-and-trees fixture. Defaults fill in URL, name,
- *  state, and collapsed sensibly so individual tests only override what they
- *  care about. */
 function makeSnapshot(opts: {
   tabs: Tab[];
   treeData: Map<Tab, TreeData>;
@@ -80,9 +70,9 @@ function td(id: number, parentId: TreeData["parentId"] = null, opts: Partial<Tre
   return { id, parentId, name: null, state: null, collapsed: false, ...opts };
 }
 
-// === serializeState ==========================================================
+// === buildEnvelope ===========================================================
 
-describe("serializeState", () => {
+describe("buildEnvelope", () => {
   test("emits tab nodes in canonical order with their TreeData", () => {
     const a = fakeTab("a");
     const b = fakeTab("b");
@@ -91,7 +81,7 @@ describe("serializeState", () => {
       tabs: [a, b, c],
       treeData: new Map([
         [a, td(1)],
-        [b, td(2, 1)],         // child of a
+        [b, td(2, 1)],
         [c, td(3, 2, { collapsed: true })],
       ]),
       urls: new Map([
@@ -100,11 +90,17 @@ describe("serializeState", () => {
         [c, "https://c.test/"],
       ]),
     });
-    const parsed = JSON.parse(serializeState(snap));
-    expect(parsed.nodes).toHaveLength(3);
-    expect(parsed.nodes[0]).toMatchObject({ type: "tab", id: 1, parentId: null, url: "https://a.test/" });
-    expect(parsed.nodes[1]).toMatchObject({ type: "tab", id: 2, parentId: 1, url: "https://b.test/" });
-    expect(parsed.nodes[2]).toMatchObject({ type: "tab", id: 3, parentId: 2, url: "https://c.test/", collapsed: true });
+    const env = buildEnvelope(snap);
+    expect(env.nodes).toHaveLength(3);
+    // SavedNode tab entries have type === undefined (loader uses
+    // `type !== "group"` to identify tabs).
+    expect(env.nodes[0]).toMatchObject({ id: 1, parentId: null, url: "https://a.test/" });
+    expect(env.nodes[1]).toMatchObject({ id: 2, parentId: 1, url: "https://b.test/" });
+    expect(env.nodes[2]).toMatchObject({ id: 3, parentId: 2, url: "https://c.test/", collapsed: true });
+    // Verify none of the tab entries are tagged as groups
+    for (const n of env.nodes) {
+      expect(n.type).not.toBe("group");
+    }
   });
 
   test("group entries carry afterTabId of the last preceding tab", () => {
@@ -114,15 +110,14 @@ describe("serializeState", () => {
     const snap = makeSnapshot({
       tabs: [a, b],
       treeData: new Map([[a, td(10)], [b, td(11, 10)]]),
-      // Row order: tabA, group, tabB → group anchors after tabA (id 10)
       rows: [fakeTabRow(a), grp, fakeTabRow(b)],
     });
-    const parsed = JSON.parse(serializeState(snap));
-    const groupNode = parsed.nodes.find((n: SavedNode) => n.type === "group");
+    const env = buildEnvelope(snap);
+    const groupNode = env.nodes.find((n) => n.type === "group");
     expect(groupNode).toBeDefined();
-    expect(groupNode.afterTabId).toBe(10);
-    expect(groupNode.name).toBe("Work");
-    expect(groupNode.level).toBe(1);
+    expect(groupNode!.afterTabId).toBe(10);
+    expect(groupNode!.name).toBe("Work");
+    expect(groupNode!.level).toBe(1);
   });
 
   test("group with no preceding tab gets afterTabId: null", () => {
@@ -131,11 +126,11 @@ describe("serializeState", () => {
     const snap = makeSnapshot({
       tabs: [a],
       treeData: new Map([[a, td(1)]]),
-      rows: [grp, fakeTabRow(a)], // group before any tab
+      rows: [grp, fakeTabRow(a)],
     });
-    const parsed = JSON.parse(serializeState(snap));
-    const groupNode = parsed.nodes.find((n: SavedNode) => n.type === "group");
-    expect(groupNode.afterTabId).toBeNull();
+    const env = buildEnvelope(snap);
+    const groupNode = env.nodes.find((n) => n.type === "group");
+    expect(groupNode!.afterTabId).toBeNull();
   });
 
   test("savedTabQueue leftovers without URL collisions are preserved", () => {
@@ -149,9 +144,10 @@ describe("serializeState", () => {
       urls: new Map([[a, "https://a.test/"]]),
       savedTabQueue: [leftover],
     });
-    const parsed = JSON.parse(serializeState(snap));
-    expect(parsed.nodes).toHaveLength(2);
-    expect(parsed.nodes[1]).toMatchObject({ id: 99, url: "https://stale.test/", type: "tab" });
+    const env = buildEnvelope(snap);
+    expect(env.nodes).toHaveLength(2);
+    expect(env.nodes[1]).toMatchObject({ id: 99, url: "https://stale.test/" });
+    expect(env.nodes[1]!.type).not.toBe("group");
   });
 
   test("savedTabQueue entries colliding with live tab URLs are dropped", () => {
@@ -164,13 +160,13 @@ describe("serializeState", () => {
       urls: new Map([[a, "https://a.test/"]]),
       savedTabQueue: [collide, keep],
     });
-    const parsed = JSON.parse(serializeState(snap));
-    expect(parsed.nodes).toHaveLength(2);
-    expect(parsed.nodes.find((n: SavedNode) => n.id === 50)).toBeUndefined();
-    expect(parsed.nodes.find((n: SavedNode) => n.id === 51)).toBeDefined();
+    const env = buildEnvelope(snap);
+    expect(env.nodes).toHaveLength(2);
+    expect(env.nodes.find((n) => n.id === 50)).toBeUndefined();
+    expect(env.nodes.find((n) => n.id === 51)).toBeDefined();
   });
 
-  test("includes closedTabs and nextTabId in the envelope", () => {
+  test("includes closedTabs (capped by CLOSED_MEMORY) and nextTabId", () => {
     const closed: SavedNode = { id: 7, parentId: null, url: "https://closed.test/" };
     const snap = makeSnapshot({
       tabs: [],
@@ -178,64 +174,23 @@ describe("serializeState", () => {
       closedTabs: [closed],
       nextTabId: 42,
     });
-    const parsed = JSON.parse(serializeState(snap));
-    expect(parsed.closedTabs).toEqual([closed]);
-    expect(parsed.nextTabId).toBe(42);
-  });
-});
-
-// === parseLoaded =============================================================
-
-describe("parseLoaded", () => {
-  test("returns null on malformed JSON", () => {
-    expect(parseLoaded("not json")).toBeNull();
-    expect(parseLoaded("")).toBeNull();
-    expect(parseLoaded("{}")).toBeNull();           // missing nodes
-    expect(parseLoaded("[]")).toBeNull();           // root must be object
-    expect(parseLoaded(JSON.stringify({ nodes: "x" }))).toBeNull();
+    const env = buildEnvelope(snap);
+    expect(env.closedTabs).toEqual([closed]);
+    expect(env.nextTabId).toBe(42);
   });
 
-  test("happy path — modern format round-trips through serialize", () => {
-    const a = fakeTab("a");
-    const b = fakeTab("b");
+  test("closedTabs trimmed to CLOSED_MEMORY entries (newest)", () => {
+    const many: SavedNode[] = Array.from({ length: CLOSED_MEMORY + 10 }, (_, i) => ({
+      id: i + 1, parentId: null, url: `https://t${i}.test/`,
+    }));
     const snap = makeSnapshot({
-      tabs: [a, b],
-      treeData: new Map([[a, td(1)], [b, td(2, 1)]]),
-      nextTabId: 99,
+      tabs: [], treeData: new Map(), closedTabs: many,
     });
-    const text = serializeState(snap);
-    const loaded = parseLoaded(text);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.tabNodes).toHaveLength(2);
-    expect(loaded!.nextTabId).toBe(99);
-  });
-
-  test("legacy migration: parentId derived from level when missing", () => {
-    // Old format: nodes carry a `level` field but no parentId. parseLoaded
-    // walks a stack to compute parents.
-    const text = JSON.stringify({
-      nodes: [
-        { type: "tab", id: 1, level: 0, url: "https://a/" },
-        { type: "tab", id: 2, level: 1, url: "https://b/" },  // child of 1
-        { type: "tab", id: 3, level: 2, url: "https://c/" },  // child of 2
-        { type: "tab", id: 4, level: 1, url: "https://d/" },  // back up: child of 1
-        { type: "tab", id: 5, level: 0, url: "https://e/" },  // root
-      ],
-    });
-    const loaded = parseLoaded(text);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.tabNodes[0]!.parentId).toBeNull();
-    expect(loaded!.tabNodes[1]!.parentId).toBe(1);
-    expect(loaded!.tabNodes[2]!.parentId).toBe(2);
-    expect(loaded!.tabNodes[3]!.parentId).toBe(1);
-    expect(loaded!.tabNodes[4]!.parentId).toBeNull();
-  });
-
-  test("nextTabId only accepted as integer; otherwise null", () => {
-    expect(parseLoaded(JSON.stringify({ nodes: [], nextTabId: 7 }))!.nextTabId).toBe(7);
-    expect(parseLoaded(JSON.stringify({ nodes: [], nextTabId: "7" }))!.nextTabId).toBeNull();
-    expect(parseLoaded(JSON.stringify({ nodes: [], nextTabId: 1.5 }))!.nextTabId).toBeNull();
-    expect(parseLoaded(JSON.stringify({ nodes: [] }))!.nextTabId).toBeNull();
+    const env = buildEnvelope(snap);
+    expect(env.closedTabs).toHaveLength(CLOSED_MEMORY);
+    // Newest 32 = the last 32 of `many`. id: 11..42
+    expect(env.closedTabs[0]!.id).toBe(11);
+    expect(env.closedTabs[CLOSED_MEMORY - 1]!.id).toBe(CLOSED_MEMORY + 10);
   });
 });
 
@@ -325,10 +280,8 @@ describe("popSavedForTab", () => {
       { id: 1, parentId: null, url: "" },
       { id: 2, parentId: null, url: "" },
     ];
-    // Without inSessionRestore: no match → null, queue intact
     expect(popSavedForTab(queue, baseCtx)).toBeNull();
     expect(queue).toHaveLength(2);
-    // With inSessionRestore: takes the head
     const popped = popSavedForTab(queue, { ...baseCtx, inSessionRestore: true });
     expect(popped?.id).toBe(1);
     expect(queue).toHaveLength(1);

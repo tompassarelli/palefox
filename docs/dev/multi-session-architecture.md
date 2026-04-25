@@ -1,300 +1,356 @@
-# Palefox multi-session architecture
+# Palefox temporal workspace architecture
 
-This document is the architectural plan for palefox's multi-session history
-feature, generated from a research dive across Firefox SessionStore source
-(~/code/firefox/browser/components/sessionstore/), Sidebery / TST / Zen
+This document is the architectural plan for palefox's history + multi-session
+feature. Generated from a research dive across Firefox SessionStore source
+(`~/code/firefox/browser/components/sessionstore/`), Mozilla's
+`Sqlite.sys.mjs` (`~/code/firefox/toolkit/modules/`), Sidebery / TST / Zen
 implementations, and our existing single-session persistence.
 
-Read this before touching `src/tabs/persist.ts` or session-restore code.
+Read this before touching `src/tabs/persist.ts`, `src/tabs/history.ts`, or
+session-restore code.
 
 ---
 
-## Vision (from user)
+## Vision
 
-> Store the last N sessions I've had. `:restore` shows date-sorted sessions,
-> optionally searchable by URL/text within sessions. Restored session goes
-> under a group node with a predictable schema like
-> "Session - Sun 2026/04/26" and the saved tab tree comes back as a subtree
-> under that group node — does NOT wipe current tabs.
-
-This is genuinely state-of-the-art for chrome-script tab managers — Sidebery
-has only opt-in single-snapshot, Zen leans on Firefox's native LastSession
-(single-session), TST has no multi-session at all.
+> Palefox treats browsing as a **durable, temporal workspace**, not
+> disposable tab state. Every meaningful workspace mutation is captured.
+> Some moments are tagged (Firefox quits → automatic sessions; user
+> `:checkpoint <label>` → manual saves). The user can `:restore` any
+> tagged point as a subtree under a synthetic group node, **without
+> wiping current state.** They can search across all history by URL or
+> label.
 
 ---
 
-## Why our current design fails this requirement
-
-`src/tabs/persist.ts` writes a single file `palefox-tab-tree.json` that
-captures only the *current* tree. There is no concept of session boundaries,
-session labels, or session history. Restore is implicit: at startup,
-`palefox-tab-tree.json` is loaded and applied to whatever tabs Firefox's
-SessionStore restored.
-
-Two orthogonal problems with extending the current design directly:
-
-1. **The two-store drift problem.** palefox-tab-tree.json and Firefox's
-   sessionstore.jsonlz4 are independent persistence layers. If they
-   disagree about what tabs exist (e.g., SessionStore restores a different
-   subset than what we saved), `popSavedForTab` reconciliation produces
-   gaps — tabs come back without parents because their parent's pfx-id was
-   never restored.
-2. **No session abstraction.** We'd need to bolt one on, and the file
-   format would have to grow a sessions array. At which point a separate
-   index + per-session blobs is cleaner.
-
----
-
-## Recommended architecture
-
-**Hybrid: profile-directory JSON files + lightweight in-memory index.**
+## Storage primitive: SQLite (single file)
 
 ```
 <profile>/
-├── palefox-tab-tree.json           current/live tree (existing)
-├── palefox-sessions.json           index of all stored sessions
-└── palefox-session-<timestamp>.json    one file per session (full blob)
+└── palefox-history.sqlite      single source of truth, WAL-journalled
 ```
 
-### Session index file
+That's it. **No `palefox-tab-tree.json`. No history JSONL files. No
+checkpoint files. No session-index file.** One database, one file, one
+source of truth.
 
-```jsonc
-{
-  "sessions": [
-    {
-      "timestamp": 1714003200000,
-      "label": "Session - Sun 2026/04/26",
-      "windowCount": 2,
-      "tabCount": 47,
-      "file": "palefox-session-1714003200000.json"
-    },
-    // …
-  ],
-  "nextSessionId": 2
-}
-```
+### Why SQLite over JSON
 
-### Per-session blob
+We considered JSONL files + an index file. Reasons SQLite won:
 
-Same shape as today's `palefox-tab-tree.json` (nodes + closedTabs +
-nextTabId), plus a `timestamp` envelope field. Each blob is independent,
-fully restorable on its own.
+1. **Indexed substring search** scales adequately as data grows.
+   Originally planned FTS5 — runtime probe (Firefox 149.0.2,
+   SQLite 3.51.2) confirms that chrome scripts get **none** of FTS3,
+   FTS4, or FTS5. Mozilla's bundled SQLite doesn't compile them in.
+   We use indexed LIKE-based search on a denormalized
+   `events_search_content` table. At our scale (≤10k events × ≤100
+   tabs/event = ≤1M rows) substring LIKE completes in <1s; prefix
+   LIKE uses the index.
 
-```jsonc
-{
-  "timestamp": 1714003200000,
-  "nodes": [ /* SavedNode[] */ ],
-  "closedTabs": [ /* SavedNode[] */ ],
-  "nextTabId": 142
-}
-```
+   **Considered and rejected: sqlite-wasm.** The bundle cost (~1MB)
+   isn't the killer; it's the persistence story. sqlite-wasm's standard
+   persistence layers (OPFS, kvvfs) don't work in chrome scope:
+   - OPFS requires SharedArrayBuffer + COOP/COEP headers, broken for
+     extensions per [bugzilla 1823260](https://bugzilla.mozilla.org/show_bug.cgi?id=1823260).
+   - kvvfs uses localStorage, not available in chrome scope.
+   - Custom VFS over IOUtils: IOUtils is async-only, no file handles,
+     wrong shape for SQLite's pager (random reads/writes, locks, sync).
+     Building it is "we wrote a fake filesystem to run SQLite while
+     Firefox already contains SQLite."
+   When the platform ships SQLite, ship-your-own-SQLite is the wrong
+   move. Native wins.
 
-### Why files over SessionStore
+   **Considered and deferred: Datahike / DataScript / Cozo.** Datalog
+   over our data is genuinely interesting for AI-driven queries
+   ("find tabs in this project", "show workspace as-of last Tuesday").
+   But: SQLite already supports `WITH RECURSIVE` for tree descendant
+   queries and timestamp filtering for as-of queries. SQL-with-CTEs is
+   90% of what Datalog gives us at zero additional dependency. If
+   palefox grows AI features and we need richer query semantics, layer
+   DataScript on top of native SQLite (durable substrate stays
+   SQLite, DataScript provides in-memory hot index) — don't replace.
+2. **WAL mode = atomicity by construction.** Crash mid-write → transaction
+   rolled back, no corruption. With JSON we'd be hand-rolling temp-file-
+   then-rename atomicity.
+3. **Indexed lookups.** "Sessions from last week" is a `WHERE timestamp
+   BETWEEN ?` with an index. With JSON files chunked by day, it's "find
+   files, parse, scan, filter."
+4. **Retention is one DELETE statement.** With files, it's "iterate
+   directory, parse dates, delete olds, handle race conditions."
+5. **Mozilla's `Sqlite.sys.mjs` is the platform-native API.** Promise-
+   based, async, full chrome-scope access via
+   `ChromeUtils.importESModule("resource://gre/modules/Sqlite.sys.mjs")`.
+   Firefox stores its own session/places/cookies in SQLite — we're
+   aligned with the platform.
 
-We considered `SessionStore.setCustomGlobalValue(key, json)`. Real
-constraints that pushed us to files:
+### Why one source of truth
 
-- SessionStore state is read at every Firefox startup. Bloating it with
-  multi-session history slows cold-start.
-- Durability under dirty shutdown is documented as best-effort —
-  `setCustomGlobalValue` writes are coalesced; a hard-kill (SIGKILL,
-  power loss) within the coalesce window loses the write. Profile files
-  with atomic temp-file-then-rename writes are stronger.
-- Sessions are independent; no need for them to load-or-save together.
-  File-per-session lets us prune individual sessions cheaply.
-- Comparable projects (Sidebery, Chrome session managers) all converged
-  on dedicated storage rather than relying on browser SessionStore.
+Earlier we maintained `palefox-tab-tree.json` (palefox state) alongside
+Firefox's `sessionstore.jsonlz4` (Firefox state). The two could disagree
+about what tabs existed, and `popSavedForTab`'s reconciliation chain
+(pfx-id → URL → FIFO) couldn't always bridge the gap. Drift between
+saves caused tabs to come back without parents.
 
-`setCustomGlobalValue` is still useful for *small* per-session metadata
-(if we want to know the latest session timestamp from a place that's
-read-once at startup), but the bulk goes in files.
+By making SQLite our **only** persistence, the drift problem can't
+happen *within palefox*. We still rely on Firefox's SessionStore to
+restore the *tabs themselves* (via `persistTabAttribute("pfx-id")`),
+but our entire tree state is one query away.
 
 ---
 
-## Session lifecycle
+## Schema
 
-### Boundary: when does a session close?
+```sql
+-- One row per meaningful workspace mutation, hash-deduped.
+CREATE TABLE events (
+  id        INTEGER PRIMARY KEY,
+  timestamp INTEGER NOT NULL,    -- Date.now()
+  hash      TEXT    NOT NULL UNIQUE,    -- sha256 of canonical(snapshot)
+  snapshot  TEXT    NOT NULL,    -- JSON-encoded full SavedTree
+  tag       TEXT             -- null untagged; else "session:<label>" or "checkpoint:<label>"
+);
+CREATE INDEX events_timestamp ON events(timestamp DESC);
+CREATE INDEX events_tag       ON events(tag) WHERE tag IS NOT NULL;
 
-**On Firefox quit, not on window close.** Multi-window users want all open
-windows captured together as one session. Hook the `quit-application`
-observer:
+-- Full-text search over each event's tab URLs and labels. Populated via
+-- triggers when an event is inserted; stays in sync automatically.
+CREATE VIRTUAL TABLE event_search USING fts5(
+  url, label,
+  content='events_search_content',
+  content_rowid='event_id'
+);
 
-```js
-Services.obs.addObserver({
-  observe(_subject, topic) {
-    if (topic === "quit-application") saveCurrentSessionToDisk();
-  }
-}, "quit-application");
+-- Materialized view over the JSON snapshot — extracted at insert time
+-- so FTS5 can index it. One row per (event, tab).
+CREATE TABLE events_search_content (
+  rowid    INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  url      TEXT NOT NULL,
+  label    TEXT NOT NULL
+);
+CREATE INDEX esc_event ON events_search_content(event_id);
+
+PRAGMA user_version = 1;
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
 ```
 
-`quit-application` fires before SessionStore's own write, so we have time
-to capture state. If it doesn't fire (SIGKILL, power loss), we fall back
-to whatever the most recent debounced save captured — same recovery
-guarantees as today.
+### Schema migration discipline
 
-### Auto-save during the session
+`PRAGMA user_version` tracks schema version. The history module owns a
+migrations array — `[v1 → v2 SQL, v2 → v3 SQL, ...]`. On open, we
+read user_version and apply pending migrations in a single transaction.
+Adding a column tomorrow is a one-line addition.
 
-Keep the existing `scheduleSave` debounced write to `palefox-tab-tree.json`
-unchanged. That's the live snapshot. The session-history file is
-written *only* at quit time; it captures the final state of the session.
+---
 
-Optional: also snapshot to history on user demand via `:checkpoint <label>`.
+## Save flow (the hot path)
 
-### Cap to N sessions
+Every meaningful workspace mutation triggers `scheduleSave`, which
+debounces. When the debounced call fires:
 
-Pruning policy (configurable via prefs):
+```
+1. Build canonical snapshot (current TreeData + groups + closedTabs + nextTabId)
+2. Compute sha256 hash of canonical JSON form
+3. If hash === lastHistoryHash → no-op (clean dedupe; no event written)
+4. Else:
+     a. INSERT INTO events (timestamp, hash, snapshot, tag=null) VALUES (?, ?, ?)
+     b. Extract tab URLs/labels into events_search_content for FTS5
+     c. Update lastHistoryHash
+```
 
-- `pfx.history.maxSessions` (default 20)
-- `pfx.history.maxDiskBytes` (default 100MB)
-- `pfx.history.maxAgeDays` (default 30)
+The hash dedupe is the key correctness property. `scheduleSave` may fire
+without the tree actually changing (e.g., a no-op resync); without
+dedupe we'd write redundant events and pollute search results.
+With dedupe, every event represents a real workspace mutation.
 
-Eviction: after each save, sort sessions by timestamp ascending, drop
-oldest until all three caps are satisfied.
+### Tagged points
+
+- **Firefox quit:** `quit-application` observer runs:
+  ```sql
+  UPDATE events SET tag = 'session:Session - Sun 2026/04/26 14:31'
+   WHERE id = (SELECT MAX(id) FROM events);
+  ```
+- **`:checkpoint <label>`:** Same UPDATE with `tag = 'checkpoint:<label>'`.
+- A tagged event is **immune to retention.** Only untagged events get
+  pruned by age.
+
+---
+
+## Retention policy
+
+Two caps, configurable via prefs:
+
+- `pfx.history.retainDays` (default 30) — drop untagged events older than this
+- `pfx.history.maxRows` (default 10_000) — drop oldest untagged events past this
+
+A retention pass runs:
+- At Firefox startup (idle, after delayed-startup-finished)
+- Every ~10 minutes during long sessions
+
+```sql
+DELETE FROM events
+ WHERE tag IS NULL
+   AND (timestamp < ? OR id IN (
+     SELECT id FROM events WHERE tag IS NULL
+      ORDER BY timestamp ASC
+      LIMIT MAX(0, (SELECT COUNT(*) FROM events WHERE tag IS NULL) - ?)
+   ));
+VACUUM;  -- reclaim space, periodically not every pass
+```
+
+Tagged events are forever. Disk usage is bounded by `tagged events × snapshot size + retainDays × event rate × snapshot size`. For a heavy user (1000 events/day, 50KB/snapshot, 100 tagged sessions): 30 × 1000 × 50KB + 100 × 50KB ≈ 1.5GB. We'll add gzip on the snapshot blob in a later phase if that becomes a concern; for v1 the WAL file size is the metric to watch.
 
 ---
 
 ## Restore semantics
 
-### `:restore <label>` flow
+### `:restore` UX
 
-The user's requirement is **restore as subtree under a group node, do NOT
-wipe current state.** Implementation walks through palefox's existing
-session-restore queue:
+Lists tagged events (sessions + checkpoints), date-sorted, most recent
+first. User picks one. The action:
 
-1. Load `palefox-session-<timestamp>.json` → `SavedNode[]`
-2. Generate a stable synthetic group id (e.g., `g-restored-1714003200000`)
-3. Build a `Group` row entry with `name = "Session - Sun 2026/04/26"`,
-   `level = 0`, `id = <synthetic>`
-4. Rewrite parentage in the loaded SavedNodes:
-   - Roots in the saved session (parentId === null) → parent becomes the
-     synthetic group id
-   - Internal-pointing parents (numeric pfx-id) → unchanged (they reference
-     other tabs in the same restored session)
-5. Re-key tab pfx-ids to avoid collision with current live state — bump
-   each saved id by `state.nextTabId` (= the current live max + 1)
-6. Open a Firefox tab per restored SavedNode (via
-   `gBrowser.addTab(url, { triggeringPrincipal })`) and let the existing
-   `onTabOpen` → `popSavedForTab` chain wire each one into its
-   pre-rewritten parentId
+1. Load the chosen event's `snapshot` (JSON-decode → SavedNode array)
+2. Re-key all pfx-ids in the saved snapshot: `id += state.nextTabId` and
+   bump nextTabId past the new max. This guarantees no collisions with
+   currently-live tabs.
+3. Build a synthetic Group row: `{ id: "g-restored-<timestamp>", name:
+   "Session - Sun 2026/04/26", level: 0, ... }`
+4. Rewrite root parentages in the saved nodes: `parentId === null` →
+   `parentId = synthetic group id`
+5. Insert the group + saved nodes into `state.savedTabQueue`
+6. For each saved tab, `gBrowser.addTab(url, ...)` — the existing
+   `onTabOpen` → `popSavedForTab` chain wires each into its parent
 
-This produces:
+Result: restored tree appears as a subtree under the group, **current
+tabs untouched.**
 
-```
-[current tabs unchanged]
-└─ Session - Sun 2026/04/26  (group node)
-   ├─ tab from saved session
-   │  └─ child tab from saved session
-   └─ tab from saved session
-```
+### `:restore --raw <timestamp>`
 
-### Why no conflict with current tabs
-
-Because we re-key pfx-ids before opening tabs, restored tab parentages
-point only at other restored tabs (or the synthetic group). Live tabs are
-untouched.
-
-### Group node persistence
-
-The synthetic group is a real `Group` entry, persisted in the *current*
-tree's save file — so it survives a subsequent quit / restore cycle. The
-user can collapse it, drag it, refile it like any other group.
+Same flow but accepts an arbitrary event timestamp (untagged or tagged).
+This is the power-user recovery hatch — surface in `:history`.
 
 ---
 
-## Within-session search
+## Search
 
-### `:sessions <query>` UX
+### `:sessions <query>`
 
-Lists sessions whose tabs match, with match count and a few example URLs:
+FTS5 query over tagged events:
 
+```sql
+SELECT events.id, events.timestamp, events.tag,
+       COUNT(DISTINCT esc.rowid) AS matches
+FROM events
+JOIN events_search_content esc ON esc.event_id = events.id
+JOIN event_search ON event_search.rowid = esc.rowid
+WHERE event_search MATCH ?
+  AND events.tag IS NOT NULL
+GROUP BY events.id
+ORDER BY events.timestamp DESC
+LIMIT 50;
 ```
-Session - Sun 2026/04/26 (5 matches)
-  https://example.com/page-a
-  https://example.com/page-b
-  My custom group name
-Session - Sat 2026/04/25 (2 matches)
-  https://other.example.com
-  …
-```
 
-### Implementation
+Returns ranked list with match counts. Sub-millisecond on tens of
+thousands of events.
 
-1. Load `palefox-sessions.json` index → list of session metadata
-2. For each session, lazy-load `palefox-session-<ts>.json` (read only when
-   the search needs it; cache in-memory for the search-UI lifetime)
-3. Per-session filter: SavedNodes whose `url` or `name` field contains
-   query (case-insensitive substring)
-4. Return ranked list — most recent matching session first, ties broken
-   by match count
+### `:history` and `:history <query>`
 
-For performance: the index is small (~200 bytes per entry, 4KB for 20
-sessions) so loading + scanning is essentially free. The expensive part
-is opening N session blobs; cap concurrent reads at 5 to avoid IO storms.
+Same query without the `tag IS NOT NULL` filter. Shows raw timeline.
 
 ---
 
-## Open questions to resolve via the test harness
+## Session boundary: Firefox quit
 
-These are testable now (Tier 3 substrate exists) — no need to speculate:
+Aligned with the user's mental model: "where was I when I last left
+the browser?" Multi-window sessions bundle together — all open windows
+during a session belong to one session entry.
 
-1. **Is `setCustomGlobalValue` durable across SIGKILL?** Write a test that
-   writes a value, kills Firefox via the OS, restarts, reads it back.
-   Decides whether the lightweight session index belongs in
-   SessionStore or in a file.
-2. **Two-store drift in practice.** Build a test that opens N tabs,
-   triggers a save, hard-kills mid-write, restarts, and measures the
-   delta between palefox-tab-tree.json and what SessionStore restored.
-   Quantifies how often drift bites.
-3. **Restore-into-subtree-of-group correctness.** Build the feature
-   end-to-end, then test: open 4 tabs in a tree, save session, close
-   them all, restore. Verify all 4 come back nested under the synthetic
-   group node, not as flat root tabs.
-4. **Pruning behavior.** Set the caps low (3 sessions, 1MB), open and
-   quit Firefox 5 times, verify oldest 2 sessions evicted and disk
-   usage stays bounded.
+Window close ≠ session boundary. A user who closes one window of two
+isn't ending their session; they're tidying.
 
 ---
 
-## Migration path from current design
+## Seven testable open questions (Tier 3 substrate covers these)
 
-`palefox-tab-tree.json` semantics don't change — it remains the live
-snapshot. The new files are additive. Three implementation phases:
-
-**Phase 1 — Storage layer:**
-- New module `src/tabs/sessions.ts` with the storage primitives
-  (saveSession, loadSession, listSessions, pruneSessions)
-- Wire `quit-application` observer to call `saveSession(Date.now())`
-- Verify via integration test (open tabs, quit, file appears)
-
-**Phase 2 — Restore UX:**
-- Add `:restore <label>` ex-command to `src/tabs/vim.ts`
-- Implement re-key + synthetic-group + queue-into-onTabOpen flow
-- Verify via integration test (saved tree comes back nested under group)
-
-**Phase 3 — Search UX:**
-- Add `:sessions [query]` ex-command — lists / searches sessions
-- Render results in a popup / dedicated UI surface (TBD — modeline list?
-  separate panel?)
-
-**Phase 4 — Polish:**
-- User-configurable caps via prefs
-- Manual `:checkpoint <label>` for explicit mid-session save
-- Optional: keyboard shortcut to open session list directly
+1. **WAL durability under SIGKILL.** Insert a row, kill Firefox via the
+   OS, restart, verify the row is there. Confirms our crash-safety claim.
+2. **FTS5 search latency** at 10k events. Insert synthetic events, time
+   substring searches. Establishes our perf budget.
+3. **Restore-into-group correctness** — the original failing test
+   becomes the canonical fixture. Build a tree, save event, restore,
+   verify nesting under synthetic group.
+4. **Hash dedupe** — many no-op `scheduleSave` fires write zero new
+   events.
+5. **Retention** — events older than `retainDays` get evicted; tagged
+   events don't.
+6. **Schema migration** — add a fake v1→v2 migration, simulate older
+   db file, verify migration succeeds.
+7. **Multi-window save consistency** — events fired from different
+   windows during the same session don't corrupt state.
 
 ---
 
-## Risks / tradeoffs we're accepting
+## Implementation phases
 
-- **Session storage is palefox-only, not synced.** If we want cross-device
-  session sync later, we'd layer it on top — out of scope for v1.
-- **Profile-file IO not transactional across sessions.** A crash during
-  save loses *that* session, not earlier ones — but partial writes could
-  in theory leave a corrupt file. Use `IOUtils.write` with `tmpPath` for
-  atomic rename.
-- **Search is linear in #sessions × #tabs/session.** Fine up to ~20
-  sessions × ~100 tabs each. Beyond that, would want an index structure.
-  Defer until it bites.
-- **No tab-content snapshot.** We save URL + label + tree structure, not
-  scroll position or form state. Firefox's SessionStore handles content
-  for the *current* session; for restored older sessions, content is
-  re-fetched fresh. This matches the user's vision (URL-level history).
+### Phase 1 — SQLite substrate
+- New `src/tabs/history.ts` module wrapping `Sqlite.sys.mjs`
+- Schema + migrations
+- `appendEvent({ snapshot })` with hash dedupe
+- `tagLatest(tag)`, `getTagged(limit)`, `getById(id)`
+- `searchTagged(query)`, `searchAll(query)` via FTS5
+- `runRetention()` background pass
+- Replace `writeTreeToDisk` / `readTreeFromDisk` callsites
+- `quit-application` observer creates auto-tagged session
+- Tier 3 integration tests for the substrate operations
+
+### Phase 2 — Restore UX
+- `:restore` ex-command (lists tagged points, opens picker, performs flow)
+- `:checkpoint <label>` ex-command (tags latest event)
+- Re-key + synthetic-group + queue-into-onTabOpen flow
+- Integration test: build tree → save → close all → :restore → tree returns nested under group
+
+### Phase 3 — Search UX
+- `:sessions [query]` ex-command — list tagged + optional FTS5 filter
+- `:history [query]` ex-command — full timeline + optional filter
+- Result UI in modeline (TBD shape — inline list, popup, dedicated panel)
+
+### Phase 4 — Power user / polish
+- `:restore --raw <id>` from history view
+- Configurable retention prefs
+- Periodic VACUUM
+- Compression on snapshot column if disk becomes a concern
+
+---
+
+## What we're explicitly not doing in v1
+
+- **Deltas.** Each event is a full snapshot. Deltas are seductive
+  premature optimization at our scale; we'd burn implementation time on
+  replay logic and corruption surface area. JSON-encoded snapshots
+  compress 10× with gzip if we need to revisit later.
+- **Cross-device sync.** Each profile has its own history. Sync layer
+  is a separate, much larger project.
+- **Tab content snapshots.** We store URL + label + tree. Restored tabs
+  re-fetch content. SessionStore handles content for the *current*
+  session; for restored older sessions, content is re-fetched fresh.
+- **Inferred tagging** ("automatically tag interesting moments"). Too
+  fuzzy; user explicitly tags via `:checkpoint`.
+- **Undo across history events.** Each event is a save point, not a
+  reversible op. Restore is the only "undo" primitive.
+
+---
+
+## Risks / tradeoffs we accept
+
+- **SQLite operational complexity.** Schema migrations, WAL file
+  management. Mitigated by Mozilla's `Sqlite.sys.mjs` covering all the
+  hard parts (transactions, shutdown barriers, async lifecycle).
+- **No backward compat with the old `palefox-tab-tree.json` format.**
+  Acceptable: project has handful of users, no install base to protect.
+  First run on a profile with the old file logs a warning, ignores it,
+  proceeds with empty SQLite. User can re-checkpoint manually.
+- **Single-file blast radius.** A corrupt `palefox-history.sqlite`
+  would lose all history. Mitigated by WAL journalling, periodic
+  integrity checks (`PRAGMA integrity_check`), and the option to
+  export tagged events to JSON for backup.

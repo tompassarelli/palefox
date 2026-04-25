@@ -3,7 +3,7 @@
 // palefox supports user-defined groups — header rows that sit between tabs
 // in the tree. Tab→group parentage uses string parentIds ("g1", "g2") in
 // TreeData, distinct from numeric tab→tab parentIds. Group state is
-// persisted to palefox-tab-tree.json with afterTabId anchoring.
+// persisted in palefox-history.sqlite with afterTabId anchoring.
 //
 // Tests here drive the API via `pfxTest` (the test-only debug surface) so
 // we can exercise palefox's group-aware code paths without faking ex-mode
@@ -11,8 +11,6 @@
 
 import type { IntegrationTest } from "../../tools/test-driver/runner.ts";
 import type { MarionetteClient } from "../../tools/test-driver/marionette.ts";
-import { join } from "node:path";
-import { readFile } from "node:fs/promises";
 
 async function waitFor(
   mn: MarionetteClient,
@@ -130,32 +128,38 @@ const tests: IntegrationTest[] = [
   },
 
   {
-    name: "groups: persisted tree file includes group entries with afterTabId",
-    async run(mn, ctx) {
-      const treeFilePath = join(ctx.profilePath, "palefox-tab-tree.json");
-
+    name: "groups: persisted history snapshot includes group entries with afterTabId",
+    async run(mn) {
       // Trigger a save by moving a tab.
       await mn.executeScript(`gBrowser.moveTabTo(gBrowser.tabs[gBrowser.tabs.length - 1], { tabIndex: 0 });`);
-      // Saves are async; wait briefly then poll.
-      await new Promise((r) => setTimeout(r, 200));
-      let parsed: { nodes: Array<{ type?: string; afterTabId?: number | null; name?: string }> } | null = null;
-      const start = Date.now();
-      while (Date.now() - start < 3000) {
-        try {
-          const text = await readFile(treeFilePath, "utf8");
-          parsed = JSON.parse(text);
-          // Stop polling once we see a group entry — confirms the latest
-          // save reflects the group we created in earlier tests.
-          if (parsed && parsed.nodes.some((n) => n.type === "group")) break;
-        } catch {}
-        await new Promise((r) => setTimeout(r, 100));
+      // Saves are debounced; let one fire.
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Query the latest history event. Snapshot should contain a group node.
+      const result = await mn.executeAsyncScript<{
+        eventCount: number;
+        groupNodes: Array<{ name?: string; afterTabId?: number | null }>;
+      }>(`
+        const cb = arguments[arguments.length - 1];
+        window.pfxTest.history.getRecent(20)
+          .then((events) => {
+            // Walk events newest-first and grab the first one that has a group.
+            for (const ev of events) {
+              const groups = (ev.snapshot.nodes || []).filter((n) => n.type === "group");
+              if (groups.length) {
+                cb({ eventCount: events.length, groupNodes: groups });
+                return;
+              }
+            }
+            cb({ eventCount: events.length, groupNodes: [] });
+          })
+          .catch(() => cb({ eventCount: -1, groupNodes: [] }));
+      `);
+
+      if (result.groupNodes.length === 0) {
+        throw new Error(`no group nodes in any of the ${result.eventCount} recent events`);
       }
-      if (!parsed) throw new Error("tree file never parsed");
-      const groupNodes = parsed.nodes.filter((n) => n.type === "group");
-      if (groupNodes.length === 0) {
-        throw new Error("no group nodes in saved tree file — group not persisted");
-      }
-      for (const g of groupNodes) {
+      for (const g of result.groupNodes) {
         if (!("afterTabId" in g)) {
           throw new Error(`group missing afterTabId field: ${JSON.stringify(g)}`);
         }

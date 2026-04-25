@@ -29,7 +29,8 @@ import {
   allRows, allTabs, pinTabId, tabUrl, treeData, tryRegisterPinAttr,
 } from "./helpers.ts";
 import { createLogger } from "./log.ts";
-import { makeSaver, readTreeFromDisk } from "./persist.ts";
+import { makeHistory, type HistoryAPI } from "./history.ts";
+import { makeSaver } from "./snapshot.ts";
 import {
   closedTabs, rowOf, savedTabQueue, selection, state, treeOf,
 } from "./state.ts";
@@ -96,9 +97,15 @@ const pfxLog = createLogger("tabs");
 
   // --- Persistence ---
 
+  // Single source of truth: SQLite-backed temporal substrate at
+  // <profile>/palefox-history.sqlite. Hash-deduped append-only event log
+  // with FTS5 for search and tagged points for sessions/checkpoints.
+  // See docs/dev/multi-session-architecture.md for the full design.
+  const history: HistoryAPI = makeHistory();
+
   // Write-on-every-change: pulls a fresh snapshot for every flush, coalesces
-  // overlapping schedules. Implementation in ./persist.ts; the closure here
-  // just supplies live state.
+  // overlapping schedules, hands off to history (which dedupes by content
+  // hash so no-op snapshots cost zero DB writes).
   const scheduleSave = makeSaver(() => ({
     tabs: [...gBrowser.tabs],
     rows: () => allRows(),
@@ -107,7 +114,7 @@ const pfxLog = createLogger("tabs");
     nextTabId: state.nextTabId,
     tabUrl,
     treeData,
-  }));
+  }), history);
 
   // drag ↔ Rows ↔ vim form a small cycle of mutual deps:
   //   - rows needs drag.setupDrag (each row gets DnD wired) AND vim's row-
@@ -151,16 +158,20 @@ const pfxLog = createLogger("tabs");
     scheduleSave,
   });
 
-  async function loadFromDisk() {
-    const parsed = await readTreeFromDisk();
-    if (!parsed) return;
+  async function loadFromHistory() {
+    const recent = await history.getRecent(1);
+    if (!recent.length) return;
+    const env = recent[0]!.snapshot;
     try {
-      if (parsed.nextTabId != null) state.nextTabId = parsed.nextTabId;
+      if (env.nextTabId != null) state.nextTabId = env.nextTabId;
       closedTabs.length = 0;
-      closedTabs.push(...parsed.closedTabs);
+      closedTabs.push(...env.closedTabs);
 
       const tabs = allTabs();
-      const tabNodes = parsed.tabNodes.map(s => ({ ...s }));
+      // tabNodes = the tab entries (groups have type === "group").
+      const tabNodes = env.nodes
+        .filter((n) => n.type !== "group")
+        .map((s) => ({ ...s }));
       state.lastLoadedNodes = tabNodes.map(s => ({ ...s }));
 
       // Belt-and-suspenders: advance state.nextTabId past every saved node ID before
@@ -171,7 +182,7 @@ const pfxLog = createLogger("tabs");
       for (const s of tabNodes) {
         if (s.id && s.id >= state.nextTabId) state.nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId: state.nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
+      pfxLog("loadFromHistory", { nextTabId: state.nextTabId, savedNextTabId: env.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map(s => s.id), liveTabPfxIds: tabs.map(t => t.getAttribute?.("pfx-id") || 0) });
 
       const applied = new Set();
       const apply = (tab, s, i) => {
@@ -232,9 +243,9 @@ const pfxLog = createLogger("tabs");
       });
 
       // Full node list drives buildFromSaved for groups + order.
-      loadedNodes = parsed.nodes;
+      loadedNodes = env.nodes;
     } catch (e) {
-      console.error("palefox-tabs: loadFromDisk apply error", e);
+      console.error("palefox-tabs: loadFromHistory apply error", e);
     }
   }
 
@@ -299,7 +310,11 @@ const pfxLog = createLogger("tabs");
 
   async function init() {
     tryRegisterPinAttr();
-    await loadFromDisk();
+    try {
+      await loadFromHistory();
+    } catch (e) {
+      console.error("palefox-tabs: loadFromHistory threw — init proceeds with empty state", e);
+    }
     await new Promise((r) => requestAnimationFrame(r));
 
     state.pinnedContainer = document.createXULElement("vbox");
@@ -365,6 +380,42 @@ const pfxLog = createLogger("tabs");
 
     window.addEventListener("unload", teardownEvents, { once: true });
 
+    // Quit-application observer: tag the most recent event as a session.
+    // Fires before SessionStore writes its own state, so the latest event
+    // captured by scheduleSave (which is hash-deduped, so it represents
+    // the actual final state) becomes the session entry. If somehow no
+    // events exist (brand-new profile), tagLatest is a no-op.
+    const sessionTagger = {
+      observe(_subject: unknown, topic: string) {
+        if (topic === "quit-application") {
+          history.tagLatest("session").catch((e) => {
+            console.error("palefox-tabs: tagLatest on quit failed", e);
+          });
+        }
+      },
+    };
+    Services.obs.addObserver(sessionTagger, "quit-application");
+    window.addEventListener("unload", () => {
+      Services.obs.removeObserver(sessionTagger, "quit-application");
+    }, { once: true });
+
+    // Retention pass: prune untagged events older than retainDays / past
+    // maxRows. Fires once at startup (after delayed-startup-finished, so
+    // it doesn't compete with chrome-window setup) and then every 10
+    // minutes during long sessions. Cheap when there's nothing to delete.
+    setTimeout(() => {
+      history.runRetention().catch((e) => {
+        console.error("palefox-tabs: initial retention pass failed", e);
+      });
+    }, 30_000);
+    const retentionTimer = setInterval(() => {
+      history.runRetention().catch(() => {}); // best-effort
+    }, 10 * 60 * 1000);
+    window.addEventListener("unload", () => {
+      clearInterval(retentionTimer);
+      history.close().catch(() => {});
+    }, { once: true });
+
     // Test-only debug API. Gated on `pfx.test.exposeAPI` so production
     // builds (where the pref is absent / false) don't expose internals.
     // Tests in tests/integration/* set this pref via the ephemeral
@@ -405,6 +456,7 @@ const pfxLog = createLogger("tabs");
         vim,
         rows: Rows,
         scheduleSave,
+        history,
       };
       console.log("palefox-tabs: pfxTest debug API exposed");
     }

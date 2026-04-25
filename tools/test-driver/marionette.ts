@@ -41,6 +41,13 @@ export interface MarionetteClient {
   /** WebDriver:ExecuteScript — runs `script` in current context, returns
    *  whatever `return` value the script produces (must be JSON-serializable). */
   executeScript<T = unknown>(script: string, args?: readonly unknown[]): Promise<T>;
+  /** WebDriver:ExecuteAsyncScript — script gets a callback as its LAST
+   *  argument; calling the callback with a value completes the call. Use
+   *  this when the script needs to await a Promise. Pattern:
+   *    const cb = arguments[arguments.length - 1];
+   *    someAsync().then(cb);
+   */
+  executeAsyncScript<T = unknown>(script: string, args?: readonly unknown[]): Promise<T>;
   /** WebDriver:GetWindowHandle — current chrome window handle (opaque ID). */
   getWindowHandle(): Promise<string>;
   /** WebDriver:GetWindowHandles — all open chrome window handles. */
@@ -49,6 +56,15 @@ export interface MarionetteClient {
   switchToWindow(handle: string): Promise<void>;
   /** WebDriver:CloseWindow — close current window. Returns remaining handles. */
   closeWindow(): Promise<string[]>;
+  /** Marionette:Quit — graceful Firefox shutdown. Used for session-restore
+   *  tests that need sessionstore.jsonlz4 to be written. */
+  quit(flags?: readonly string[]): Promise<{ cause?: string; in_app?: boolean }>;
+  /** WebDriver:PerformActions — execute a WebDriver actions chain (pointer
+   *  moves, mouse buttons, key sequences). Useful for headed-mode tests that
+   *  need real cursor movement. See https://w3c.github.io/webdriver/#actions. */
+  performActions(actions: readonly object[]): Promise<void>;
+  /** WebDriver:ReleaseActions — clear all in-flight actions state. */
+  releaseActions(): Promise<void>;
   /** WebDriver:DeleteSession — tears down. */
   deleteSession(): Promise<void>;
   /** Close the underlying socket. Call after deleteSession. */
@@ -198,6 +214,15 @@ async function initClient(socket: Socket): Promise<MarionetteClient> {
       });
       return r.value;
     },
+    async executeAsyncScript<T = unknown>(script: string, args: readonly unknown[] = []): Promise<T> {
+      const r = await send<{ value: T }>("WebDriver:ExecuteAsyncScript", {
+        script,
+        args,
+        scriptTimeout: 30_000,
+        newSandbox: false,
+      });
+      return r.value;
+    },
     async getWindowHandle() {
       // Marionette wraps single-value returns in { value: ... } here, just
       // like ExecuteScript. Unwrap.
@@ -217,6 +242,24 @@ async function initClient(socket: Socket): Promise<MarionetteClient> {
       // to close the entire window, hence Marionette:CloseChromeWindow.
       const r = await send<string[] | { value: string[] }>("WebDriver:CloseChromeWindow", {});
       return Array.isArray(r) ? r : r.value;
+    },
+    async performActions(actions: readonly object[]) {
+      await send<unknown>("WebDriver:PerformActions", { actions });
+    },
+    async releaseActions() {
+      await send<unknown>("WebDriver:ReleaseActions", {});
+    },
+    async quit(flags?: readonly string[]) {
+      // Marionette:Quit gracefully shuts Firefox down and writes
+      // sessionstore.jsonlz4. Returns { cause, in_app }.
+      try {
+        return await send<{ cause?: string; in_app?: boolean }>("Marionette:Quit", {
+          flags: flags ?? ["eAttemptQuit"],
+        });
+      } catch (e) {
+        // Connection may close mid-shutdown; treat that as success.
+        return {};
+      }
     },
     async deleteSession() {
       try {

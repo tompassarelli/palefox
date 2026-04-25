@@ -29,7 +29,7 @@ import { createLogger } from "./log.ts";
 import {
   popSavedByUrl as popQueueByUrl,
   popSavedForTab as popQueueForTab,
-} from "./persist.ts";
+} from "./snapshot.ts";
 import {
   closedTabs,
   movingTabs,

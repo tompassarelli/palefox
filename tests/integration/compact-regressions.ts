@@ -24,6 +24,78 @@ async function waitFor(
 
 const tests: IntegrationTest[] = [
   {
+    // Bug (reported by user): mouse re-enters the sidebar AS IT'S CLOSING,
+    // and the sidebar stays hidden — appears "locked out." User reports
+    // having to slowly drag back in to recover. Root cause: setHover(false)
+    // (the close commit) stamps a 280ms collapse-protection window. If the
+    // user re-enters during that window, onSidebarEnter → setHover(true)
+    // checks _collapseProtectedUntil and DROPS the reveal. The protection
+    // was meant to suppress spurious reveal events during the close
+    // animation — but a confirmed `:hover` after the hoverHackDelay tick
+    // is real user intent, not a spurious event.
+    //
+    // Fix: onSidebarEnter cancels _collapseProtectedUntil after `:hover`
+    // is confirmed, before scheduling setHover(true).
+    name: "regression: mouse re-entering during close animation interrupts the close",
+    async run(mn) {
+      // Set up: enable compact, force sidebar visible.
+      await mn.executeScript(`Services.prefs.setBoolPref("pfx.sidebar.compact", true);`);
+      await waitFor(mn, `return document.getElementById("sidebar-main")?.hasAttribute("data-pfx-compact");`);
+      await new Promise((r) => setTimeout(r, 350)); // wait out any prior protection
+
+      // Show the sidebar (cursor "arrives").
+      await mn.executeScript(`document.getElementById("sidebar-main").dispatchEvent(new CustomEvent("pfx-flash"));`);
+      await waitFor(mn, `return document.getElementById("sidebar-main")?.hasAttribute("pfx-has-hover");`, 2000);
+
+      // Wait for the flash auto-hide to fire — this stamps collapse-protection.
+      // FLASH_DURATION = 800ms; wait 1000ms to be safe past it but well within
+      // the 280ms protection window that follows.
+      await new Promise((r) => setTimeout(r, 900));
+      const stillVisible = await mn.executeScript<boolean>(
+        `return document.getElementById("sidebar-main")?.hasAttribute("pfx-has-hover") || false;`,
+      );
+      // We expect it to be hiding/hidden by now (flash timer fired).
+      // (Don't assert false here — there's natural jitter; just continue.)
+
+      // Now simulate the cursor RETURNING during the protection window.
+      // We need to dispatch a mouseover that passes the `:hover` check
+      // inside onSidebarEnter. Without a real cursor, we have to set up
+      // the dispatchEvent path correctly: the handler reads
+      // `event.target.matches(":hover")` after a setTimeout(hoverHackDelay)
+      // tick. happy-dom-style :hover pseudoclass tracking is finicky in
+      // headless Firefox without a real cursor.
+      //
+      // Workaround: bypass the :hover check by dispatching mouseover with
+      // a target that has `matches: () => true` patched on it. (We test
+      // the post-:hover-confirm path: collapse-protection cancellation +
+      // reveal.) The :hover check itself is tested in vim.ts.
+      await mn.executeScript(`
+        const sb = document.getElementById("sidebar-main");
+        // Patch matches() temporarily so the simulated cursor return
+        // passes onSidebarEnter's check. Restore right after.
+        const orig = sb.matches.bind(sb);
+        sb.matches = (s) => s === ":hover" ? true : orig(s);
+        sb.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
+        // hoverHackDelay defaults to 0; the handler runs on next microtask.
+        // Restore matches() after a frame so the rAF inside onSidebarEnter
+        // also sees the patched version.
+        setTimeout(() => { sb.matches = orig; }, 100);
+        return true;
+      `);
+
+      // After the re-entry, the reveal should NOT be dropped — pfx-has-hover
+      // should be set (or about to be set on the next rAF tick).
+      await waitFor(
+        mn,
+        `return document.getElementById("sidebar-main")?.hasAttribute("pfx-has-hover") || false;`,
+        2000,
+      );
+
+      // Cleanup
+      await mn.executeScript(`Services.prefs.setBoolPref("pfx.sidebar.compact", false);`);
+    },
+  },
+  {
     // Bug: window.blur bubbles up from any focused element (urlbar, popups,
     // input fields) — palefox's old listener didn't filter `e.target ===
     // window`, so it reconciled (and force-cleared pfx-has-hover) dozens of

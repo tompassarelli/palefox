@@ -30,14 +30,27 @@ import { join, basename } from "node:path";
 import { connectMarionette, type MarionetteClient } from "./marionette.ts";
 import { createProfile, type TestProfile } from "./profile.ts";
 
+/** Throw a `SkipError` from a test body to mark the run as skipped (vs failed).
+ *  The runner emits a `test:skip` event with the reason. Skipped tests don't
+ *  contribute to the fail count and don't affect exit code. */
+export class SkipError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "SkipError";
+  }
+}
+
 export interface TestContext {
   /** Path to the ephemeral profile directory. Stable across restarts within
    *  one test run; auto-cleaned at the end. */
   readonly profilePath: string;
   /** True iff the runner is launching Firefox without --headless. Tests that
-   *  need toolbar UI / real hover should `if (!ctx.headed) throw new Error(...)`
-   *  to skip noisily under headless rather than silently passing. */
+   *  need toolbar UI / real hover should call `ctx.skip(reason)` to skip
+   *  with a clear message rather than failing silently. */
   readonly headed: boolean;
+  /** Throw a SkipError to mark the test as skipped. Convenience for the
+   *  common headed-only / setup-required pattern. */
+  skip(reason: string): never;
   /** Kill Firefox, respawn with the SAME profile, reconnect Marionette, set
    *  chrome context. Returns the new client; the prior client is dead.
    *
@@ -126,9 +139,13 @@ async function spawnFirefox(opts: {
     "--remote-allow-system-access",
     `-marionette-port`, String(opts.marionettePort),
   ];
+  // We don't disable the sandbox — earlier code did via
+  // MOZ_DISABLE_CONTENT_SANDBOX=1, which surfaced a "your configuration
+  // is unsupported and less secure" infobar in headed mode and didn't
+  // actually buy us anything for chrome-context tests.
   const child = spawn(opts.firefoxBin, args, {
     stdio: opts.verbose ? "inherit" : "pipe",
-    env: { ...process.env, MOZ_DISABLE_CONTENT_SANDBOX: "1" },
+    env: { ...process.env },
   });
   if (!opts.verbose) {
     // Drain pipes so Firefox doesn't block on a full buffer.
@@ -139,10 +156,15 @@ async function spawnFirefox(opts: {
   return child;
 }
 
-export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; fail: number }> {
+export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; fail: number; skip: number }> {
   const firefoxBin = opts.firefoxBin ?? process.env.FIREFOX_BIN ?? "firefox";
   const testDir = opts.testDir ?? join(process.cwd(), "tests/integration");
   const marionettePort = opts.marionettePort ?? 2828;
+
+  if (opts.headed) {
+    logErr("WARNING: --headed mode will pop a real Firefox window on your");
+    logErr("WARNING: display. For unattended runs, drop --headed.");
+  }
 
   const suites = await loadTests(testDir);
   // Apply --grep filter. We filter at the suite level so empty suites get
@@ -157,10 +179,10 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
   const totalCount = suites.reduce((n, s) => n + s.tests.length, 0);
   if (totalCount === 0) {
     emit({
-      type: "summary", pass: 0, fail: 0, durationMs: 0,
+      type: "summary", pass: 0, fail: 0, skip: 0, durationMs: 0,
       note: opts.grep ? `no tests match --grep "${opts.grep}"` : "no tests found",
     });
-    return { pass: 0, fail: 0 };
+    return { pass: 0, fail: 0, skip: 0 };
   }
 
   let profile: TestProfile | null = null;
@@ -168,6 +190,7 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
   let mn: MarionetteClient | null = null;
   let pass = 0;
   let fail = 0;
+  let skip = 0;
   const start = Date.now();
 
   async function killFirefox(): Promise<void> {
@@ -206,10 +229,16 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
         const ctx: TestContext = {
           profilePath: profile.path,
           headed: !!opts.headed,
+          skip(reason: string): never {
+            throw new SkipError(reason);
+          },
           async restartFirefox() {
-            try { await mn!.deleteSession(); } catch {}
+            // Graceful Firefox shutdown via Marionette:Quit so
+            // sessionstore.jsonlz4 gets written. SIGTERM-only restarts
+            // skip session save, which breaks tree-reconciliation tests.
+            try { await mn!.quit(); } catch {}
             mn!.disconnect();
-            await killFirefox();
+            await killFirefox(); // belt-and-suspenders if quit didn't fully exit
             mn = await bootFirefox(profile!.path);
             return mn;
           },
@@ -219,13 +248,22 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
           emit({ type: "test:pass", name: t.name, file, durationMs: Date.now() - tStart });
           pass++;
         } catch (e) {
-          emit({
-            type: "test:fail", name: t.name, file,
-            durationMs: Date.now() - tStart,
-            error: (e as Error).message ?? String(e),
-            stack: (e as Error).stack,
-          });
-          fail++;
+          if (e instanceof SkipError) {
+            emit({
+              type: "test:skip", name: t.name, file,
+              durationMs: Date.now() - tStart,
+              reason: e.message,
+            });
+            skip++;
+          } else {
+            emit({
+              type: "test:fail", name: t.name, file,
+              durationMs: Date.now() - tStart,
+              error: (e as Error).message ?? String(e),
+              stack: (e as Error).stack,
+            });
+            fail++;
+          }
         }
       }
     }
@@ -239,12 +277,16 @@ export async function runAll(opts: RunnerOptions = {}): Promise<{ pass: number; 
     }
     await killFirefox();
     if (profile) {
-      try { await profile.cleanup(); } catch {}
+      if (opts.verbose) {
+        logErr(`profile preserved at ${profile.path} for inspection`);
+      } else {
+        try { await profile.cleanup(); } catch {}
+      }
     }
   }
 
-  emit({ type: "summary", pass, fail, durationMs: Date.now() - start });
-  return { pass, fail };
+  emit({ type: "summary", pass, fail, skip, durationMs: Date.now() - start });
+  return { pass, fail, skip };
 }
 
 if (import.meta.main) {
@@ -258,7 +300,7 @@ if (import.meta.main) {
     if (args[i]!.startsWith("--grep=")) { grep = args[i]!.slice("--grep=".length); }
   }
   runAll({ verbose, grep, headed })
-    .then(({ fail }) => process.exit(fail > 0 ? 1 : 0))
+    .then(({ fail }) => process.exit(fail > 0 ? 1 : 0)) // skips don't fail the run
     .catch((e) => {
       logErr(`fatal: ${(e as Error).stack ?? e}`);
       process.exit(1);

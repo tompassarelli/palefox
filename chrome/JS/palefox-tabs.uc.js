@@ -27,7 +27,6 @@
 
   // src/tabs/constants.ts
   var INDENT = 14;
-  var SAVE_FILE = "palefox-tab-tree.json";
   var CHORD_TIMEOUT = 500;
   var CLOSED_MEMORY = 32;
   var PIN_ATTR = "pfx-id";
@@ -1015,15 +1014,11 @@
     return { setupDrag, setupPinnedContainerDrop, setupPanelDrop };
   }
 
-  // src/tabs/persist.ts
-  function profilePath() {
-    return PathUtils.join(Services.dirsvc.get("ProfD", Ci.nsIFile).path, SAVE_FILE);
-  }
-  function serializeState(snapshot) {
+  // src/tabs/snapshot.ts
+  function buildEnvelope(snapshot) {
     const tabEntries = snapshot.tabs.map((tab) => {
       const d = snapshot.treeData(tab);
       return {
-        type: "tab",
         id: d.id,
         parentId: d.parentId ?? null,
         url: snapshot.tabUrl(tab),
@@ -1051,68 +1046,15 @@
       }
     }
     const liveUrls = new Set(tabEntries.map((e) => e.url).filter(Boolean));
-    const leftovers = snapshot.savedTabQueue.filter((s) => !s.url || !liveUrls.has(s.url)).map((s) => ({ ...s, type: "tab" }));
+    const leftovers = snapshot.savedTabQueue.filter((s) => !s.url || !liveUrls.has(s.url)).map((s) => ({ ...s }));
     const out = [...tabEntries, ...groupEntries, ...leftovers];
-    return JSON.stringify({
-      nodes: out,
-      closedTabs: snapshot.closedTabs,
-      nextTabId: snapshot.nextTabId
-    });
-  }
-  function parseLoaded(text) {
-    let raw;
-    try {
-      raw = JSON.parse(text);
-    } catch {
-      return null;
-    }
-    if (!raw || !Array.isArray(raw.nodes))
-      return null;
-    const tabNodes = raw.nodes.filter((n) => n.type === "tab" || n.type === undefined).map((n) => ({ ...n }));
-    {
-      const stack = [];
-      for (const n of tabNodes) {
-        const lv = n.level || 0;
-        while (stack.length && stack[stack.length - 1].level >= lv)
-          stack.pop();
-        if (n.parentId === undefined) {
-          n.parentId = stack.length ? stack[stack.length - 1].id : null;
-        }
-        if (n.id)
-          stack.push({ level: lv, id: n.id });
-      }
-    }
     return {
-      nodes: raw.nodes,
-      tabNodes,
-      closedTabs: Array.isArray(raw.closedTabs) ? raw.closedTabs.slice(-CLOSED_MEMORY) : [],
-      nextTabId: Number.isInteger(raw.nextTabId) ? raw.nextTabId : null
+      nodes: out,
+      closedTabs: snapshot.closedTabs.slice(-CLOSED_MEMORY),
+      nextTabId: snapshot.nextTabId
     };
   }
-  async function writeTreeToDisk(snapshot) {
-    try {
-      await IOUtils.writeUTF8(profilePath(), serializeState(snapshot));
-    } catch (e) {
-      console.error("palefox-tabs: writeTreeToDisk failed", e);
-      throw e;
-    }
-  }
-  async function readTreeFromDisk() {
-    const path = profilePath();
-    let text;
-    try {
-      text = await IOUtils.readUTF8(path);
-    } catch (e) {
-      console.log(`palefox-tabs: no save file at ${path} (${e?.name || "err"})`);
-      return null;
-    }
-    const parsed = parseLoaded(text);
-    if (!parsed) {
-      console.log("palefox-tabs: save file exists but failed to parse");
-    }
-    return parsed;
-  }
-  function makeSaver(getSnapshot, onError = (e) => console.error("palefox-tabs: save chain", e)) {
+  function makeSaver(getSnapshot, history, onError = (e) => console.error("palefox-tabs: save chain", e)) {
     let inFlight = false;
     let pending = false;
     function scheduleSave() {
@@ -1123,7 +1065,7 @@
       inFlight = true;
       (async () => {
         try {
-          await writeTreeToDisk(getSnapshot());
+          await history.appendEvent(buildEnvelope(getSnapshot()));
         } catch (e) {
           onError(e);
         }
@@ -3322,6 +3264,255 @@
     };
   }
 
+  // src/tabs/history.ts
+  var SCHEMA_VERSION = 1;
+  var MIGRATIONS = [
+    `
+  CREATE TABLE events (
+    id        INTEGER PRIMARY KEY,
+    timestamp INTEGER NOT NULL,
+    hash      TEXT    NOT NULL UNIQUE,
+    snapshot  TEXT    NOT NULL,
+    tag       TEXT
+  );
+  CREATE INDEX events_timestamp ON events(timestamp DESC);
+  CREATE INDEX events_tag       ON events(tag) WHERE tag IS NOT NULL;
+
+  CREATE TABLE events_search_content (
+    rowid    INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    url      TEXT NOT NULL,
+    label    TEXT NOT NULL
+  );
+  CREATE INDEX esc_event ON events_search_content(event_id);
+  CREATE INDEX esc_url   ON events_search_content(url);
+  CREATE INDEX esc_label ON events_search_content(label);
+  `
+  ];
+  var log7 = createLogger("history");
+  var _conn = null;
+  var _lastHash = null;
+  async function sha256Hex(text) {
+    const data = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    const bytes = new Uint8Array(buf);
+    let hex = "";
+    for (const b of bytes)
+      hex += b.toString(16).padStart(2, "0");
+    return hex;
+  }
+  function canonicalize(value) {
+    if (value === null || typeof value !== "object")
+      return JSON.stringify(value);
+    if (Array.isArray(value)) {
+      return "[" + value.map(canonicalize).join(",") + "]";
+    }
+    const obj = value;
+    const keys = Object.keys(obj).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalize(obj[k])).join(",") + "}";
+  }
+  async function openConnection() {
+    if (_conn)
+      return _conn;
+    const { Sqlite } = ChromeUtils.importESModule("resource://gre/modules/Sqlite.sys.mjs");
+    const path = PathUtils.join(Services.dirsvc.get("ProfD", Ci.nsIFile).path, "palefox-history.sqlite");
+    log7("openConnection", { path });
+    const conn = await Sqlite.openConnection({ path });
+    await conn.execute("PRAGMA journal_mode = WAL");
+    await conn.execute("PRAGMA foreign_keys = ON");
+    await applyMigrations(conn);
+    _conn = conn;
+    await primeLastHash(conn);
+    return conn;
+  }
+  async function applyMigrations(conn) {
+    const rows = await conn.execute("PRAGMA user_version");
+    const current = rows?.[0]?.getResultByName?.("user_version") ?? 0;
+    if (current >= SCHEMA_VERSION) {
+      log7("migrate:current", { version: current });
+      return;
+    }
+    log7("migrate:apply", { from: current, to: SCHEMA_VERSION });
+    for (let v = current;v < SCHEMA_VERSION; v++) {
+      const sql = MIGRATIONS[v];
+      if (!sql)
+        throw new Error(`palefox-history: no migration for v${v} → v${v + 1}`);
+      await conn.executeTransaction(async () => {
+        for (const stmt of sql.split(/;\s*\n/)) {
+          const trimmed = stmt.trim();
+          if (trimmed)
+            await conn.execute(trimmed);
+        }
+        await conn.execute(`PRAGMA user_version = ${v + 1}`);
+      });
+    }
+  }
+  async function primeLastHash(conn) {
+    const rows = await conn.execute("SELECT hash FROM events ORDER BY id DESC LIMIT 1");
+    if (rows?.length) {
+      _lastHash = rows[0].getResultByName("hash");
+    }
+  }
+  function dateLabel(d = new Date) {
+    const dayShort = d.toLocaleDateString("en-US", { weekday: "short" });
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const HH = String(d.getHours()).padStart(2, "0");
+    const MM = String(d.getMinutes()).padStart(2, "0");
+    return `Session - ${dayShort} ${yyyy}/${mm}/${dd} ${HH}:${MM}`;
+  }
+  function decodeRow(row) {
+    const snap = row.getResultByName("snapshot");
+    return {
+      id: row.getResultByName("id"),
+      timestamp: row.getResultByName("timestamp"),
+      hash: row.getResultByName("hash"),
+      snapshot: JSON.parse(snap),
+      tag: row.getResultByName("tag")
+    };
+  }
+  function extractSearchableRows(snapshot) {
+    const out = [];
+    for (const node of snapshot.nodes) {
+      const url = node.url ?? "";
+      const label = node.name ?? "";
+      if (url || label)
+        out.push({ url, label });
+    }
+    return out;
+  }
+  function makeHistory() {
+    return {
+      async appendEvent(snapshot) {
+        const conn = await openConnection();
+        const canon = canonicalize(snapshot);
+        const hash = await sha256Hex(canon);
+        if (hash === _lastHash) {
+          return null;
+        }
+        const ts = Date.now();
+        let insertedId = null;
+        await conn.executeTransaction(async () => {
+          await conn.execute("INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag) VALUES (?, ?, ?, NULL)", [ts, hash, canon]);
+          const idRows = await conn.execute("SELECT id FROM events WHERE hash = ?", [hash]);
+          if (!idRows.length)
+            return;
+          insertedId = idRows[0].getResultByName("id");
+          for (const { url, label } of extractSearchableRows(snapshot)) {
+            await conn.execute("INSERT INTO events_search_content(event_id, url, label) VALUES (?, ?, ?)", [insertedId, url, label]);
+          }
+        });
+        if (insertedId !== null) {
+          _lastHash = hash;
+          log7("appendEvent", { id: insertedId, ts, hashHead: hash.slice(0, 12) });
+        }
+        return insertedId;
+      },
+      async tagLatest(kind, label) {
+        const conn = await openConnection();
+        const finalLabel = label ?? (kind === "session" ? dateLabel() : "Untitled");
+        const tagValue = `${kind}:${finalLabel}`;
+        const result = await conn.execute(`UPDATE events SET tag = ?
+          WHERE id = (SELECT MAX(id) FROM events) AND tag IS NULL`, [tagValue]);
+        const idRows = await conn.execute("SELECT id FROM events ORDER BY id DESC LIMIT 1");
+        const id = idRows?.[0]?.getResultByName?.("id") ?? null;
+        log7("tagLatest", { id, tagValue });
+        return id;
+      },
+      async getTagged(limit = 50) {
+        const conn = await openConnection();
+        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag
+           FROM events
+          WHERE tag IS NOT NULL
+          ORDER BY timestamp DESC
+          LIMIT ?`, [limit]);
+        return rows.map(decodeRow);
+      },
+      async getById(id) {
+        const conn = await openConnection();
+        const rows = await conn.execute("SELECT id, timestamp, hash, snapshot, tag FROM events WHERE id = ?", [id]);
+        return rows.length ? decodeRow(rows[0]) : null;
+      },
+      async getRecent(limit = 50) {
+        const conn = await openConnection();
+        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag
+           FROM events
+          ORDER BY timestamp DESC
+          LIMIT ?`, [limit]);
+        return rows.map(decodeRow);
+      },
+      async search(query, { taggedOnly = false, limit = 50 } = {}) {
+        const conn = await openConnection();
+        const trimmed = query.trim();
+        if (!trimmed)
+          return [];
+        const tokens = trimmed.split(/\s+/).filter(Boolean);
+        const escapeLike = (s) => s.replace(/([%_\\])/g, "\\$1");
+        const conditions = [];
+        const params = [];
+        for (const tok of tokens) {
+          const pat = `%${escapeLike(tok)}%`;
+          conditions.push(`(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')`);
+          params.push(pat, pat);
+        }
+        const sql = `
+        SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag
+          FROM events
+          JOIN events_search_content esc ON esc.event_id = events.id
+         WHERE ${conditions.join(" AND ")}
+           ${taggedOnly ? "AND events.tag IS NOT NULL" : ""}
+         GROUP BY events.id
+         ORDER BY events.timestamp DESC
+         LIMIT ?
+      `;
+        params.push(limit);
+        const rows = await conn.execute(sql, params);
+        return rows.map(decodeRow);
+      },
+      async runRetention({ retainDays, maxRows } = {}) {
+        const conn = await openConnection();
+        const days = retainDays ?? Services.prefs.getIntPref("pfx.history.retainDays", 30);
+        const max = maxRows ?? Services.prefs.getIntPref("pfx.history.maxRows", 1e4);
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        let deleted = 0;
+        await conn.executeTransaction(async () => {
+          await conn.execute(`DELETE FROM events WHERE tag IS NULL AND timestamp < ?`, [cutoff]);
+          const after1 = await conn.execute("SELECT changes() AS c");
+          const c1 = after1?.[0]?.getResultByName?.("c") ?? 0;
+          deleted += c1;
+          const overflow = await conn.execute(`DELETE FROM events
+            WHERE tag IS NULL
+              AND id IN (
+                SELECT id FROM events
+                 WHERE tag IS NULL
+                 ORDER BY timestamp ASC
+                 LIMIT MAX(0, (SELECT COUNT(*) FROM events WHERE tag IS NULL) - ?)
+              )`, [max]);
+          const after2 = await conn.execute("SELECT changes() AS c");
+          const c2 = after2?.[0]?.getResultByName?.("c") ?? 0;
+          deleted += c2;
+        });
+        if (deleted) {
+          log7("runRetention", { deleted, retainDays: days, maxRows: max });
+        }
+        return deleted;
+      },
+      lastHash() {
+        return _lastHash;
+      },
+      async close() {
+        if (_conn) {
+          try {
+            await _conn.close();
+          } catch {}
+          _conn = null;
+          _lastHash = null;
+        }
+      }
+    };
+  }
+
   // src/tabs/index.ts
   var pfxLog = createLogger("tabs");
   var sidebarMain = document.getElementById("sidebar-main");
@@ -3367,6 +3558,7 @@
     }
     Rows.updateVisibility();
   }
+  var history = makeHistory();
   var scheduleSave = makeSaver(() => ({
     tabs: [...gBrowser.tabs],
     rows: () => allRows(),
@@ -3375,7 +3567,7 @@
     nextTabId: state.nextTabId,
     tabUrl,
     treeData
-  }));
+  }), history);
   var Rows;
   var vim;
   var drag = makeDrag({
@@ -3409,23 +3601,24 @@
     vim,
     scheduleSave
   });
-  async function loadFromDisk() {
-    const parsed = await readTreeFromDisk();
-    if (!parsed)
+  async function loadFromHistory() {
+    const recent = await history.getRecent(1);
+    if (!recent.length)
       return;
+    const env = recent[0].snapshot;
     try {
-      if (parsed.nextTabId != null)
-        state.nextTabId = parsed.nextTabId;
+      if (env.nextTabId != null)
+        state.nextTabId = env.nextTabId;
       closedTabs.length = 0;
-      closedTabs.push(...parsed.closedTabs);
+      closedTabs.push(...env.closedTabs);
       const tabs = allTabs();
-      const tabNodes = parsed.tabNodes.map((s) => ({ ...s }));
+      const tabNodes = env.nodes.filter((n) => n.type !== "group").map((s) => ({ ...s }));
       state.lastLoadedNodes = tabNodes.map((s) => ({ ...s }));
       for (const s of tabNodes) {
         if (s.id && s.id >= state.nextTabId)
           state.nextTabId = s.id + 1;
       }
-      pfxLog("loadFromDisk", { nextTabId: state.nextTabId, savedNextTabId: parsed.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
+      pfxLog("loadFromHistory", { nextTabId: state.nextTabId, savedNextTabId: env.nextTabId, tabNodes: tabNodes.length, liveTabs: tabs.length, tabNodeIds: tabNodes.map((s) => s.id), liveTabPfxIds: tabs.map((t) => t.getAttribute?.("pfx-id") || 0) });
       const applied = new Set;
       const apply = (tab, s, i) => {
         const id = s.id || state.nextTabId++;
@@ -3473,9 +3666,9 @@
         s._origIdx = i;
         savedTabQueue.push(s);
       });
-      loadedNodes = parsed.nodes;
+      loadedNodes = env.nodes;
     } catch (e) {
-      console.error("palefox-tabs: loadFromDisk apply error", e);
+      console.error("palefox-tabs: loadFromHistory apply error", e);
     }
   }
   var loadedNodes = null;
@@ -3530,7 +3723,11 @@
   }
   async function init() {
     tryRegisterPinAttr();
-    await loadFromDisk();
+    try {
+      await loadFromHistory();
+    } catch (e) {
+      console.error("palefox-tabs: loadFromHistory threw — init proceeds with empty state", e);
+    }
     await new Promise((r) => requestAnimationFrame(r));
     state.pinnedContainer = document.createXULElement("vbox");
     state.pinnedContainer.id = "pfx-pinned-container";
@@ -3581,6 +3778,31 @@
         vim.activateVim(visible[visible.length - 1]);
     });
     window.addEventListener("unload", teardownEvents, { once: true });
+    const sessionTagger = {
+      observe(_subject, topic) {
+        if (topic === "quit-application") {
+          history.tagLatest("session").catch((e) => {
+            console.error("palefox-tabs: tagLatest on quit failed", e);
+          });
+        }
+      }
+    };
+    Services.obs.addObserver(sessionTagger, "quit-application");
+    window.addEventListener("unload", () => {
+      Services.obs.removeObserver(sessionTagger, "quit-application");
+    }, { once: true });
+    setTimeout(() => {
+      history.runRetention().catch((e) => {
+        console.error("palefox-tabs: initial retention pass failed", e);
+      });
+    }, 30000);
+    const retentionTimer = setInterval(() => {
+      history.runRetention().catch(() => {});
+    }, 10 * 60 * 1000);
+    window.addEventListener("unload", () => {
+      clearInterval(retentionTimer);
+      history.close().catch(() => {});
+    }, { once: true });
     if (Services.prefs.getBoolPref("pfx.test.exposeAPI", false)) {
       window.pfxTest = {
         state,
@@ -3612,7 +3834,8 @@
         },
         vim,
         rows: Rows,
-        scheduleSave
+        scheduleSave,
+        history
       };
       console.log("palefox-tabs: pfxTest debug API exposed");
     }
