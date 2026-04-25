@@ -366,6 +366,7 @@ const pfxLog = createLogger("tabs");
     });
     vim.createModeline();
     vim.setupVimKeys();
+    vim.setupGlobalKeys();
     vim.focusPanel();
 
     // events.ts wires all gBrowser.tabContainer listeners + the sessionstore

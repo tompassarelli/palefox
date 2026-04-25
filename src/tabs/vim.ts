@@ -77,6 +77,9 @@ export type VimAPI = {
   readonly createModeline: () => void;
   /** One-time init: install the document keydown listener. */
   readonly setupVimKeys: () => void;
+  /** One-time init: install the global keydown listener (t / : / Alt+X /
+   *  ` / o / O / x). Fires regardless of sidebar focus. */
+  readonly setupGlobalKeys: () => void;
 
   /** Duplicate a tab and place it as a child of the source tab. Sets the
    *  pending-cursor-move flag so the new row gets the cursor. */
@@ -493,6 +496,198 @@ export function makeVim(deps: VimDeps): VimAPI {
   }
 
   // ---------- Keys ----------------------------------------------------------
+
+  // ---------- Global keys ---------------------------------------------------
+  //
+  // Chrome-scope keyboard interface. Fires whenever palefox is loaded
+  // (sidebar focused or not), as long as focus isn't in a text input.
+  // Content-area keys (when a webpage has focus) DON'T reach this listener
+  // because content lives in a separate process — that's Phase 2 work
+  // (frame script + messaging). For now: chrome-area only.
+  //
+  // The keymap (per the user's vimium-replacement plan):
+  //
+  //   t           open spotlight tabs picker
+  //   :           open spotlight ex-input
+  //   `           toggle to last selected tab
+  //   o           focus urlbar (open URL in current tab)
+  //   O           new tab + focus urlbar
+  //   x           close current tab
+  //   /           NOT intercepted — Firefox's native find owns it
+  //   b / B       (Phase 1b — bookmarks picker, separate push)
+  //
+  // Composability (CSS-layers inspired): every binding is gated on a pref
+  // `pfx.keys.<key>.enabled` (default true). Users can disable any palefox
+  // binding to let vimium/tridactyl/Firefox-native take it. Set the pref
+  // to false in about:config to opt out per-key without uninstalling.
+  //
+  // Originally also had Alt+X (Meta-X alias for `:`) but on Windows it's
+  // Firefox's File→Exit accesskey; dispatching it crashes the chrome
+  // window. Cross-platform safe binding TBD.
+
+  /** Tracks the previously-selected tab so backtick can toggle. */
+  let lastTab: Tab | null = null;
+  let currentSelectedTab: Tab | null = null;
+
+  /** Build picker items from the live tab tree. Used by :tabs and the
+   *  global `t` shortcut. Tree-preserving — depth + parentId set so the
+   *  picker filter shows ancestors as context. */
+  function openTabsPicker(): void {
+    const items: PickerItem[] = [];
+    for (const tab of gBrowser.tabs as Iterable<Tab>) {
+      const td = treeOf.get(tab);
+      if (!td) continue;
+      const url = tab.linkedBrowser?.currentURI?.spec || "";
+      const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
+      let icon: string | undefined;
+      try { icon = gBrowser.getIcon(tab) || undefined; } catch {}
+      items.push({
+        display: td.name || tab.label || "(untitled)",
+        secondary: host || url || "",
+        icon,
+        id: td.id,
+        parentId: typeof td.parentId === "number" ? td.parentId : null,
+        depth: levelOf(tab),
+        data: tab,
+      });
+    }
+    if (!items.length) {
+      modelineMsg("No tabs", 3000);
+      return;
+    }
+    showPicker({
+      prompt: "tabs ›",
+      items,
+      preserveTree: true,
+      onSelect: (item) => {
+        const tab = item.data as Tab;
+        try { gBrowser.selectedTab = tab; } catch {}
+      },
+      actions: [
+        { label: "Close", key: "x", run: (item) => { try { gBrowser.removeTab(item.data); } catch {} } },
+        { label: "Duplicate", key: "d", run: (item) => { try { gBrowser.duplicateTab(item.data); } catch {} } },
+        { label: "Pin / Unpin", key: "p", run: (item) => {
+          const t = item.data as Tab;
+          try {
+            if (t.pinned) gBrowser.unpinTab(t);
+            else gBrowser.pinTab(t);
+          } catch {}
+        }},
+        { label: "Reload", key: "r", run: (item) => { try { gBrowser.reloadTab(item.data); } catch {} } },
+      ],
+    });
+  }
+
+  function focusUrlbar(): void {
+    try {
+      const w = window as unknown as { gURLBar?: { focus(): void; select?(): void } };
+      if (w.gURLBar?.focus) {
+        w.gURLBar.focus();
+        w.gURLBar.select?.();
+      }
+    } catch {}
+  }
+
+  function openNewTabAndFocusUrlbar(): void {
+    try {
+      const sp = Services.scriptSecurityManager.getSystemPrincipal();
+      const tab = gBrowser.addTab("about:newtab", { triggeringPrincipal: sp });
+      gBrowser.selectedTab = tab;
+      // Wait one tick so Firefox finishes its tab-switch focus dance,
+      // then steal focus back to the urlbar.
+      setTimeout(() => focusUrlbar(), 60);
+    } catch (e) {
+      console.error("palefox-tabs: openNewTabAndFocusUrlbar failed", e);
+    }
+  }
+
+  function toggleLastTab(): void {
+    const target = lastTab;
+    if (!target) return;
+    try {
+      // tab.isOpen check — `isOpen` is in our Tab type and palefox uses it.
+      if (target.isOpen) gBrowser.selectedTab = target;
+    } catch (e) {
+      console.error("palefox-tabs: toggleLastTab failed", e);
+    }
+  }
+
+  /** Pref-gate per-binding. Users opt out of any palefox key by setting
+   *  `pfx.keys.<name>.enabled` to false in about:config — letting
+   *  vimium / tridactyl / native Firefox take it instead. Defaults true. */
+  function keyEnabled(name: string): boolean {
+    return Services.prefs.getBoolPref(`pfx.keys.${name}.enabled`, true);
+  }
+
+  /** Wire the global keydown listener + tab-toggle tracking. Called once
+   *  from the orchestrator's init. */
+  function setupGlobalKeys(): void {
+    // Track tab switches for backtick toggle.
+    currentSelectedTab = gBrowser.selectedTab as Tab;
+    gBrowser.tabContainer.addEventListener("TabSelect", (e: Event) => {
+      const newTab = e.target as Tab;
+      if (newTab !== currentSelectedTab) {
+        lastTab = currentSelectedTab;
+        currentSelectedTab = newTab;
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      // Picker has its own input, don't compete.
+      if (pickerActive) return;
+      // Bail when typing in any input field — those keys are real input.
+      const a = document.activeElement as HTMLElement | null;
+      if (a && a !== state.panel && (
+        a.tagName === "INPUT" || a.tagName === "input" ||
+        a.tagName === "TEXTAREA" || a.tagName === "textarea" ||
+        a.isContentEditable
+      )) return;
+      if (a && (a.closest?.("#urlbar") || a.closest?.("findbar") || a.closest?.(".pfx-search-input") || a.closest?.(".pfx-picker"))) return;
+
+      // No-modifier global hotkeys (per-binding pref-gated).
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        switch (e.key) {
+          case "t":
+            if (!keyEnabled("t")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            openTabsPicker();
+            return;
+          case ":":
+            if (!keyEnabled("colon")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            startExMode();
+            return;
+          case "x":
+            if (!keyEnabled("x")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            try { gBrowser.removeTab(gBrowser.selectedTab); } catch {}
+            return;
+          case "o":
+            if (!keyEnabled("o")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            focusUrlbar();
+            return;
+          case "O":
+            if (!keyEnabled("O")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            openNewTabAndFocusUrlbar();
+            return;
+          case "`":
+            if (!keyEnabled("backtick")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            toggleLastTab();
+            return;
+          // / intentionally NOT bound — Firefox's find-as-you-type owns it.
+        }
+      }
+    }, true);
+  }
 
   function setupVimKeys(): void {
     state.panel.setAttribute("tabindex", "0");
@@ -1097,9 +1292,11 @@ export function makeVim(deps: VimDeps): VimAPI {
         return true;
       case "r": startRename(state.cursor); return true;
       case "G": goToBottom(); return true;
-      case "/": startSearch(); return true;
-      case "n": nextMatch(1); return true;
-      case "N": nextMatch(-1); return true;
+      // /, n, N removed in favor of global keys + spotlight :tabs (the
+      // "all search lives in spotlight" rule). Page-content search lives
+      // with Firefox's native find-as-you-type. Refile still uses
+      // startSearch internally — that flow is invoked from :refile and
+      // doesn't need the / keybinding.
       case "x": closeFocused(); return true;
       case ":": startExMode(); return true;
       case "J": {
@@ -1433,77 +1630,9 @@ export function makeVim(deps: VimDeps): VimAPI {
         })();
         break;
       }
-      case "tabs": {
-        // :tabs — picker over current live tabs, tree-preserving.
-        // Primary action: focus the tab. Mod+Tab opens the action menu
-        // (close, duplicate, pin/unpin).
-        const items: PickerItem[] = [];
-        for (const tab of gBrowser.tabs as Iterable<Tab>) {
-          const td = treeOf.get(tab);
-          if (!td) continue;
-          const url = tab.linkedBrowser?.currentURI?.spec || "";
-          const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
-          let icon: string | undefined;
-          try { icon = gBrowser.getIcon(tab) || undefined; } catch {}
-          items.push({
-            display: td.name || tab.label || "(untitled)",
-            secondary: host || url || "",
-            icon,
-            id: td.id,
-            parentId: typeof td.parentId === "number" ? td.parentId : null,
-            depth: levelOf(tab),
-            data: tab,
-          });
-        }
-        if (!items.length) {
-          modelineMsg("No tabs", 3000);
-          break;
-        }
-        showPicker({
-          prompt: "tabs ›",
-          items,
-          preserveTree: true,
-          onSelect: (item) => {
-            const tab = item.data as Tab;
-            try { gBrowser.selectedTab = tab; } catch {}
-          },
-          actions: [
-            {
-              label: "Close",
-              key: "x",
-              run: (item) => {
-                try { gBrowser.removeTab(item.data); } catch {}
-              },
-            },
-            {
-              label: "Duplicate",
-              key: "d",
-              run: (item) => {
-                try { gBrowser.duplicateTab(item.data); } catch {}
-              },
-            },
-            {
-              label: "Pin / Unpin",
-              key: "p",
-              run: (item) => {
-                const t = item.data as Tab;
-                try {
-                  if (t.pinned) gBrowser.unpinTab(t);
-                  else gBrowser.pinTab(t);
-                } catch {}
-              },
-            },
-            {
-              label: "Reload",
-              key: "r",
-              run: (item) => {
-                try { gBrowser.reloadTab(item.data); } catch {}
-              },
-            },
-          ],
-        });
+      case "tabs":
+        openTabsPicker();
         break;
-      }
       case "history": {
         // :history [<query>] — picker over ALL events, tagged or not.
         const q = args.slice(1).join(" ").trim();
@@ -1962,7 +2091,7 @@ export function makeVim(deps: VimDeps): VimAPI {
 
   return {
     setCursor, activateVim, moveCursor, focusPanel,
-    createModeline, setupVimKeys,
+    createModeline, setupVimKeys, setupGlobalKeys,
     cloneAsSibling, startRename,
     consumePendingCursorMove,
   };

@@ -159,81 +159,9 @@ const tests: IntegrationTest[] = [
     },
   },
 
-  {
-    name: "search: pressing / opens the search input field",
-    async run(mn) {
-      await mn.executeScript(ACTIVATE_VIM_ON_FIRST_ROW);
-      await waitFor(mn, `return !!document.querySelector(".pfx-tab-row[pfx-cursor]");`);
-
-      await mn.executeScript(pressKey("/"));
-      await waitFor(mn, `return !!document.querySelector(".pfx-search-input");`, 2000);
-
-      // Cleanup
-      await mn.executeScript(`
-        const input = document.querySelector(".pfx-search-input");
-        input?.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "Escape", bubbles: true, cancelable: true,
-        }));
-      `);
-    },
-  },
-
-  {
-    name: "search: typing a query filters rows by tab label",
-    async run(mn) {
-      // Open extra tabs so we have multiple rows to filter — this test
-      // can run in isolation (--grep) so don't depend on prior tests.
-      await mn.executeScript(`
-        const sp = Services.scriptSecurityManager.getSystemPrincipal();
-        for (let i = 0; i < 3; i++) gBrowser.addTab("about:blank", { triggeringPrincipal: sp });
-        return true;
-      `);
-      await waitFor(mn, `return document.querySelectorAll(".pfx-tab-row").length >= 4;`);
-
-      // Rename one tab to a unique string we can search for.
-      await mn.executeScript(`
-        const t = gBrowser.tabs[gBrowser.tabs.length - 1];
-        const td = window.pfxTest.treeOf.get(t);
-        td.name = "needle-find-me";
-        window.pfxTest.rows.scheduleTreeResync();
-        return true;
-      `);
-
-      await mn.executeScript(ACTIVATE_VIM_ON_FIRST_ROW);
-      await waitFor(mn, `return !!document.querySelector(".pfx-tab-row[pfx-cursor]");`);
-
-      // Open search, type "needle". The `input` event triggers
-      // applyFilter synchronously, which sets row.hidden = !matched.
-      const visibleAfter = await mn.executeScript<{ total: number; visible: number }>(`
-        document.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "/", bubbles: true, cancelable: true,
-        }));
-        const input = document.querySelector(".pfx-search-input");
-        if (!input) throw new Error("search input never appeared");
-        input.value = "needle";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        const rows = [...document.querySelectorAll(".pfx-tab-row")];
-        return {
-          total: rows.length,
-          visible: rows.filter(r => !r.hidden).length,
-        };
-      `);
-      // Some rows must be hidden — palefox filters to matches + ancestors.
-      if (visibleAfter.visible >= visibleAfter.total) {
-        throw new Error(
-          `search filter did not hide any rows. total=${visibleAfter.total} visible=${visibleAfter.visible}`,
-        );
-      }
-
-      // Cleanup: dismiss search.
-      await mn.executeScript(`
-        const input = document.querySelector(".pfx-search-input");
-        input?.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "Escape", bubbles: true, cancelable: true,
-        }));
-      `);
-    },
-  },
+  // / removed from palefox; Firefox's native find-as-you-type owns it.
+  // The old "/ opens in-sidebar filter" tests have been deleted. The
+  // global-key behaviors live in tests/integration/global-keys.ts.
 ];
 
 export default tests;

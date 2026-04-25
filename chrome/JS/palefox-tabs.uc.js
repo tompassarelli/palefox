@@ -2453,6 +2453,178 @@
       }
       updateModeline();
     }
+    let lastTab = null;
+    let currentSelectedTab = null;
+    function openTabsPicker() {
+      const items = [];
+      for (const tab of gBrowser.tabs) {
+        const td = treeOf.get(tab);
+        if (!td)
+          continue;
+        const url = tab.linkedBrowser?.currentURI?.spec || "";
+        const host = (() => {
+          try {
+            return new URL(url).hostname;
+          } catch {
+            return "";
+          }
+        })();
+        let icon;
+        try {
+          icon = gBrowser.getIcon(tab) || undefined;
+        } catch {}
+        items.push({
+          display: td.name || tab.label || "(untitled)",
+          secondary: host || url || "",
+          icon,
+          id: td.id,
+          parentId: typeof td.parentId === "number" ? td.parentId : null,
+          depth: levelOf(tab),
+          data: tab
+        });
+      }
+      if (!items.length) {
+        modelineMsg("No tabs", 3000);
+        return;
+      }
+      showPicker({
+        prompt: "tabs ›",
+        items,
+        preserveTree: true,
+        onSelect: (item) => {
+          const tab = item.data;
+          try {
+            gBrowser.selectedTab = tab;
+          } catch {}
+        },
+        actions: [
+          { label: "Close", key: "x", run: (item) => {
+            try {
+              gBrowser.removeTab(item.data);
+            } catch {}
+          } },
+          { label: "Duplicate", key: "d", run: (item) => {
+            try {
+              gBrowser.duplicateTab(item.data);
+            } catch {}
+          } },
+          { label: "Pin / Unpin", key: "p", run: (item) => {
+            const t = item.data;
+            try {
+              if (t.pinned)
+                gBrowser.unpinTab(t);
+              else
+                gBrowser.pinTab(t);
+            } catch {}
+          } },
+          { label: "Reload", key: "r", run: (item) => {
+            try {
+              gBrowser.reloadTab(item.data);
+            } catch {}
+          } }
+        ]
+      });
+    }
+    function focusUrlbar() {
+      try {
+        const w = window;
+        if (w.gURLBar?.focus) {
+          w.gURLBar.focus();
+          w.gURLBar.select?.();
+        }
+      } catch {}
+    }
+    function openNewTabAndFocusUrlbar() {
+      try {
+        const sp = Services.scriptSecurityManager.getSystemPrincipal();
+        const tab = gBrowser.addTab("about:newtab", { triggeringPrincipal: sp });
+        gBrowser.selectedTab = tab;
+        setTimeout(() => focusUrlbar(), 60);
+      } catch (e) {
+        console.error("palefox-tabs: openNewTabAndFocusUrlbar failed", e);
+      }
+    }
+    function toggleLastTab() {
+      const target = lastTab;
+      if (!target)
+        return;
+      try {
+        if (target.isOpen)
+          gBrowser.selectedTab = target;
+      } catch (e) {
+        console.error("palefox-tabs: toggleLastTab failed", e);
+      }
+    }
+    function keyEnabled(name) {
+      return Services.prefs.getBoolPref(`pfx.keys.${name}.enabled`, true);
+    }
+    function setupGlobalKeys() {
+      currentSelectedTab = gBrowser.selectedTab;
+      gBrowser.tabContainer.addEventListener("TabSelect", (e) => {
+        const newTab = e.target;
+        if (newTab !== currentSelectedTab) {
+          lastTab = currentSelectedTab;
+          currentSelectedTab = newTab;
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (pickerActive)
+          return;
+        const a = document.activeElement;
+        if (a && a !== state.panel && (a.tagName === "INPUT" || a.tagName === "input" || a.tagName === "TEXTAREA" || a.tagName === "textarea" || a.isContentEditable))
+          return;
+        if (a && (a.closest?.("#urlbar") || a.closest?.("findbar") || a.closest?.(".pfx-search-input") || a.closest?.(".pfx-picker")))
+          return;
+        if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+          switch (e.key) {
+            case "t":
+              if (!keyEnabled("t"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              openTabsPicker();
+              return;
+            case ":":
+              if (!keyEnabled("colon"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              startExMode();
+              return;
+            case "x":
+              if (!keyEnabled("x"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              try {
+                gBrowser.removeTab(gBrowser.selectedTab);
+              } catch {}
+              return;
+            case "o":
+              if (!keyEnabled("o"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              focusUrlbar();
+              return;
+            case "O":
+              if (!keyEnabled("O"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              openNewTabAndFocusUrlbar();
+              return;
+            case "`":
+              if (!keyEnabled("backtick"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              toggleLastTab();
+              return;
+          }
+        }
+      }, true);
+    }
     function setupVimKeys() {
       state.panel.setAttribute("tabindex", "0");
       document.addEventListener("keydown", (e) => {
@@ -2964,15 +3136,6 @@
         case "G":
           goToBottom();
           return true;
-        case "/":
-          startSearch();
-          return true;
-        case "n":
-          nextMatch(1);
-          return true;
-        case "N":
-          nextMatch(-1);
-          return true;
         case "x":
           closeFocused();
           return true;
@@ -3311,93 +3474,9 @@
           })();
           break;
         }
-        case "tabs": {
-          const items = [];
-          for (const tab of gBrowser.tabs) {
-            const td = treeOf.get(tab);
-            if (!td)
-              continue;
-            const url = tab.linkedBrowser?.currentURI?.spec || "";
-            const host = (() => {
-              try {
-                return new URL(url).hostname;
-              } catch {
-                return "";
-              }
-            })();
-            let icon;
-            try {
-              icon = gBrowser.getIcon(tab) || undefined;
-            } catch {}
-            items.push({
-              display: td.name || tab.label || "(untitled)",
-              secondary: host || url || "",
-              icon,
-              id: td.id,
-              parentId: typeof td.parentId === "number" ? td.parentId : null,
-              depth: levelOf(tab),
-              data: tab
-            });
-          }
-          if (!items.length) {
-            modelineMsg("No tabs", 3000);
-            break;
-          }
-          showPicker({
-            prompt: "tabs ›",
-            items,
-            preserveTree: true,
-            onSelect: (item) => {
-              const tab = item.data;
-              try {
-                gBrowser.selectedTab = tab;
-              } catch {}
-            },
-            actions: [
-              {
-                label: "Close",
-                key: "x",
-                run: (item) => {
-                  try {
-                    gBrowser.removeTab(item.data);
-                  } catch {}
-                }
-              },
-              {
-                label: "Duplicate",
-                key: "d",
-                run: (item) => {
-                  try {
-                    gBrowser.duplicateTab(item.data);
-                  } catch {}
-                }
-              },
-              {
-                label: "Pin / Unpin",
-                key: "p",
-                run: (item) => {
-                  const t = item.data;
-                  try {
-                    if (t.pinned)
-                      gBrowser.unpinTab(t);
-                    else
-                      gBrowser.pinTab(t);
-                  } catch {}
-                }
-              },
-              {
-                label: "Reload",
-                key: "r",
-                run: (item) => {
-                  try {
-                    gBrowser.reloadTab(item.data);
-                  } catch {}
-                }
-              }
-            ]
-          });
+        case "tabs":
+          openTabsPicker();
           break;
-        }
         case "history": {
           const q = args.slice(1).join(" ").trim();
           (async () => {
@@ -3805,6 +3884,7 @@
       focusPanel,
       createModeline,
       setupVimKeys,
+      setupGlobalKeys,
       cloneAsSibling,
       startRename,
       consumePendingCursorMove
@@ -4318,6 +4398,7 @@
     });
     vim.createModeline();
     vim.setupVimKeys();
+    vim.setupGlobalKeys();
     vim.focusPanel();
     const teardownEvents = events.install();
     state.spacer.addEventListener("click", () => {
