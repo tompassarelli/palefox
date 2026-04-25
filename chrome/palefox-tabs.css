@@ -487,10 +487,17 @@
  * fixed, anchored to bottom-center, fits in the viewport with sane
  * max-height + scrollable list. */
 
+/* Anchored to TOP edge (bottom: auto) so the input row stays put and
+ * the result list resizes from the bottom as filtering narrows results.
+ * The top position equals (viewport-height − max-height − bottom-margin)
+ * so a full-height picker still has ~32px breathing room from the
+ * viewport bottom. Shorter result sets just leave whitespace below
+ * instead of yanking the input down. */
 #pfx-picker {
   position: fixed !important;
   left: 50% !important;
-  bottom: 32px !important;
+  top: calc(100vh - 60vh - 32px) !important;
+  bottom: auto !important;
   transform: translateX(-50%) !important;
   z-index: 9999 !important;
   width: min(720px, 90vw) !important;

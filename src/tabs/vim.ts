@@ -780,8 +780,15 @@ export function makeVim(deps: VimDeps): VimAPI {
         row.setAttribute("pfx-picker-context", "true");
       }
       // Indent: each level adds 14px (matches palefox's INDENT constant).
+      // Use setProperty(..., "important") to win against the row's
+      // CSS `padding: 6px 14px !important` rule. Plain inline-style
+      // assignment loses to a CSS !important.
       if (item.depth) {
-        row.style.paddingLeft = `${14 + (item.depth * 14)}px`;
+        row.style.setProperty(
+          "padding-left",
+          `${14 + (item.depth * 14)}px`,
+          "important",
+        );
       }
 
       // Icon column.

@@ -2654,7 +2654,7 @@
           row.setAttribute("pfx-picker-context", "true");
         }
         if (item.depth) {
-          row.style.paddingLeft = `${14 + item.depth * 14}px`;
+          row.style.setProperty("padding-left", `${14 + item.depth * 14}px`, "important");
         }
         if (item.icon) {
           if (/^https?:|^data:|^chrome:|^moz-/.test(item.icon)) {
