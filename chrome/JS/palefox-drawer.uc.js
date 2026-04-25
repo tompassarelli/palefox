@@ -455,24 +455,23 @@
         collapseItem.setAttribute("label", "Collapse Layout");
         collapseItem.hidden = true;
         collapseItem.addEventListener("command", () => {
+          const vertical = Services.prefs.getBoolPref("sidebar.verticalTabs", true);
+          if (vertical) {
+            sidebarMain.toggleAttribute("sidebar-launcher-expanded");
+            return;
+          }
           try {
             const win = window;
-            if (win.SidebarController) {
-              if (typeof win.SidebarController.toggleExpanded === "function") {
-                win.SidebarController.toggleExpanded();
-                return;
-              }
-              if (typeof win.SidebarController.toggle === "function") {
-                win.SidebarController.toggle();
-                return;
-              }
+            if (win.SidebarController?.toggle) {
+              win.SidebarController.toggle();
+              return;
             }
-            if (win.SidebarUI && typeof win.SidebarUI.toggle === "function") {
+            if (win.SidebarUI?.toggle) {
               win.SidebarUI.toggle();
               return;
             }
             const cmd = document.getElementById("cmd_toggleSidebar");
-            if (cmd && typeof cmd.doCommand === "function") {
+            if (cmd?.doCommand) {
               cmd.doCommand();
               return;
             }

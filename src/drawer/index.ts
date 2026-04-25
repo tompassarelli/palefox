@@ -655,31 +655,36 @@ function init() {
       collapseItem.setAttribute("label", "Collapse Layout");
       collapseItem.hidden = true;
       collapseItem.addEventListener("command", () => {
-        // The native sidebar-button is display:none, so .click() and
-        // .doCommand() don't propagate through Firefox's UI plumbing. Call
-        // the sidebar API directly. SidebarController is the modern revamp
-        // API; SidebarUI is the legacy fallback.
+        // The action depends on layout mode:
+        //   Vertical:   "Collapse Layout" toggles the icons-only strip via
+        //               the sidebar-launcher-expanded attribute. The
+        //               attribute observer in palefox-tabs catches this and
+        //               re-runs positionPanel. Calling SidebarController
+        //               here would instead show/hide the bookmarks
+        //               sidebar — wrong action for vertical mode.
+        //   Horizontal: "Enable/Disable Sidebar" shows/hides the
+        //               bookmarks/history sidebar widget.
+        const vertical = Services.prefs.getBoolPref(
+          "sidebar.verticalTabs",
+          true
+        );
+        if (vertical) {
+          sidebarMain.toggleAttribute("sidebar-launcher-expanded");
+          return;
+        }
         try {
           const win = window;
-          if (win.SidebarController) {
-            // toggleExpanded handles vertical-tabs launcher; toggle handles
-            // the bookmarks/history widget show/hide. Try whichever exists.
-            if (typeof win.SidebarController.toggleExpanded === "function") {
-              win.SidebarController.toggleExpanded();
-              return;
-            }
-            if (typeof win.SidebarController.toggle === "function") {
-              win.SidebarController.toggle();
-              return;
-            }
+          if (win.SidebarController?.toggle) {
+            win.SidebarController.toggle();
+            return;
           }
-          if (win.SidebarUI && typeof win.SidebarUI.toggle === "function") {
+          if (win.SidebarUI?.toggle) {
             win.SidebarUI.toggle();
             return;
           }
-          // Last resort: fire the global command directly.
+          // Fall back to the global command.
           const cmd = document.getElementById("cmd_toggleSidebar");
-          if (cmd && typeof cmd.doCommand === "function") {
+          if (cmd?.doCommand) {
             cmd.doCommand();
             return;
           }
