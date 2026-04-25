@@ -1,5 +1,6 @@
-// @ts-nocheck
-// Legacy port from chrome/JS/palefox-tabs.uc.js. Single-file paste — will be
+// Legacy port from chrome/JS/palefox-tabs.uc.js — being incrementally split
+// into modules in src/tabs/*.ts. Not @ts-nocheck'd: we lean on tsc to catch
+// unbound references after each refactor pass.
 // split into modules incrementally. The build wraps the file in IIFE; the
 // existing init() bootstrap at the bottom handles delayed startup. Module
 // scope is fine because top-level code below has no `return`s outside of
@@ -1796,8 +1797,12 @@ const pfxLog = createLogger("tabs");
     if (!buildFromSaved()) buildPanel();
 
     buildContextMenu({
-      startRename, toggleCollapse, createGroupRow, setCursor,
-      updateVisibility, scheduleSave,
+      startRename,
+      toggleCollapse: Rows.toggleCollapse,
+      createGroupRow: Rows.createGroupRow,
+      setCursor,
+      updateVisibility: Rows.updateVisibility,
+      scheduleSave,
     });
     createModeline();
     setupVimKeys();

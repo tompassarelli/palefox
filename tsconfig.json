@@ -12,8 +12,13 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
-    // Strict but pragmatic.
+    // Strict but pragmatic. noImplicitAny is OFF for now so the legacy
+    // src/tabs/index.ts doesn't drown us in ~50 implicit-any errors before
+    // those code paths get extracted into typed modules. The check that
+    // really matters here is TS2304 (Cannot find name) — that's what catches
+    // "toggleCollapse-is-not-defined" style bugs at build time.
     "strict": true,
+    "noImplicitAny": false,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,

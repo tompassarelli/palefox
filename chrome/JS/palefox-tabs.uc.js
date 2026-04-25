@@ -698,10 +698,10 @@
   function buildContextMenu(deps) {
     const {
       startRename,
-      toggleCollapse: toggleCollapse2,
-      createGroupRow: createGroupRow2,
+      toggleCollapse,
+      createGroupRow,
       setCursor,
-      updateVisibility: updateVisibility2,
+      updateVisibility,
       scheduleSave
     } = deps;
     const menu = document.createXULElement("menupopup");
@@ -725,7 +725,7 @@
         return;
       const row = rowOf.get(state.contextTab);
       if (row)
-        toggleCollapse2(row);
+        toggleCollapse(row);
     });
     const createGroupItem = mi("Create Group", () => {
       if (!state.contextTab)
@@ -733,11 +733,11 @@
       const row = rowOf.get(state.contextTab);
       if (!row)
         return;
-      const grp = createGroupRow2("New Group", levelOfRow(row));
+      const grp = createGroupRow("New Group", levelOfRow(row));
       const st = subtreeRows(row);
       st[st.length - 1].after(grp);
       setCursor(grp);
-      updateVisibility2();
+      updateVisibility();
       scheduleSave();
       startRename(grp);
     });
@@ -909,7 +909,7 @@
       row.toggleAttribute("pfx-collapsed", !!td.collapsed && hasChildren(row));
       row.style.paddingInlineStart = levelOf(tab) * INDENT + 8 + "px";
     }
-    function createGroupRow2(name, level = 0) {
+    function createGroupRow(name, level = 0) {
       const group = {
         id: `g${++groupCounter}`,
         type: "group",
@@ -955,7 +955,7 @@
       row.toggleAttribute("pfx-collapsed", !!g.collapsed && hasChildren(row));
       row.style.paddingInlineStart = g.level * INDENT + 8 + "px";
     }
-    function updateVisibility2() {
+    function updateVisibility() {
       let hideBelow = -1;
       for (const row of allRows()) {
         const d = dataOf(row);
@@ -1024,7 +1024,7 @@
         row.removeAttribute("pfx-popout-child");
       }
     }
-    function toggleCollapse2(row) {
+    function toggleCollapse(row) {
       const d = dataOf(row);
       if (!d || !hasChildren(row))
         return;
@@ -1033,7 +1033,7 @@
         syncTabRow(row._tab);
       else
         syncGroupRow(row);
-      updateVisibility2();
+      updateVisibility();
       scheduleSave();
     }
     function scheduleTreeResync() {
@@ -1046,18 +1046,18 @@
           if (rowOf.get(t))
             syncTabRow(t);
         }
-        updateVisibility2();
+        updateVisibility();
       });
     }
     return {
       createTabRow,
       syncTabRow,
-      createGroupRow: createGroupRow2,
+      createGroupRow,
       syncGroupRow,
-      updateVisibility: updateVisibility2,
+      updateVisibility,
       updateHorizontalGrid,
       clearHorizontalGrid,
-      toggleCollapse: toggleCollapse2,
+      toggleCollapse,
       scheduleTreeResync
     };
   }
@@ -2723,10 +2723,10 @@
       buildPanel();
     buildContextMenu({
       startRename,
-      toggleCollapse,
-      createGroupRow,
+      toggleCollapse: Rows.toggleCollapse,
+      createGroupRow: Rows.createGroupRow,
       setCursor,
-      updateVisibility,
+      updateVisibility: Rows.updateVisibility,
       scheduleSave
     });
     createModeline();
