@@ -452,6 +452,30 @@
   }
 
   // src/tabs/drag.ts
+  var log2 = createLogger("tabs/drag");
+  function rowDesc(row) {
+    if (!row)
+      return { row: "null" };
+    if (row._tab) {
+      return {
+        kind: "tab",
+        id: treeData(row._tab).id,
+        label: row._tab.label,
+        level: levelOf(row._tab),
+        pinned: !!row._tab.pinned,
+        parentId: treeData(row._tab).parentId
+      };
+    }
+    if (row._group) {
+      return {
+        kind: "group",
+        id: row._group.id,
+        name: row._group.name,
+        level: row._group.level
+      };
+    }
+    return { kind: "?" };
+  }
   function findGroupContextParent(group) {
     const groupLevel = group._group?.level ?? 0;
     let next = group.nextElementSibling;
@@ -460,17 +484,32 @@
         const lv = levelOf(next._tab);
         if (lv <= groupLevel)
           break;
-        return treeData(next._tab).parentId;
+        const result = treeData(next._tab).parentId;
+        log2("findGroupContextParent:forward", {
+          groupLevel,
+          foundTab: next._tab.label,
+          foundLevel: lv,
+          resultParentId: result
+        });
+        return result;
       }
       next = next.nextElementSibling;
     }
     let prev = group.previousElementSibling;
     while (prev) {
       if (prev._tab && levelOf(prev._tab) === groupLevel) {
-        return treeData(prev._tab).id;
+        const result = treeData(prev._tab).id;
+        log2("findGroupContextParent:backward", {
+          groupLevel,
+          foundTab: prev._tab.label,
+          foundLevel: groupLevel,
+          resultParentId: result
+        });
+        return result;
       }
       prev = prev.previousElementSibling;
     }
+    log2("findGroupContextParent:fallback", { groupLevel, resultParentId: null });
     return null;
   }
   function findClosestTabBefore(row) {
@@ -503,6 +542,7 @@
           return;
         }
         dragSource = row;
+        log2("dragstart", { source: rowDesc(row) });
         const dt = e.dataTransfer;
         dt.effectAllowed = "move";
         dt.setData("text/plain", "");
@@ -551,6 +591,13 @@
             dropPosition = "child";
         }
         dropTarget = row;
+        if (row._group) {
+          log2("dragover/group", {
+            target: rowDesc(row),
+            source: rowDesc(dragSource),
+            position: dropPosition
+          });
+        }
         showDropIndicator(row, dropPosition);
       });
       row.addEventListener("dragleave", (e) => {
@@ -566,6 +613,11 @@
           return;
         if (subtreeRows(dragSource).includes(row))
           return;
+        log2("drop", {
+          target: rowDesc(row),
+          source: rowDesc(dragSource),
+          position: dropPosition
+        });
         if (dropPosition && dropPosition !== "into-empty-pinned" && dropPosition !== "into-empty-panel") {
           executeDrop(dragSource, row, dropPosition);
         }
@@ -698,11 +750,22 @@
     }
     function executeDrop(srcRow, tgtRow, position) {
       const tgtLevel = levelOfRow(tgtRow);
-      if (!dataOf(tgtRow))
+      if (!dataOf(tgtRow)) {
+        log2("executeDrop:abort", { reason: "no-tgt-data", target: rowDesc(tgtRow) });
         return;
+      }
       const srcPinned = !!srcRow._tab?.pinned;
       const tgtPinned = !!tgtRow._tab?.pinned;
       const isCrossContainer = srcPinned !== tgtPinned;
+      log2("executeDrop:enter", {
+        source: rowDesc(srcRow),
+        target: rowDesc(tgtRow),
+        position,
+        srcPinned,
+        tgtPinned,
+        isCrossContainer,
+        tgtLevel
+      });
       let movedRows;
       if (isCrossContainer) {
         movedRows = srcRow._tab ? [srcRow] : [];
@@ -711,20 +774,38 @@
       } else {
         movedRows = subtreeRows(srcRow);
       }
-      if (!movedRows.length)
+      if (!movedRows.length) {
+        log2("executeDrop:abort", { reason: "no-movedRows" });
         return;
+      }
       const srcLevel = levelOfRow(movedRows[0]);
       const newSrcLevel = position === "child" && !tgtPinned ? tgtLevel + 1 : tgtLevel;
       const delta = newSrcLevel - srcLevel;
+      log2("executeDrop:plan", {
+        movedRowsCount: movedRows.length,
+        movedRowsKinds: movedRows.map((r) => r._tab ? "tab" : r._group ? "group" : "?"),
+        srcLevel,
+        newSrcLevel,
+        delta
+      });
       let newParentForSource = null;
+      let parentBranch;
       if (!tgtPinned) {
         if (tgtRow._tab) {
+          parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
           newParentForSource = position === "child" ? treeData(tgtRow._tab).id : treeData(tgtRow._tab).parentId;
         } else if (tgtRow._group) {
+          parentBranch = "group→findGroupContextParent";
           newParentForSource = findGroupContextParent(tgtRow);
+        } else {
+          parentBranch = "no-tab-no-group→null";
         }
+      } else {
+        parentBranch = "pinned→null";
       }
+      log2("executeDrop:newParent", { branch: parentBranch, newParentForSource });
       const movedSet = new Set(movedRows);
+      let parentIdMutations = 0;
       for (const r of movedRows) {
         if (!r._tab) {
           if (r._group)
@@ -734,9 +815,18 @@
         const td = treeData(r._tab);
         const parent = tabById(td.parentId ?? 0);
         if (!parent || !movedSet.has(rowOf.get(parent))) {
+          const oldPid = td.parentId;
           td.parentId = newParentForSource;
+          parentIdMutations++;
+          log2("executeDrop:mutate", {
+            tab: r._tab.label,
+            tabId: td.id,
+            oldParentId: oldPid,
+            newParentId: newParentForSource
+          });
         }
       }
+      log2("executeDrop:mutations", { parentIdMutations });
       const movedTabs = movedRows.filter((r) => r._tab).map((r) => r._tab);
       if (isCrossContainer) {
         for (const t of movedTabs) {
@@ -748,35 +838,51 @@
       }
       const tabsArr = [...gBrowser.tabs];
       let targetIdx;
+      let idxBranch;
       if (tgtRow._group) {
         const anchorTab = position === "before" ? findClosestTabBefore(tgtRow) : findLastTabInGroupOrBefore(tgtRow);
         if (anchorTab) {
           targetIdx = tabsArr.indexOf(anchorTab) + 1;
-          if (position === "before" && anchorTab) {}
+          idxBranch = `group/${position}→after-anchor(${anchorTab.label || "?"}@${tabsArr.indexOf(anchorTab)})`;
         } else {
           targetIdx = tabsArr.length;
+          idxBranch = `group/${position}→no-anchor→end(${tabsArr.length})`;
         }
       } else if (position === "before") {
         targetIdx = tabsArr.indexOf(tgtRow._tab);
+        idxBranch = `tab/before→${targetIdx}`;
       } else {
         const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find((r) => r._tab)?._tab;
         targetIdx = (tgtSubtreeTab ? tabsArr.indexOf(tgtSubtreeTab) : tabsArr.indexOf(tgtRow._tab)) + 1;
+        idxBranch = `tab/${position}→after-${tgtSubtreeTab ? "subtreeLast" : "self"}→${targetIdx}`;
       }
-      if (targetIdx < 0)
+      if (targetIdx < 0) {
+        idxBranch += `→clamp(${tabsArr.length})`;
         targetIdx = tabsArr.length;
+      }
+      log2("executeDrop:targetIdx", { idxBranch, targetIdx, tabsLen: tabsArr.length });
       for (const t of movedTabs)
         movingTabs.add(t);
       let insertIdx = targetIdx;
+      let actualMoves = 0;
       for (const t of movedTabs) {
         const currentIdx = [...gBrowser.tabs].indexOf(t);
         if (currentIdx < 0)
           continue;
         if (currentIdx < insertIdx)
           insertIdx--;
-        if (currentIdx !== insertIdx)
+        if (currentIdx !== insertIdx) {
+          log2("executeDrop:moveTabTo", {
+            tab: t.label,
+            currentIdx,
+            insertIdx
+          });
           gBrowser.moveTabTo(t, { tabIndex: insertIdx });
+          actualMoves++;
+        }
         insertIdx++;
       }
+      log2("executeDrop:moveSummary", { actualMoves, totalTabs: movedTabs.length });
       const groupRows = movedRows.filter((r) => r._group);
       if (groupRows.length) {
         if (position === "before") {
@@ -787,6 +893,7 @@
           const anchor = anchorRows.length ? anchorRows[anchorRows.length - 1] : tgtRow;
           anchor.after(...groupRows);
         }
+        log2("executeDrop:groupDOMMove", { groupRowsCount: groupRows.length });
       }
       clearSelection();
       requestAnimationFrame(() => {
@@ -797,6 +904,14 @@
           if (row)
             row.toggleAttribute("busy", t.hasAttribute("busy"));
         }
+        log2("executeDrop:settled", {
+          sourceFinal: rowDesc(srcRow),
+          sourceParentInTree: srcRow._tab ? treeData(srcRow._tab).parentId : null,
+          sourceLevelDerived: srcRow._tab ? levelOf(srcRow._tab) : null,
+          sourceDOMParent: srcRow.parentNode === state.panel ? "panel" : srcRow.parentNode === state.pinnedContainer ? "pinnedContainer" : "?",
+          sourcePrevSibling: rowDesc(srcRow.previousElementSibling || null),
+          sourceNextSibling: rowDesc(srcRow.nextElementSibling || null)
+        });
         scheduleTreeResync();
         scheduleSave();
       });
@@ -932,23 +1047,23 @@
     return i >= 0 ? queue.splice(i, 1)[0] : null;
   }
   function popSavedForTab(queue, ctx) {
-    const { currentIdx, pinnedId, url, inSessionRestore, log: log2 } = ctx;
+    const { currentIdx, pinnedId, url, inSessionRestore, log: log3 } = ctx;
     if (pinnedId) {
       const i = queue.findIndex((s) => s.id === pinnedId);
       if (i >= 0) {
-        log2?.("popSavedForTab:pfxId", { idx: currentIdx, pfxId: pinnedId, url });
+        log3?.("popSavedForTab:pfxId", { idx: currentIdx, pfxId: pinnedId, url });
         return queue.splice(i, 1)[0];
       }
     }
     if (url && url !== "about:blank") {
       const node2 = popSavedByUrl(queue, url);
-      log2?.("popSavedForTab:url", { idx: currentIdx, url, found: !!node2 });
+      log3?.("popSavedForTab:url", { idx: currentIdx, url, found: !!node2 });
       return node2;
     }
     if (!inSessionRestore)
       return null;
     const node = queue.length ? queue.shift() : null;
-    log2?.("popSavedForTab:fifo", {
+    log3?.("popSavedForTab:fifo", {
       idx: currentIdx,
       pfxId: pinnedId,
       url,
@@ -959,7 +1074,7 @@
   }
 
   // src/tabs/events.ts
-  var log2 = createLogger("tabs");
+  var log3 = createLogger("tabs");
   function makeEvents(deps) {
     const { rows, vim, scheduleSave } = deps;
     function popSavedByUrl2(url) {
@@ -971,7 +1086,7 @@
         pinnedId: readPinnedId(tab),
         url: tabUrl(tab),
         inSessionRestore: state.inSessionRestore,
-        log: log2
+        log: log3
       });
     }
     function popClosedEntry(url) {
@@ -995,7 +1110,7 @@
       td.state = prior.state || null;
       td.collapsed = !!prior.collapsed;
       pinTabId(tab, td.id);
-      log2("applySavedToTab", {
+      log3("applySavedToTab", {
         id: td.id,
         parentId: td.parentId,
         priorId: prior.id,
@@ -1266,7 +1381,7 @@
       const tab = e.target;
       const url = tabUrl(tab);
       const idx = [...gBrowser.tabs].indexOf(tab);
-      log2("onTabRestoring", {
+      log3("onTabRestoring", {
         idx,
         url,
         currentId: treeOf.get(tab)?.id,
@@ -1280,7 +1395,7 @@
           return;
         const correction = popSavedByUrl2(url);
         if (correction) {
-          log2("onTabRestoring:correction", {
+          log3("onTabRestoring:correction", {
             idx,
             url,
             savedId: correction.id,
@@ -1370,7 +1485,7 @@
       tc.addEventListener("TabUnpinned", onTabUnpinned);
       const onSessionRestored = () => {
         console.log("palefox-tabs: sessionstore-windows-restored — final tree resync");
-        log2("sessionstore-windows-restored", {
+        log3("sessionstore-windows-restored", {
           queueLen: savedTabQueue.length,
           inSessionRestore: state.inSessionRestore
         });
@@ -1388,7 +1503,7 @@
           savedTabQueue.push({ ...s, _origIdx: i });
         });
         state.inSessionRestore = true;
-        log2("manualRestoreArmed", {
+        log3("manualRestoreArmed", {
           queueLen: savedTabQueue.length,
           queueIds: savedTabQueue.map((s) => s.id)
         });
@@ -1752,7 +1867,7 @@
   }
 
   // src/tabs/vim.ts
-  var log3 = createLogger("tabs/vim");
+  var log4 = createLogger("tabs/vim");
   function makeVim(deps) {
     const { rows, layout, scheduleSave, clearSelection, selectRange, sidebarMain } = deps;
     let chord = null;
@@ -2514,7 +2629,7 @@
           }
           refileSource = state.cursor;
           const srcLabel = dataOf(state.cursor)?.name || state.cursor._tab?.label || "tab";
-          log3("refile:start", {
+          log4("refile:start", {
             srcLabel,
             srcKind: refileSource._tab ? "tab" : refileSource._group ? "group" : "?",
             srcLevel: levelOfRow(refileSource),
@@ -2558,33 +2673,33 @@
     }
     function executeRefile(target) {
       if (!refileSource) {
-        log3("refile:abort", { reason: "no-refileSource" });
+        log4("refile:abort", { reason: "no-refileSource" });
         return;
       }
       if (!target) {
-        log3("refile:abort", { reason: "no-target" });
+        log4("refile:abort", { reason: "no-target" });
         return;
       }
       if (target === refileSource) {
-        log3("refile:abort", { reason: "target-is-source" });
+        log4("refile:abort", { reason: "target-is-source" });
         return;
       }
       const srcRows = subtreeRows(refileSource);
       if (srcRows.includes(target)) {
-        log3("refile:abort", { reason: "target-in-source-subtree", srcRowsCount: srcRows.length });
+        log4("refile:abort", { reason: "target-in-source-subtree", srcRowsCount: srcRows.length });
         modelineMsg("Can't refile under own subtree", 3000);
         return;
       }
       const srcData = dataOf(refileSource);
       const tgtData = dataOf(target);
       if (!srcData || !tgtData) {
-        log3("refile:abort", { reason: "no-data", hasSrcData: !!srcData, hasTgtData: !!tgtData });
+        log4("refile:abort", { reason: "no-data", hasSrcData: !!srcData, hasTgtData: !!tgtData });
         return;
       }
       const srcKind = refileSource._tab ? "tab" : "group";
       const tgtKind = target._tab ? "tab" : "group";
       const groupCountInSubtree = srcRows.filter((r) => r._group).length;
-      log3("refile:enter", {
+      log4("refile:enter", {
         srcLabel: srcData.name || refileSource._tab?.label,
         tgtLabel: tgtData.name || target._tab?.label,
         srcKind,
@@ -2598,7 +2713,7 @@
       if (refileSource._tab && target._tab) {
         const oldParentId = treeData(refileSource._tab).parentId;
         treeData(refileSource._tab).parentId = treeData(target._tab).id;
-        log3("refile:tab-to-tab", {
+        log4("refile:tab-to-tab", {
           oldParentId,
           newParentId: treeData(target._tab).id,
           groupsAffected: groupCountInSubtree
@@ -2607,20 +2722,20 @@
         const tgtLevel = levelOfRow(target);
         const srcLevel = levelOfRow(refileSource);
         const delta = tgtLevel + 1 - srcLevel;
-        log3("refile:level-delta", { srcLevel, tgtLevel, delta });
+        log4("refile:level-delta", { srcLevel, tgtLevel, delta });
         for (const r of srcRows) {
           if (r._group)
             r._group.level = Math.max(0, (r._group.level || 0) + delta);
         }
       }
       const tgtSub = subtreeRows(target);
-      log3("refile:placing", { tgtSubtreeSize: tgtSub.length });
+      log4("refile:placing", { tgtSubtreeSize: tgtSub.length });
       tgtSub[tgtSub.length - 1].after(...srcRows);
       for (const r of srcRows)
         rows.syncAnyRow(r);
       rows.updateVisibility();
       scheduleSave();
-      log3("refile:done", {
+      log4("refile:done", {
         srcLevelAfter: levelOfRow(refileSource),
         groupLevelsAfter: srcRows.filter((r) => r._group).map((r) => r._group.level)
       });
@@ -2633,7 +2748,7 @@
     }
     function cancelRefile() {
       if (refileSource) {
-        log3("refile:cancel", {});
+        log4("refile:cancel", {});
         refileSource = null;
         searchMatches = [];
         searchIdx = -1;

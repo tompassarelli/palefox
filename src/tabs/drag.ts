@@ -14,6 +14,7 @@
 // been extracted yet; once helpers.ts exists they'll move from deps to imports.
 
 import { INDENT } from "./constants.ts";
+import { createLogger } from "./log.ts";
 import {
   state,
   rowOf,
@@ -33,6 +34,33 @@ import type { Row, Tab } from "./types.ts";
 
 declare const gBrowser: any;
 declare const document: Document;
+
+const log = createLogger("tabs/drag");
+
+/** Pretty-printer for a row — used in log lines so we can correlate source
+ *  vs target across event boundaries without dumping the whole element. */
+function rowDesc(row: Row | null | undefined): Record<string, unknown> {
+  if (!row) return { row: "null" };
+  if (row._tab) {
+    return {
+      kind: "tab",
+      id: treeData(row._tab).id,
+      label: row._tab.label,
+      level: levelOf(row._tab),
+      pinned: !!row._tab.pinned,
+      parentId: treeData(row._tab).parentId,
+    };
+  }
+  if (row._group) {
+    return {
+      kind: "group",
+      id: row._group.id,
+      name: row._group.name,
+      level: row._group.level,
+    };
+  }
+  return { kind: "?" };
+}
 
 // =============================================================================
 // INTERFACE
@@ -88,7 +116,14 @@ function findGroupContextParent(group: Row): number | null {
     if (next._tab) {
       const lv = levelOf(next._tab);
       if (lv <= groupLevel) break; // exited the group's subtree
-      return treeData(next._tab).parentId; // its parent IS the container
+      const result = treeData(next._tab).parentId;
+      log("findGroupContextParent:forward", {
+        groupLevel,
+        foundTab: next._tab.label,
+        foundLevel: lv,
+        resultParentId: result,
+      });
+      return result;
     }
     next = next.nextElementSibling;
   }
@@ -97,10 +132,18 @@ function findGroupContextParent(group: Row): number | null {
   let prev = group.previousElementSibling;
   while (prev) {
     if (prev._tab && levelOf(prev._tab) === groupLevel) {
-      return treeData(prev._tab).id;
+      const result = treeData(prev._tab).id;
+      log("findGroupContextParent:backward", {
+        groupLevel,
+        foundTab: prev._tab.label,
+        foundLevel: groupLevel,
+        resultParentId: result,
+      });
+      return result;
     }
     prev = prev.previousElementSibling;
   }
+  log("findGroupContextParent:fallback", { groupLevel, resultParentId: null });
   return null;
 }
 
@@ -146,6 +189,7 @@ export function makeDrag(deps: DragDeps): DragAPI {
         return;
       }
       dragSource = row;
+      log("dragstart", { source: rowDesc(row) });
       const dt = (e as DragEvent).dataTransfer!;
       dt.effectAllowed = "move";
       dt.setData("text/plain", "");
@@ -188,8 +232,6 @@ export function makeDrag(deps: DragDeps): DragAPI {
 
       const tgtPinned = !!row._tab?.pinned;
       if (tgtPinned) {
-        // Target is pinned — horizontal layout, before/after only.
-        // (Pinned tabs can't have children.)
         const rect = row.getBoundingClientRect();
         const x = (e as MouseEvent).clientX - rect.left;
         dropPosition = x < rect.width / 2 ? "before" : "after";
@@ -202,6 +244,15 @@ export function makeDrag(deps: DragDeps): DragAPI {
         else dropPosition = "child";
       }
       dropTarget = row;
+      // Only log on group targets (where the drag-onto-group bug lives) or
+      // on transitions to keep the log tight during rapid-fire dragover.
+      if (row._group) {
+        log("dragover/group", {
+          target: rowDesc(row),
+          source: rowDesc(dragSource),
+          position: dropPosition,
+        });
+      }
       showDropIndicator(row, dropPosition);
     });
 
@@ -217,6 +268,11 @@ export function makeDrag(deps: DragDeps): DragAPI {
       e.preventDefault();
       if (!dragSource || dragSource === row) return;
       if (subtreeRows(dragSource).includes(row)) return;
+      log("drop", {
+        target: rowDesc(row),
+        source: rowDesc(dragSource),
+        position: dropPosition,
+      });
       if (dropPosition && dropPosition !== "into-empty-pinned" && dropPosition !== "into-empty-panel") {
         executeDrop(dragSource, row, dropPosition);
       }
@@ -366,15 +422,23 @@ export function makeDrag(deps: DragDeps): DragAPI {
 
   function executeDrop(srcRow: Row, tgtRow: Row, position: DropPosition): void {
     const tgtLevel = levelOfRow(tgtRow);
-    if (!dataOf(tgtRow)) return;
+    if (!dataOf(tgtRow)) {
+      log("executeDrop:abort", { reason: "no-tgt-data", target: rowDesc(tgtRow) });
+      return;
+    }
 
     const srcPinned = !!srcRow._tab?.pinned;
     const tgtPinned = !!tgtRow._tab?.pinned;
     const isCrossContainer = srcPinned !== tgtPinned;
 
-    // Collect rows to move. Cross-container drags only carry the source tab
-    // itself — pinned tabs can't have children, and dragging a pinned tab
-    // out shouldn't drag siblings with it.
+    log("executeDrop:enter", {
+      source: rowDesc(srcRow),
+      target: rowDesc(tgtRow),
+      position,
+      srcPinned, tgtPinned, isCrossContainer,
+      tgtLevel,
+    });
+
     let movedRows: Row[];
     if (isCrossContainer) {
       movedRows = srcRow._tab ? [srcRow] : [];
@@ -383,33 +447,44 @@ export function makeDrag(deps: DragDeps): DragAPI {
     } else {
       movedRows = subtreeRows(srcRow);
     }
-    if (!movedRows.length) return;
+    if (!movedRows.length) {
+      log("executeDrop:abort", { reason: "no-movedRows" });
+      return;
+    }
 
     const srcLevel = levelOfRow(movedRows[0]!);
     const newSrcLevel = (position === "child" && !tgtPinned) ? tgtLevel + 1 : tgtLevel;
     const delta = newSrcLevel - srcLevel;
 
-    // Resolve source's new parentId. Three cases:
-    //   - pinned target: null (pinned tabs have no parent in our tree)
-    //   - tab target:    standard child/sibling logic from tgtRow._tab
-    //   - group target:  groups can't be parentIds (they're labels, not tabs).
-    //                    We borrow the parentId of any nearby tab at the same
-    //                    level as the group — that gives us a sibling of the
-    //                    tabs visually "in" the group.
+    log("executeDrop:plan", {
+      movedRowsCount: movedRows.length,
+      movedRowsKinds: movedRows.map(r => r._tab ? "tab" : r._group ? "group" : "?"),
+      srcLevel, newSrcLevel, delta,
+    });
+
     let newParentForSource: number | null = null;
+    let parentBranch: string;
     if (!tgtPinned) {
       if (tgtRow._tab) {
+        parentBranch = position === "child" ? "tab/child→tgtId" : "tab/sibling→tgtParentId";
         newParentForSource = position === "child"
           ? treeData(tgtRow._tab).id
           : treeData(tgtRow._tab).parentId;
       } else if (tgtRow._group) {
+        parentBranch = "group→findGroupContextParent";
         newParentForSource = findGroupContextParent(tgtRow);
+      } else {
+        parentBranch = "no-tab-no-group→null";
       }
+    } else {
+      parentBranch = "pinned→null";
     }
+    log("executeDrop:newParent", { branch: parentBranch, newParentForSource });
 
     // Update parentId for top-level moved tabs; descendants keep their existing
     // parentId pointers (they follow the source in the subtree).
     const movedSet = new Set(movedRows);
+    let parentIdMutations = 0;
     for (const r of movedRows) {
       if (!r._tab) {
         if (r._group) r._group.level = Math.max(0, (r._group.level || 0) + delta);
@@ -418,9 +493,18 @@ export function makeDrag(deps: DragDeps): DragAPI {
       const td = treeData(r._tab);
       const parent = tabById(td.parentId ?? 0);
       if (!parent || !movedSet.has(rowOf.get(parent)!)) {
+        const oldPid = td.parentId;
         td.parentId = newParentForSource;
+        parentIdMutations++;
+        log("executeDrop:mutate", {
+          tab: r._tab.label,
+          tabId: td.id,
+          oldParentId: oldPid,
+          newParentId: newParentForSource,
+        });
       }
     }
+    log("executeDrop:mutations", { parentIdMutations });
 
     const movedTabs = movedRows.filter(r => r._tab).map(r => r._tab!);
 
@@ -441,50 +525,54 @@ export function makeDrag(deps: DragDeps): DragAPI {
 
     // Compute target index in Firefox's tab list.
     let targetIdx: number;
+    let idxBranch: string;
     if (tgtRow._group) {
-      // Group target — anchor is "last tab in group's visual subtree" for
-      // after/child, or "last tab BEFORE the group" for before. If neither
-      // exists, fall back to end of tab list.
       const anchorTab = position === "before"
         ? findClosestTabBefore(tgtRow)
         : findLastTabInGroupOrBefore(tgtRow);
       if (anchorTab) {
         targetIdx = tabsArr.indexOf(anchorTab) + 1;
-        if (position === "before" && anchorTab) {
-          // For "before", we still want source landing immediately before the
-          // group — which is right after anchorTab. (If anchorTab has subtree
-          // tabs ending right before the group, this still works because
-          // placeRowInFirefoxOrder anchors against the subtree's last row.)
-        }
+        idxBranch = `group/${position}→after-anchor(${anchorTab.label || "?"}@${tabsArr.indexOf(anchorTab)})`;
       } else {
         targetIdx = tabsArr.length;
+        idxBranch = `group/${position}→no-anchor→end(${tabsArr.length})`;
       }
     } else if (position === "before") {
       targetIdx = tabsArr.indexOf(tgtRow._tab!);
+      idxBranch = `tab/before→${targetIdx}`;
     } else {
-      // "child" and "after": insert right after tgt's subtree's last Firefox tab.
       const tgtSubtreeTab = [...subtreeRows(tgtRow)].reverse().find(r => r._tab)?._tab;
       targetIdx = (tgtSubtreeTab ? tabsArr.indexOf(tgtSubtreeTab) : tabsArr.indexOf(tgtRow._tab!)) + 1;
+      idxBranch = `tab/${position}→after-${tgtSubtreeTab ? "subtreeLast" : "self"}→${targetIdx}`;
     }
-    if (targetIdx < 0) targetIdx = tabsArr.length;
+    if (targetIdx < 0) {
+      idxBranch += `→clamp(${tabsArr.length})`;
+      targetIdx = tabsArr.length;
+    }
+    log("executeDrop:targetIdx", { idxBranch, targetIdx, tabsLen: tabsArr.length });
 
     // Mark every tab we're about to move so TabMove handlers and syncTabRow
     // skip busy-sync / tree-resync while Firefox's move animation runs. One
     // final clean resync happens below after all moves settle.
     for (const t of movedTabs) movingTabs.add(t);
 
-    // moveTabTo each moved tab, adjusting indices as we go so the group lands
-    // contiguously in the right spot.
     let insertIdx = targetIdx;
+    let actualMoves = 0;
     for (const t of movedTabs) {
       const currentIdx = [...gBrowser.tabs].indexOf(t);
       if (currentIdx < 0) continue;
       if (currentIdx < insertIdx) insertIdx--;
-      if (currentIdx !== insertIdx) gBrowser.moveTabTo(t, { tabIndex: insertIdx });
+      if (currentIdx !== insertIdx) {
+        log("executeDrop:moveTabTo", {
+          tab: t.label, currentIdx, insertIdx,
+        });
+        gBrowser.moveTabTo(t, { tabIndex: insertIdx });
+        actualMoves++;
+      }
       insertIdx++;
     }
+    log("executeDrop:moveSummary", { actualMoves, totalTabs: movedTabs.length });
 
-    // Move any groups in the selection via DOM (no Firefox counterpart).
     const groupRows = movedRows.filter(r => r._group);
     if (groupRows.length) {
       if (position === "before") {
@@ -495,22 +583,28 @@ export function makeDrag(deps: DragDeps): DragAPI {
         const anchor = anchorRows.length ? anchorRows[anchorRows.length - 1]! : tgtRow;
         anchor.after(...groupRows);
       }
+      log("executeDrop:groupDOMMove", { groupRowsCount: groupRows.length });
     }
 
     clearSelection();
 
-    // After the browser has had a frame to settle its move animation (and any
-    // transient `busy` attributes), clear the moving set and do one clean
-    // resync + save. requestAnimationFrame is cheap and reliable.
     requestAnimationFrame(() => {
       for (const t of movedTabs) movingTabs.delete(t);
-      // Also explicitly clear any lingering `busy` attribute on our rows
-      // (Firefox may have cleared it on the tab but TabAttrModified for the
-      // back-to-back toggle is unreliable for pending/lazy tabs).
       for (const t of movedTabs) {
         const row = rowOf.get(t);
         if (row) row.toggleAttribute("busy", t.hasAttribute("busy"));
       }
+      // Final state for verification.
+      log("executeDrop:settled", {
+        sourceFinal: rowDesc(srcRow),
+        sourceParentInTree: srcRow._tab ? treeData(srcRow._tab).parentId : null,
+        sourceLevelDerived: srcRow._tab ? levelOf(srcRow._tab) : null,
+        sourceDOMParent: srcRow.parentNode === state.panel ? "panel"
+          : srcRow.parentNode === state.pinnedContainer ? "pinnedContainer"
+          : "?",
+        sourcePrevSibling: rowDesc((srcRow.previousElementSibling || null) as Row | null),
+        sourceNextSibling: rowDesc((srcRow.nextElementSibling || null) as Row | null),
+      });
       scheduleTreeResync();
       scheduleSave();
     });
