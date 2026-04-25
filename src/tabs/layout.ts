@@ -9,7 +9,6 @@
 
 import { allRows, isHorizontal } from "./helpers.ts";
 import { state } from "./state.ts";
-import type { Row, Tab } from "./types.ts";
 import type { RowsAPI } from "./rows.ts";
 
 declare const document: Document;
@@ -23,11 +22,9 @@ export type LayoutDeps = {
   /** The native #sidebar-main element. Module-load time guarantees this
    *  exists (legacy returns early if not), so we type it non-null. */
   readonly sidebarMain: HTMLElement;
-  /** Row-rendering API — for grid clear/visibility refresh on mode switches. */
+  /** Row-rendering API — for grid clear/visibility refresh + the polymorphic
+   *  syncAnyRow on mode switches. */
   readonly rows: RowsAPI;
-  /** Polymorphic row sync — calls syncTabRow or syncGroupRow as appropriate.
-   *  Provided by legacy until the row-resync helpers themselves migrate. */
-  readonly syncAnyRow: (row: Row) => void;
 };
 
 export type LayoutAPI = {
@@ -41,7 +38,7 @@ export type LayoutAPI = {
 // =============================================================================
 
 export function makeLayout(deps: LayoutDeps): LayoutAPI {
-  const { sidebarMain, rows, syncAnyRow } = deps;
+  const { sidebarMain, rows } = deps;
 
   // Module-private state.
   let toolboxResizeObs: ResizeObserver | null = null;
@@ -143,7 +140,7 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
 
     // Re-sync all rows when switching modes.
     if (vertical) rows.clearHorizontalGrid();
-    for (const row of allRows()) syncAnyRow(row);
+    for (const row of allRows()) rows.syncAnyRow(row);
     rows.updateVisibility(); // calls rows.updateHorizontalGrid() if horizontal
   }
 

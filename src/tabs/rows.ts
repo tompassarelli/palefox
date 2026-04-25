@@ -49,6 +49,9 @@ export type RowsAPI = {
   readonly syncTabRow: (tab: Tab) => void;
   readonly createGroupRow: (name: string, level?: number) => Row;
   readonly syncGroupRow: (row: Row) => void;
+  /** Polymorphic sync: dispatches to syncTabRow or syncGroupRow based on
+   *  which discriminator (`_tab` / `_group`) is set on the row. */
+  readonly syncAnyRow: (row: Row) => void;
   readonly updateVisibility: () => void;
   readonly updateHorizontalGrid: () => void;
   readonly clearHorizontalGrid: () => void;
@@ -333,9 +336,15 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     });
   }
 
+  function syncAnyRow(row: Row): void {
+    if (row._tab) syncTabRow(row._tab);
+    else if (row._group) syncGroupRow(row);
+  }
+
   return {
     createTabRow, syncTabRow,
     createGroupRow, syncGroupRow,
+    syncAnyRow,
     updateVisibility, updateHorizontalGrid, clearHorizontalGrid,
     toggleCollapse, scheduleTreeResync,
   };
