@@ -14,6 +14,7 @@ A developer-focused alternative to Zen Browser on upstream Firefox
 ## Features
 
 - **Tree-style tabs** — custom tab panel with deep nesting, groups, drag-and-drop reordering, and multi-select
+- **Horizontal Tabs** — custom tab panel that supports trees and complementary UX
 - **Vim keybindings** — navigate, refile, search, and manipulate tabs without leaving the keyboard
 - **Compact mode** — sidebar autohides off-screen, revealed on left-edge hover with spring animation
 - **Collapse layout** — sidebar shrinks to icons-only strip, toolbox returns to horizontal bar
@@ -46,6 +47,9 @@ irm https://raw.githubusercontent.com/tompassarelli/palefox/main/install.ps1 -Ou
 
 ## Docs
 
+- [**Getting started**](docs/getting-started.md) — five-minute orientation, hotkey & pref cheatsheets, sidebar-button modes
+- [Keybindings reference](docs/keybindings.md) — every key Palefox listens for
+- [about:config reference](docs/about-config.md) — every `pfx.*` pref
 - [Full installation guide](docs/install.md)
 - [Nix / Home Manager](docs/nix.md)
 - [Features & options](docs/features.md)
