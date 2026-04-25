@@ -2501,6 +2501,8 @@
     let pickerFiltered = [];
     let pickerSelectedIdx = 0;
     let pickerOnSelect = null;
+    let pickerActions = [];
+    let pickerPreserveTree = false;
     function ensurePickerBuilt() {
       if (pickerEl)
         return;
@@ -2523,7 +2525,7 @@
       document.documentElement.appendChild(pickerEl);
       pickerInput.addEventListener("input", () => {
         const q = pickerInput.value.trim().toLowerCase();
-        pickerFiltered = !q ? [...pickerItems] : pickerItems.filter((it) => it.display.toLowerCase().includes(q));
+        pickerFiltered = computeFiltered(pickerItems, q);
         pickerSelectedIdx = 0;
         renderPickerList();
       });
@@ -2541,6 +2543,14 @@
             e.stopImmediatePropagation();
             commitPicker();
             return;
+          case "Tab":
+            if (pickerActions.length > 0) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              openActionMenu();
+              return;
+            }
+            break;
           case "ArrowDown":
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -2586,6 +2596,42 @@
         }
       }, true);
     }
+    function computeFiltered(items, q) {
+      if (!q)
+        return [...items];
+      const matchedSet = new Set;
+      for (const it of items) {
+        const hay = ((it.display ?? "") + " " + (it.secondary ?? "")).toLowerCase();
+        if (hay.includes(q))
+          matchedSet.add(it);
+      }
+      if (!pickerPreserveTree) {
+        return items.filter((it) => matchedSet.has(it));
+      }
+      const byId = new Map;
+      for (const it of items) {
+        if (it.id != null)
+          byId.set(it.id, it);
+      }
+      const visible = new Set(matchedSet);
+      for (const m of matchedSet) {
+        let cur = m;
+        while (cur && cur.parentId != null) {
+          const p = byId.get(cur.parentId);
+          if (!p || visible.has(p))
+            break;
+          visible.add(p);
+          cur = p;
+        }
+      }
+      return items.filter((it) => visible.has(it));
+    }
+    function isDirectMatch(item, q) {
+      if (!q)
+        return true;
+      const hay = ((item.display ?? "") + " " + (item.secondary ?? "")).toLowerCase();
+      return hay.includes(q);
+    }
     function renderPickerList() {
       if (!pickerList)
         return;
@@ -2598,17 +2644,48 @@
         pickerList.appendChild(empty);
         return;
       }
+      const q = pickerInput?.value?.trim().toLowerCase() ?? "";
       pickerFiltered.forEach((item, idx) => {
         const row = document.createXULElement("hbox");
         row.className = "pfx-picker-row";
         if (idx === pickerSelectedIdx)
           row.setAttribute("pfx-picker-selected", "true");
-        const label = document.createXULElement("label");
-        label.className = "pfx-picker-label";
-        label.setAttribute("value", item.display);
-        label.setAttribute("flex", "1");
-        label.setAttribute("crop", "end");
-        row.appendChild(label);
+        if (pickerPreserveTree && q && !isDirectMatch(item, q)) {
+          row.setAttribute("pfx-picker-context", "true");
+        }
+        if (item.depth) {
+          row.style.paddingLeft = `${14 + item.depth * 14}px`;
+        }
+        if (item.icon) {
+          if (/^https?:|^data:|^chrome:|^moz-/.test(item.icon)) {
+            const img = document.createElement("img");
+            img.className = "pfx-picker-icon";
+            img.src = item.icon;
+            img.alt = "";
+            row.appendChild(img);
+          } else {
+            const ic = document.createXULElement("label");
+            ic.className = "pfx-picker-icon-text";
+            ic.setAttribute("value", item.icon);
+            row.appendChild(ic);
+          }
+        }
+        const text = document.createXULElement("hbox");
+        text.className = "pfx-picker-text";
+        text.setAttribute("flex", "1");
+        const primary = document.createXULElement("label");
+        primary.className = "pfx-picker-label";
+        primary.setAttribute("value", item.display);
+        primary.setAttribute("crop", "end");
+        text.appendChild(primary);
+        if (item.secondary) {
+          const sec = document.createXULElement("label");
+          sec.className = "pfx-picker-secondary";
+          sec.setAttribute("value", item.secondary);
+          sec.setAttribute("crop", "end");
+          text.appendChild(sec);
+        }
+        row.appendChild(text);
         row.addEventListener("click", () => {
           pickerSelectedIdx = idx;
           commitPicker();
@@ -2617,6 +2694,28 @@
       });
       const selected = pickerList.querySelector("[pfx-picker-selected='true']");
       selected?.scrollIntoView({ block: "nearest" });
+    }
+    function openActionMenu() {
+      const target = pickerFiltered[pickerSelectedIdx];
+      const actions = pickerActions;
+      if (!target || !actions.length)
+        return;
+      dismissPicker();
+      showPicker({
+        prompt: `actions ›`,
+        items: actions.map((a) => ({
+          display: a.label + (a.key ? `   (${a.key})` : ""),
+          data: a
+        })),
+        onSelect: (chosen) => {
+          const action = chosen.data;
+          try {
+            action.run(target);
+          } catch (e) {
+            modelineMsg(`action failed: ${e.message}`, 4000);
+          }
+        }
+      });
     }
     function movePickerSelection(delta) {
       if (!pickerFiltered.length)
@@ -2636,6 +2735,8 @@
         return;
       pickerActive = false;
       pickerOnSelect = null;
+      pickerActions = [];
+      pickerPreserveTree = false;
       if (pickerEl)
         pickerEl.hidden = true;
       if (state.panel)
@@ -2646,9 +2747,11 @@
       if (!pickerEl || !pickerInput || !pickerList)
         return;
       pickerItems = opts.items;
-      pickerFiltered = [...opts.items];
       pickerSelectedIdx = 0;
       pickerOnSelect = opts.onSelect;
+      pickerActions = opts.actions ?? [];
+      pickerPreserveTree = !!opts.preserveTree;
+      pickerFiltered = [...opts.items];
       pickerActive = true;
       const promptEl = pickerEl.querySelector(".pfx-picker-prompt");
       if (promptEl && opts.prompt) {
@@ -3206,6 +3309,93 @@
               modelineMsg(`:sessions failed: ${e.message}`, 4000);
             }
           })();
+          break;
+        }
+        case "tabs": {
+          const items = [];
+          for (const tab of gBrowser.tabs) {
+            const td = treeOf.get(tab);
+            if (!td)
+              continue;
+            const url = tab.linkedBrowser?.currentURI?.spec || "";
+            const host = (() => {
+              try {
+                return new URL(url).hostname;
+              } catch {
+                return "";
+              }
+            })();
+            let icon;
+            try {
+              icon = gBrowser.getIcon(tab) || undefined;
+            } catch {}
+            items.push({
+              display: td.name || tab.label || "(untitled)",
+              secondary: host || url || "",
+              icon,
+              id: td.id,
+              parentId: typeof td.parentId === "number" ? td.parentId : null,
+              depth: levelOf(tab),
+              data: tab
+            });
+          }
+          if (!items.length) {
+            modelineMsg("No tabs", 3000);
+            break;
+          }
+          showPicker({
+            prompt: "tabs ›",
+            items,
+            preserveTree: true,
+            onSelect: (item) => {
+              const tab = item.data;
+              try {
+                gBrowser.selectedTab = tab;
+              } catch {}
+            },
+            actions: [
+              {
+                label: "Close",
+                key: "x",
+                run: (item) => {
+                  try {
+                    gBrowser.removeTab(item.data);
+                  } catch {}
+                }
+              },
+              {
+                label: "Duplicate",
+                key: "d",
+                run: (item) => {
+                  try {
+                    gBrowser.duplicateTab(item.data);
+                  } catch {}
+                }
+              },
+              {
+                label: "Pin / Unpin",
+                key: "p",
+                run: (item) => {
+                  const t = item.data;
+                  try {
+                    if (t.pinned)
+                      gBrowser.unpinTab(t);
+                    else
+                      gBrowser.pinTab(t);
+                  } catch {}
+                }
+              },
+              {
+                label: "Reload",
+                key: "r",
+                run: (item) => {
+                  try {
+                    gBrowser.reloadTab(item.data);
+                  } catch {}
+                }
+              }
+            ]
+          });
           break;
         }
         case "history": {

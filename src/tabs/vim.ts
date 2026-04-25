@@ -562,12 +562,35 @@ export function makeVim(deps: VimDeps): VimAPI {
   // in one panel.
 
   interface PickerItem {
-    /** Short text shown to the user. Whitespace and case-insensitive
-     *  substring filter runs against this. */
+    /** Primary text. Substring filter (case-insensitive) runs against this. */
     readonly display: string;
-    /** Pass-through for the onSelect callback. Could be an event id, a
-     *  full HistoryEvent, anything the caller wants. */
+    /** Optional dim subtitle — URL/hostname/timestamp/etc. */
+    readonly secondary?: string;
+    /** Optional icon URL (favicon) or single emoji. */
+    readonly icon?: string;
+    /** Indent depth for tree-preserving rendering. 0 = root. Used when the
+     *  caller wants to display tree-shaped data (e.g. tab tree). */
+    readonly depth?: number;
+    /** Stable id linking children to their parent. When set, the picker can
+     *  walk parents during filter to preserve tree context. Combined with
+     *  parentId for tree-preserving filter mode. */
+    readonly id?: string | number;
+    /** Parent id (matches another item's `id`). Optional. Used by the
+     *  tree-preserving filter to walk ancestors. */
+    readonly parentId?: string | number | null;
+    /** Pass-through for action callbacks. */
     readonly data: unknown;
+  }
+
+  /** Optional menu of secondary actions a picker can offer per row.
+   *  Triggered via Tab on the selected row → opens a sub-picker. */
+  interface PickerAction {
+    /** Label shown in the action sub-menu. */
+    readonly label: string;
+    /** Single-letter shortcut to trigger from the action sub-menu. */
+    readonly key?: string;
+    /** Run against the originally-selected picker item's data. */
+    readonly run: (item: PickerItem) => unknown;
   }
 
   let pickerEl: HTMLElement | null = null;
@@ -578,6 +601,10 @@ export function makeVim(deps: VimDeps): VimAPI {
   let pickerFiltered: PickerItem[] = [];
   let pickerSelectedIdx = 0;
   let pickerOnSelect: ((item: PickerItem) => unknown) | null = null;
+  let pickerActions: readonly PickerAction[] = [];
+  /** When true, filter walks parents of matched items so tree context is
+   *  preserved (rendered as `[pfx-picker-context]` rows). */
+  let pickerPreserveTree = false;
 
   /** Build the picker DOM lazily. After build it lives in the chrome doc
    *  (display:none) and gets reused on each show. */
@@ -606,12 +633,14 @@ export function makeVim(deps: VimDeps): VimAPI {
     pickerEl.append(inputBox, pickerList);
     document.documentElement.appendChild(pickerEl);
 
-    // Filter on input.
+    // Filter on input. Two modes:
+    //   - Flat: substring match on display + secondary.
+    //   - Tree-preserving: matched items + all their ancestors stay
+    //     visible, in original tree order. Ancestors that aren't direct
+    //     matches get the `[pfx-picker-context]` flag for dim styling.
     pickerInput.addEventListener("input", () => {
       const q = pickerInput!.value.trim().toLowerCase();
-      pickerFiltered = !q
-        ? [...pickerItems]
-        : pickerItems.filter((it) => it.display.toLowerCase().includes(q));
+      pickerFiltered = computeFiltered(pickerItems, q);
       pickerSelectedIdx = 0;
       renderPickerList();
     });
@@ -630,6 +659,15 @@ export function makeVim(deps: VimDeps): VimAPI {
           e.stopImmediatePropagation();
           commitPicker();
           return;
+        case "Tab":
+          // Open action sub-menu for current row (if actions are configured).
+          if (pickerActions.length > 0) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            openActionMenu();
+            return;
+          }
+          break;
         case "ArrowDown":
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -679,6 +717,48 @@ export function makeVim(deps: VimDeps): VimAPI {
     }, true);
   }
 
+  /** Compute the filtered items list. In flat mode, substring match against
+   *  display + secondary. In tree-preserving mode, matched items + all their
+   *  ancestors stay visible in original tree order; ancestors that aren't
+   *  direct matches get marked context (rendered dimmer). */
+  function computeFiltered(items: readonly PickerItem[], q: string): PickerItem[] {
+    if (!q) return [...items];
+    const matchedSet = new Set<PickerItem>();
+    for (const it of items) {
+      const hay = ((it.display ?? "") + " " + (it.secondary ?? "")).toLowerCase();
+      if (hay.includes(q)) matchedSet.add(it);
+    }
+    if (!pickerPreserveTree) {
+      // Flat: just the matches, in original order.
+      return items.filter((it) => matchedSet.has(it));
+    }
+    // Tree mode: include ancestors of every match.
+    const byId = new Map<string | number, PickerItem>();
+    for (const it of items) {
+      if (it.id != null) byId.set(it.id, it);
+    }
+    const visible = new Set<PickerItem>(matchedSet);
+    for (const m of matchedSet) {
+      let cur: PickerItem | undefined = m;
+      while (cur && cur.parentId != null) {
+        const p = byId.get(cur.parentId);
+        if (!p || visible.has(p)) break;
+        visible.add(p);
+        cur = p;
+      }
+    }
+    // Render in the original (tree-traversal) order.
+    return items.filter((it) => visible.has(it));
+  }
+
+  /** True if the item, given the current filter query, is a direct match
+   *  (vs an ancestor included as tree context). */
+  function isDirectMatch(item: PickerItem, q: string): boolean {
+    if (!q) return true;
+    const hay = ((item.display ?? "") + " " + (item.secondary ?? "")).toLowerCase();
+    return hay.includes(q);
+  }
+
   function renderPickerList(): void {
     if (!pickerList) return;
     while (pickerList.firstChild) pickerList.firstChild.remove();
@@ -689,16 +769,59 @@ export function makeVim(deps: VimDeps): VimAPI {
       pickerList.appendChild(empty);
       return;
     }
+    const q = pickerInput?.value?.trim().toLowerCase() ?? "";
     pickerFiltered.forEach((item, idx) => {
       const row = document.createXULElement("hbox") as HTMLElement;
       row.className = "pfx-picker-row";
       if (idx === pickerSelectedIdx) row.setAttribute("pfx-picker-selected", "true");
-      const label = document.createXULElement("label") as HTMLElement;
-      label.className = "pfx-picker-label";
-      label.setAttribute("value", item.display);
-      label.setAttribute("flex", "1");
-      label.setAttribute("crop", "end");
-      row.appendChild(label);
+      // In tree-preserving mode, items that are visible only because they're
+      // an ancestor of a match get a context flag for dimmer styling.
+      if (pickerPreserveTree && q && !isDirectMatch(item, q)) {
+        row.setAttribute("pfx-picker-context", "true");
+      }
+      // Indent: each level adds 14px (matches palefox's INDENT constant).
+      if (item.depth) {
+        row.style.paddingLeft = `${14 + (item.depth * 14)}px`;
+      }
+
+      // Icon column.
+      if (item.icon) {
+        if (/^https?:|^data:|^chrome:|^moz-/.test(item.icon)) {
+          // URL → favicon-shaped <img>.
+          const img = document.createElement("img");
+          img.className = "pfx-picker-icon";
+          img.src = item.icon;
+          img.alt = "";
+          row.appendChild(img);
+        } else {
+          // Treat as inline text (emoji, etc.).
+          const ic = document.createXULElement("label") as HTMLElement;
+          ic.className = "pfx-picker-icon-text";
+          ic.setAttribute("value", item.icon);
+          row.appendChild(ic);
+        }
+      }
+
+      // Display + secondary stacked or inline depending on whether secondary
+      // is set. We keep inline for compactness — primary first, then dim
+      // secondary on the right.
+      const text = document.createXULElement("hbox") as HTMLElement;
+      text.className = "pfx-picker-text";
+      text.setAttribute("flex", "1");
+      const primary = document.createXULElement("label") as HTMLElement;
+      primary.className = "pfx-picker-label";
+      primary.setAttribute("value", item.display);
+      primary.setAttribute("crop", "end");
+      text.appendChild(primary);
+      if (item.secondary) {
+        const sec = document.createXULElement("label") as HTMLElement;
+        sec.className = "pfx-picker-secondary";
+        sec.setAttribute("value", item.secondary);
+        sec.setAttribute("crop", "end");
+        text.appendChild(sec);
+      }
+      row.appendChild(text);
+
       row.addEventListener("click", () => {
         pickerSelectedIdx = idx;
         commitPicker();
@@ -708,6 +831,31 @@ export function makeVim(deps: VimDeps): VimAPI {
     // Scroll selected into view.
     const selected = pickerList.querySelector("[pfx-picker-selected='true']");
     selected?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** Open a sub-picker over the current pickerActions, retaining the
+   *  outer-picker's selected item as the action target. The action-menu
+   *  picker is itself a regular picker — we just stack them. */
+  function openActionMenu(): void {
+    const target = pickerFiltered[pickerSelectedIdx];
+    const actions = pickerActions;
+    if (!target || !actions.length) return;
+    // Snapshot, dismiss the outer picker so its keys don't conflict, then
+    // open the action menu.
+    dismissPicker();
+    showPicker({
+      prompt: `actions ›`,
+      items: actions.map((a) => ({
+        display: a.label + (a.key ? `   (${a.key})` : ""),
+        data: a,
+      })),
+      onSelect: (chosen) => {
+        const action = chosen.data as PickerAction;
+        try { action.run(target); } catch (e) {
+          modelineMsg(`action failed: ${(e as Error).message}`, 4000);
+        }
+      },
+    });
   }
 
   function movePickerSelection(delta: number): void {
@@ -727,23 +875,41 @@ export function makeVim(deps: VimDeps): VimAPI {
     if (!pickerActive) return;
     pickerActive = false;
     pickerOnSelect = null;
+    pickerActions = [];
+    pickerPreserveTree = false;
     if (pickerEl) pickerEl.hidden = true;
     // Restore vim panel focus if it was active before the picker.
     if (state.panel) state.panel.focus();
   }
 
-  /** Public picker API. Show a list, get back the user's pick. */
+  /** Public picker API. Show a list, get back the user's pick.
+   *
+   *  Options:
+   *    items          The rows to render. Each may declare display,
+   *                   secondary, icon, depth, id, parentId.
+   *    onSelect       Called when the user picks (Enter or click).
+   *    prompt         Prompt text shown next to the input.
+   *    actions        Optional secondary actions. Tab on a row opens a
+   *                   sub-picker listing these.
+   *    preserveTree   When true, filter walks parent links and keeps
+   *                   ancestors visible as context (dim styling). Used
+   *                   for tree-shaped data like the live tab tree.
+   */
   function showPicker(opts: {
     items: readonly PickerItem[];
     onSelect: (item: PickerItem) => unknown;
     prompt?: string;
+    actions?: readonly PickerAction[];
+    preserveTree?: boolean;
   }): void {
     ensurePickerBuilt();
     if (!pickerEl || !pickerInput || !pickerList) return;
     pickerItems = opts.items;
-    pickerFiltered = [...opts.items];
     pickerSelectedIdx = 0;
     pickerOnSelect = opts.onSelect;
+    pickerActions = opts.actions ?? [];
+    pickerPreserveTree = !!opts.preserveTree;
+    pickerFiltered = [...opts.items];
     pickerActive = true;
 
     // Update the prompt label if provided.
@@ -1258,6 +1424,77 @@ export function makeVim(deps: VimDeps): VimAPI {
             modelineMsg(`:sessions failed: ${(e as Error).message}`, 4000);
           }
         })();
+        break;
+      }
+      case "tabs": {
+        // :tabs — picker over current live tabs, tree-preserving.
+        // Primary action: focus the tab. Mod+Tab opens the action menu
+        // (close, duplicate, pin/unpin).
+        const items: PickerItem[] = [];
+        for (const tab of gBrowser.tabs as Iterable<Tab>) {
+          const td = treeOf.get(tab);
+          if (!td) continue;
+          const url = tab.linkedBrowser?.currentURI?.spec || "";
+          const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
+          let icon: string | undefined;
+          try { icon = gBrowser.getIcon(tab) || undefined; } catch {}
+          items.push({
+            display: td.name || tab.label || "(untitled)",
+            secondary: host || url || "",
+            icon,
+            id: td.id,
+            parentId: typeof td.parentId === "number" ? td.parentId : null,
+            depth: levelOf(tab),
+            data: tab,
+          });
+        }
+        if (!items.length) {
+          modelineMsg("No tabs", 3000);
+          break;
+        }
+        showPicker({
+          prompt: "tabs ›",
+          items,
+          preserveTree: true,
+          onSelect: (item) => {
+            const tab = item.data as Tab;
+            try { gBrowser.selectedTab = tab; } catch {}
+          },
+          actions: [
+            {
+              label: "Close",
+              key: "x",
+              run: (item) => {
+                try { gBrowser.removeTab(item.data); } catch {}
+              },
+            },
+            {
+              label: "Duplicate",
+              key: "d",
+              run: (item) => {
+                try { gBrowser.duplicateTab(item.data); } catch {}
+              },
+            },
+            {
+              label: "Pin / Unpin",
+              key: "p",
+              run: (item) => {
+                const t = item.data as Tab;
+                try {
+                  if (t.pinned) gBrowser.unpinTab(t);
+                  else gBrowser.pinTab(t);
+                } catch {}
+              },
+            },
+            {
+              label: "Reload",
+              key: "r",
+              run: (item) => {
+                try { gBrowser.reloadTab(item.data); } catch {}
+              },
+            },
+          ],
+        });
         break;
       }
       case "history": {

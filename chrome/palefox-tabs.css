@@ -543,6 +543,8 @@
   padding: 6px 14px !important;
   cursor: pointer !important;
   display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 #pfx-picker .pfx-picker-row[pfx-picker-selected="true"] {
@@ -551,6 +553,39 @@
 
 #pfx-picker .pfx-picker-row:hover:not([pfx-picker-selected="true"]) {
   background: color-mix(in srgb, var(--pfx-fg) 6%, transparent) !important;
+}
+
+/* Tree context rows — dim text so direct matches stand out. */
+#pfx-picker .pfx-picker-row[pfx-picker-context="true"] .pfx-picker-label,
+#pfx-picker .pfx-picker-row[pfx-picker-context="true"] .pfx-picker-secondary {
+  opacity: 0.5 !important;
+}
+
+#pfx-picker .pfx-picker-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex: none !important;
+  object-fit: contain !important;
+}
+
+#pfx-picker .pfx-picker-icon-text {
+  width: 16px !important;
+  text-align: center !important;
+  flex: none !important;
+}
+
+#pfx-picker .pfx-picker-text {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+#pfx-picker .pfx-picker-secondary {
+  color: var(--pfx-fg-muted) !important;
+  font-size: 0.85em !important;
+  margin-inline-start: auto !important;
 }
 
 #pfx-picker .pfx-picker-empty {
