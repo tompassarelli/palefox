@@ -293,6 +293,22 @@ try {
         }
 
         if (Test-Path $appDir) {
+            # Notice users upgrading from vanilla fx-autoconfig that we're
+            # tightening their security boundary. No prompt — they ran install,
+            # they're opting in. Ctrl-C if they object.
+            $existingConfig = Join-Path $appDir "config.js"
+            if ((Test-Path $existingConfig) -and -not (Select-String -Path $existingConfig -Pattern "PALEFOX_PINNED" -Quiet -ErrorAction SilentlyContinue)) {
+                Write-Host ""
+                Write-Host "Detected vanilla fx-autoconfig bootstrap — upgrading to palefox hash-pinned variant."
+                Write-Host "This tightens palefox's security boundary:"
+                Write-Host "  - Chrome JS/CSS files are SHA-256 verified at startup"
+                Write-Host "  - Local-mode malware can no longer drop a .uc.js into your profile"
+                Write-Host "    and have it execute with browser privileges"
+                Write-Host "  - Any non-palefox .uc.js you had in chrome\JS\ will be rejected"
+                Write-Host "    post-upgrade (backed up under chrome.bak.<timestamp>\JS\)"
+                Write-Host "See docs\dev\sandbox-research.md for the threat-model writeup."
+                Write-Host ""
+            }
             Write-Host "Installing palefox hash-pinned loader to $appDir..."
             try {
                 Copy-Item -Path $bootstrapSrc -Destination (Join-Path $appDir "config.js") -Force

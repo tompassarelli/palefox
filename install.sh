@@ -320,6 +320,21 @@ if [ -d "$program_source" ]; then
     fi
 
     if [ -n "${app_dir:-}" ] && [ -d "$app_dir" ]; then
+        # Notice users upgrading from vanilla fx-autoconfig that we're
+        # tightening their security boundary. No prompt — they ran install.sh,
+        # they're opting in to the current palefox model. Ctrl-C if they object.
+        if [ -f "$app_dir/config.js" ] && ! grep -q PALEFOX_PINNED "$app_dir/config.js" 2>/dev/null; then
+            echo ""
+            echo "Detected vanilla fx-autoconfig bootstrap — upgrading to palefox hash-pinned variant."
+            echo "This tightens palefox's security boundary:"
+            echo "  • Chrome JS/CSS files are SHA-256 verified at startup"
+            echo "  • Local-mode malware can no longer drop a .uc.js into your profile"
+            echo "    and have it execute with browser privileges"
+            echo "  • Any non-palefox .uc.js you had in chrome/JS/ will be rejected"
+            echo "    post-upgrade (backed up under chrome.bak.<timestamp>/JS/)"
+            echo "See docs/dev/sandbox-research.md for the threat-model writeup."
+            echo ""
+        fi
         echo "Installing palefox hash-pinned loader to $app_dir..."
         if [ -w "$app_dir" ]; then
             cp "$bootstrap_src" "$app_dir/config.js"
