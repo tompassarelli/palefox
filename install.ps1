@@ -218,40 +218,44 @@ try {
     if (-not (Test-Path $jsDir)) {
         New-Item -ItemType Directory -Path $jsDir | Out-Null
     }
+    $cssDir = Join-Path $chromeDir "CSS"
+    if (-not (Test-Path $cssDir)) {
+        New-Item -ItemType Directory -Path $cssDir | Out-Null
+    }
 
-    # Core files — always overwrite
-    foreach ($file in @("palefox.css", "palefox-tabs.css")) {
-        $source = Join-Path $chromeSource $file
-        $dest = Join-Path $chromeDir $file
-        if (Test-Path $source) {
-            Copy-Item -Path $source -Destination $dest -Force
+    # Migration: previous palefox versions wrote palefox*.css and userChrome.css
+    # at chrome\ root. The hash-pinned loader scans chrome\CSS\ instead, so
+    # those files now sit unloaded — clean them up to avoid confusion.
+    foreach ($stale in @("palefox.css", "palefox-tabs.css", "palefox-which-key.css", "palefox-legacy.css", "userChrome.css", "user.css")) {
+        $stalePath = Join-Path $chromeDir $stale
+        if (Test-Path $stalePath) {
+            Remove-Item -Path $stalePath -Force
         }
     }
 
-    # fx-autoconfig loader — always overwrite
+    # fx-autoconfig loader — always overwrite. Files here are HASHED by the
+    # bootstrap, so they must match exactly what palefox shipped.
     $utilsSource = Join-Path $chromeSource "utils"
     if (Test-Path $utilsSource) {
+        Get-ChildItem -Path $utilsDir -File | Remove-Item -Force
         Copy-Item -Path (Join-Path $utilsSource "*") -Destination $utilsDir -Force
     }
 
-    # JS scripts — always overwrite (managed by palefox)
+    # JS scripts — always overwrite (hashed by bootstrap; managed by palefox).
     $jsSource = Join-Path $chromeSource "JS"
     if (Test-Path $jsSource) {
+        Get-ChildItem -Path $jsDir -File | Remove-Item -Force
         foreach ($file in (Get-ChildItem -Path $jsSource -File)) {
             Copy-Item -Path $file.FullName -Destination (Join-Path $jsDir $file.Name) -Force
         }
     }
 
-    # User files — preserve if present, create if missing
-    foreach ($file in @("userChrome.css", "user.css")) {
-        $source = Join-Path $chromeSource $file
-        $dest = Join-Path $chromeDir $file
-        if (Test-Path $source) {
-            if (-not (Test-Path $dest) -or $force) {
-                Copy-Item -Path $source -Destination $dest -Force
-            } else {
-                Write-Host "Preserved: $file"
-            }
+    # CSS files — always overwrite (hashed by bootstrap; managed by palefox).
+    $cssSource = Join-Path $chromeSource "CSS"
+    if (Test-Path $cssSource) {
+        Get-ChildItem -Path $cssDir -File | Remove-Item -Force
+        foreach ($file in (Get-ChildItem -Path $cssSource -File)) {
+            Copy-Item -Path $file.FullName -Destination (Join-Path $cssDir $file.Name) -Force
         }
     }
 
@@ -263,6 +267,19 @@ try {
     }
 
     if (Test-Path $programSource) {
+        # The HASH-PINNED bootstrap is at config.generated.js (built by
+        # `bun run build` from program\config.template.js with chrome\ file
+        # hashes baked in). Falls back to config.js for tarball installs that
+        # ship the pre-generated file.
+        $bootstrapSrc = Join-Path $programSource "config.generated.js"
+        if (-not (Test-Path $bootstrapSrc)) {
+            $bootstrapSrc = Join-Path $programSource "config.js"
+        }
+        if (-not (Test-Path $bootstrapSrc)) {
+            Write-Error "bootstrap not found at $bootstrapSrc. If installing from source, run `bun run build` first."
+            exit 1
+        }
+
         if ($browserName -eq "LibreWolf") {
             $appDir = (Get-ItemProperty "HKLM:\SOFTWARE\LibreWolf" -ErrorAction SilentlyContinue).InstallDirectory
             if (-not $appDir) {
@@ -276,9 +293,9 @@ try {
         }
 
         if (Test-Path $appDir) {
-            Write-Host "Installing fx-autoconfig loader to $appDir..."
+            Write-Host "Installing palefox hash-pinned loader to $appDir..."
             try {
-                Copy-Item -Path (Join-Path $programSource "config.js") -Destination (Join-Path $appDir "config.js") -Force
+                Copy-Item -Path $bootstrapSrc -Destination (Join-Path $appDir "config.js") -Force
                 $prefDir = Join-Path $appDir "defaults\pref"
                 if (-not (Test-Path $prefDir)) {
                     New-Item -ItemType Directory -Path $prefDir | Out-Null
@@ -288,14 +305,14 @@ try {
                 Write-Host "Elevated privileges may be required. Retrying..."
                 Start-Process powershell -Verb RunAs -Wait -ArgumentList @(
                     "-Command",
-                    "Copy-Item '$(Join-Path $programSource "config.js")' '$(Join-Path $appDir "config.js")' -Force; " +
+                    "Copy-Item '$bootstrapSrc' '$(Join-Path $appDir "config.js")' -Force; " +
                     "New-Item -ItemType Directory -Path '$(Join-Path $appDir "defaults\pref")' -Force | Out-Null; " +
                     "Copy-Item '$(Join-Path $programSource "defaults\pref\config-prefs.js")' '$(Join-Path $appDir "defaults\pref\config-prefs.js")' -Force"
                 )
             }
         } else {
             Write-Host "Warning: Could not locate $browserName install directory at $appDir"
-            Write-Host "Manually copy program\config.js and program\defaults\pref\config-prefs.js"
+            Write-Host "Manually copy program\config.generated.js and program\defaults\pref\config-prefs.js"
             Write-Host "to your $browserName application directory for JavaScript support."
         }
     }
@@ -327,7 +344,29 @@ try {
         }
     }
 
-    Set-BrowserPref "toolkit.legacyUserProfileCustomizations.stylesheets" "true"
+    # Force-overwrite a pref. Set-BrowserPref preserves existing values, which
+    # is correct for user-customizable prefs but wrong for prefs whose value
+    # changed across palefox versions (e.g. legacy stylesheets flipping
+    # true → false when the loader stopped depending on it).
+    function Force-SetBrowserPref {
+        param([string]$Key, [string]$Value)
+        $line = "user_pref(`"$Key`", $Value);"
+        if (Test-Path $userJs) {
+            $existing = Get-Content $userJs | Where-Object { $_ -notmatch [regex]::Escape("`"$Key`"") }
+            Set-Content -Path $userJs -Value $existing
+        }
+        Write-Host "Setting $Key in user.js"
+        Add-Content -Path $userJs -Value $line
+    }
+
+    # Legacy stylesheets pref OFF — palefox CSS now loads via the hash-pinned
+    # loader's chrome:// CSS registration, NOT through Firefox's direct
+    # userChrome.css load. Force-overrides any pre-existing `true` from
+    # older palefox installs.
+    Force-SetBrowserPref "toolkit.legacyUserProfileCustomizations.stylesheets" "false"
+    # fx-autoconfig loader gate — required for the autoconfig bootstrap chain
+    # to actually load palefox JS and CSS.
+    Force-SetBrowserPref "userChromeJS.enabled" "true"
     Set-BrowserPref "sidebar.verticalTabs" "true"
     Set-BrowserPref "sidebar.revamp" "true"
     Set-BrowserPref "sidebar.position_start" "true"

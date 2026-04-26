@@ -7,18 +7,34 @@ on:
       - install.sh
       - install.ps1
       - chrome/**
+      - program/**
+      - tools/generate-bootstrap.ts
+      - build.ts
+      - build.config.ts
       - .github/workflows/test-install.yml
   pull_request:
     paths:
       - install.sh
       - install.ps1
       - chrome/**
+      - program/**
+      - tools/generate-bootstrap.ts
+      - build.ts
+      - build.config.ts
 
 jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build (compiles .uc.js + generates hash-pinned bootstrap)
+        run: bun run build
 
       - name: Create Firefox profile
         run: MOZ_HEADLESS=1 firefox -CreateProfile default-release
@@ -39,28 +55,44 @@ jobs:
           profile=$(find "$profiles_dir" -maxdepth 1 -type d -name '*.default-release' | head -1)
           test -n "$profile" || { echo "FAIL: no *.default-release profile found"; exit 1; }
 
+          # Profile chrome/ structure — hash-pinned loader expects exactly these dirs
           test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
-          test -f "$profile/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
+          test -d "$profile/chrome/CSS" || { echo "FAIL: chrome/CSS/ missing"; exit 1; }
+          test -d "$profile/chrome/JS" || { echo "FAIL: chrome/JS/ missing"; exit 1; }
+          test -d "$profile/chrome/utils" || { echo "FAIL: chrome/utils/ missing"; exit 1; }
 
-          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
-          test -f "$profile/chrome/user.css" || { echo "FAIL: user.css missing"; exit 1; }
-          grep -q '@import url("palefox.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: palefox.css import missing"; exit 1; }
-          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          # CSS files (loaded via fx-autoconfig chrome://userstyles/skin/)
+          test -f "$profile/chrome/CSS/palefox.uc.css" || { echo "FAIL: palefox.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox-tabs.uc.css" || { echo "FAIL: palefox-tabs.uc.css missing"; exit 1; }
+
+          # JS scripts
+          test -f "$profile/chrome/JS/palefox-hello.uc.js" || { echo "FAIL: palefox-hello.uc.js missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-tabs.uc.js" || { echo "FAIL: palefox-tabs.uc.js missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-drawer.uc.js" || { echo "FAIL: palefox-drawer.uc.js missing"; exit 1; }
+
+          # fx-autoconfig loader machinery
+          test -f "$profile/chrome/utils/boot.sys.mjs" || { echo "FAIL: boot.sys.mjs missing"; exit 1; }
+          test -f "$profile/chrome/utils/chrome.manifest" || { echo "FAIL: chrome.manifest missing"; exit 1; }
+
+          # Stale-file cleanup — old monolithic palefox files should NOT be at chrome/ root
+          for stale in palefox.css palefox-tabs.css palefox-which-key.css palefox-legacy.css userChrome.css user.css; do
+            test ! -f "$profile/chrome/$stale" || { echo "FAIL: stale $stale should have been removed"; exit 1; }
+          done
+
+          # Prefs in user.js
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*false' "$profile/user.js" || { echo "FAIL: legacy stylesheets pref must be false (loader doesn't depend on it)"; exit 1; }
+          grep -q 'userChromeJS.enabled.*true' "$profile/user.js" || { echo "FAIL: userChromeJS.enabled missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
           grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
           grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
 
-          # fx-autoconfig loader (profile)
-          test -d "$profile/chrome/utils" || { echo "FAIL: utils/ missing"; exit 1; }
-          test -f "$profile/chrome/utils/boot.sys.mjs" || { echo "FAIL: boot.sys.mjs missing"; exit 1; }
-          test -f "$profile/chrome/utils/chrome.manifest" || { echo "FAIL: chrome.manifest missing"; exit 1; }
-          test -d "$profile/chrome/JS" || { echo "FAIL: JS/ missing"; exit 1; }
-          test -f "$profile/chrome/JS/palefox-hello.uc.js" || { echo "FAIL: palefox-hello.uc.js missing"; exit 1; }
-
-          # fx-autoconfig loader (Firefox app directory)
+          # Hash-pinned bootstrap installed to Firefox install root
           app_dir="$(dirname "$(readlink -f "$(which firefox)")")"
-          test -f "$app_dir/config.js" || { echo "FAIL: fx-autoconfig config.js missing from $app_dir"; exit 1; }
-          test -f "$app_dir/defaults/pref/config-prefs.js" || { echo "FAIL: fx-autoconfig config-prefs.js missing from $app_dir"; exit 1; }
+          test -f "$app_dir/config.js" || { echo "FAIL: bootstrap config.js missing from $app_dir"; exit 1; }
+          test -f "$app_dir/defaults/pref/config-prefs.js" || { echo "FAIL: config-prefs.js missing from $app_dir"; exit 1; }
+
+          # Confirm it's the HASH-PINNED bootstrap (not stock fx-autoconfig)
+          grep -q 'PALEFOX_PINNED' "$app_dir/config.js" || { echo "FAIL: $app_dir/config.js is not the hash-pinned bootstrap"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -75,6 +107,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
       - name: Create Flatpak profile directory
         run: mkdir -p ~/.var/app/org.mozilla.firefox/.mozilla/firefox/fake.default-release
 
@@ -86,12 +126,11 @@ jobs:
           profile="$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox/fake.default-release"
 
           test -d "$profile/chrome" || { echo "FAIL: chrome/ missing at Flatpak path"; exit 1; }
-          test -f "$profile/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
-          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
-          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox.uc.css" || { echo "FAIL: palefox.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-tabs.uc.js" || { echo "FAIL: palefox-tabs.uc.js missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*false' "$profile/user.js" || { echo "FAIL: legacy stylesheets pref must be false"; exit 1; }
+          grep -q 'userChromeJS.enabled.*true' "$profile/user.js" || { echo "FAIL: userChromeJS.enabled missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
-          grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
-          grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
 
           # Confirm native path was NOT used
           if [ -d "$HOME/.mozilla/firefox" ]; then
@@ -108,6 +147,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Create Firefox profile
         run: /Applications/Firefox.app/Contents/MacOS/firefox -CreateProfile default-release
@@ -126,12 +173,18 @@ jobs:
           test -n "$profile" || { echo "FAIL: no *.default-release profile found"; exit 1; }
 
           test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
-          test -f "$profile/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
-          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
-          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox.uc.css" || { echo "FAIL: palefox.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox-tabs.uc.css" || { echo "FAIL: palefox-tabs.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-tabs.uc.js" || { echo "FAIL: palefox-tabs.uc.js missing"; exit 1; }
+          test -f "$profile/chrome/utils/boot.sys.mjs" || { echo "FAIL: boot.sys.mjs missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*false' "$profile/user.js" || { echo "FAIL: legacy stylesheets pref must be false"; exit 1; }
+          grep -q 'userChromeJS.enabled.*true' "$profile/user.js" || { echo "FAIL: userChromeJS.enabled missing"; exit 1; }
           grep -q 'sidebar.verticalTabs' "$profile/user.js" || { echo "FAIL: sidebar.verticalTabs pref missing"; exit 1; }
-          grep -q 'sidebar.revamp' "$profile/user.js" || { echo "FAIL: sidebar.revamp pref missing"; exit 1; }
-          grep -q 'sidebar.position_start' "$profile/user.js" || { echo "FAIL: sidebar.position_start pref missing"; exit 1; }
+
+          # Hash-pinned bootstrap installed to Firefox install root
+          app_dir="/Applications/Firefox.app/Contents/Resources"
+          test -f "$app_dir/config.js" || { echo "FAIL: bootstrap config.js missing from $app_dir"; exit 1; }
+          grep -q 'PALEFOX_PINNED' "$app_dir/config.js" || { echo "FAIL: $app_dir/config.js is not the hash-pinned bootstrap"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -142,6 +195,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Create Firefox profile
         shell: pwsh
@@ -172,27 +233,43 @@ jobs:
           if (-not $prof) { Write-Error "FAIL: no *.default-release profile found"; exit 1 }
 
           if (-not (Test-Path "$($prof.FullName)\chrome")) { Write-Error "FAIL: chrome\ missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\palefox.css")) { Write-Error "FAIL: palefox.css missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\CSS\palefox.uc.css")) { Write-Error "FAIL: palefox.uc.css missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\CSS\palefox-tabs.uc.css")) { Write-Error "FAIL: palefox-tabs.uc.css missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\JS\palefox-tabs.uc.js")) { Write-Error "FAIL: palefox-tabs.uc.js missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\utils\boot.sys.mjs")) { Write-Error "FAIL: boot.sys.mjs missing"; exit 1 }
 
-          if (-not (Test-Path "$($prof.FullName)\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\user.css")) { Write-Error "FAIL: user.css missing"; exit 1 }
-          $userChrome = Get-Content "$($prof.FullName)\chrome\userChrome.css" -Raw
-          if ($userChrome -notmatch '@import url\("palefox.css"\)') { Write-Error "FAIL: palefox.css import missing"; exit 1 }
+          # Stale-file cleanup
+          foreach ($stale in @("palefox.css","palefox-tabs.css","userChrome.css","user.css")) {
+            if (Test-Path "$($prof.FullName)\chrome\$stale") {
+              Write-Error "FAIL: stale $stale should have been removed"; exit 1
+            }
+          }
+
           $userJs = Get-Content "$($prof.FullName)\user.js" -Raw
-          if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: stylesheets pref missing"; exit 1 }
+          if ($userJs -notmatch 'toolkit\.legacyUserProfileCustomizations\.stylesheets.*false') { Write-Error "FAIL: legacy stylesheets pref must be false"; exit 1 }
+          if ($userJs -notmatch 'userChromeJS\.enabled.*true') { Write-Error "FAIL: userChromeJS.enabled missing"; exit 1 }
           if ($userJs -notmatch "sidebar.verticalTabs") { Write-Error "FAIL: sidebar.verticalTabs pref missing"; exit 1 }
-          if ($userJs -notmatch "sidebar.revamp") { Write-Error "FAIL: sidebar.revamp pref missing"; exit 1 }
-          if ($userJs -notmatch "sidebar.position_start") { Write-Error "FAIL: sidebar.position_start pref missing"; exit 1 }
 
-          Write-Host "--- chrome/ contents ---"
+          Write-Host "--- chrome\ contents ---"
           Get-ChildItem "$($prof.FullName)\chrome" -Recurse
           Write-Host "--- user.js ---"
           Get-Content "$($prof.FullName)\user.js"
 
-  test-preservation:
+  test-idempotent-reinstall:
+    # Hash-pinned model has no user-customizable files in chrome/ — every file
+    # is overwritten on reinstall. Verify reinstall is idempotent (running
+    # install.sh twice yields the same state) instead of preservation.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Create Firefox profile
         run: |
@@ -204,26 +281,37 @@ jobs:
       - name: First install
         run: PALEFOX_LOCAL=. ./install.sh
 
-      - name: Simulate user customizations
+      - name: Snapshot after first install
         run: |
-          echo "/* MY CUSTOM CSS */" >> "$PROFILE/chrome/user.css"
-          echo "/* MY ENTRY POINT EDIT */" >> "$PROFILE/chrome/userChrome.css"
+          find "$PROFILE/chrome" -type f -exec sha256sum {} \; | sort > /tmp/snapshot1.txt
+          cat /tmp/snapshot1.txt
 
-      - name: Second install (should preserve user files)
+      - name: Second install (no changes between)
         run: PALEFOX_LOCAL=. ./install.sh
 
-      - name: Verify preservation
+      - name: Verify identical state
         run: |
-          grep -q "MY CUSTOM CSS" "$PROFILE/chrome/user.css" || { echo "FAIL: user.css was overwritten"; exit 1; }
-          grep -q "MY ENTRY POINT EDIT" "$PROFILE/chrome/userChrome.css" || { echo "FAIL: userChrome.css was overwritten"; exit 1; }
-          test -f "$PROFILE/chrome/palefox.css" || { echo "FAIL: palefox.css missing after second install"; exit 1; }
-
-          echo "Preservation test passed."
+          find "$PROFILE/chrome" -type f -exec sha256sum {} \; | sort > /tmp/snapshot2.txt
+          if ! diff /tmp/snapshot1.txt /tmp/snapshot2.txt; then
+            echo "FAIL: chrome/ contents differ between identical reinstalls"
+            exit 1
+          fi
+          echo "Idempotent reinstall confirmed."
 
   test-legacy-migration:
+    # Old palefox versions wrote a monolithic userChrome.css. New install
+    # should detect that, back it up to .legacy, and migrate to chrome/CSS/.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Create Firefox profile with legacy userChrome.css
         run: |
@@ -249,11 +337,12 @@ jobs:
           test -f "$PROFILE/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing"; exit 1; }
           grep -q "MY OLD TWEAK" "$PROFILE/chrome/userChrome.css.legacy" || { echo "FAIL: legacy backup missing user content"; exit 1; }
 
-          # New modular userChrome.css should be in place
-          grep -q '@import url("palefox.css")' "$PROFILE/chrome/userChrome.css" || { echo "FAIL: new modular userChrome.css not installed"; exit 1; }
+          # Old userChrome.css should be GONE (new model doesn't recreate it —
+          # palefox CSS now loads via chrome/CSS/ + chrome.manifest registration)
+          test ! -f "$PROFILE/chrome/userChrome.css" || { echo "FAIL: old userChrome.css should have been removed"; exit 1; }
 
-          # Core files should exist
-          test -f "$PROFILE/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
+          # New CSS layout in place
+          test -f "$PROFILE/chrome/CSS/palefox.uc.css" || { echo "FAIL: new chrome/CSS/palefox.uc.css missing"; exit 1; }
 
           echo "Legacy migration test passed."
 
@@ -261,6 +350,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Install LibreWolf
         run: |
@@ -275,7 +372,6 @@ jobs:
 
       - name: Verify profile path
         run: |
-          # LibreWolf deb uses XDG path ~/.config/librewolf/librewolf/
           profiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/librewolf/librewolf"
           test -d "$profiles_dir" || { echo "FAIL: $profiles_dir not created"; exit 1; }
           echo "Profile root confirmed at $profiles_dir"
@@ -291,12 +387,10 @@ jobs:
           test -n "$profile" || { echo "FAIL: no *.default-default profile found"; exit 1; }
 
           test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
-          test -f "$profile/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
-
-          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
-          test -f "$profile/chrome/user.css" || { echo "FAIL: user.css missing"; exit 1; }
-          grep -q '@import url("palefox.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: palefox.css import missing"; exit 1; }
-          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox.uc.css" || { echo "FAIL: palefox.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-tabs.uc.js" || { echo "FAIL: palefox-tabs.uc.js missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*false' "$profile/user.js" || { echo "FAIL: legacy stylesheets pref must be false"; exit 1; }
+          grep -q 'userChromeJS.enabled.*true' "$profile/user.js" || { echo "FAIL: userChromeJS.enabled missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -307,6 +401,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Install LibreWolf
         run: brew install --cask librewolf
@@ -329,12 +431,10 @@ jobs:
           test -n "$profile" || { echo "FAIL: no *.default-default profile found"; exit 1; }
 
           test -d "$profile/chrome" || { echo "FAIL: chrome/ missing"; exit 1; }
-          test -f "$profile/chrome/palefox.css" || { echo "FAIL: palefox.css missing"; exit 1; }
-
-          test -f "$profile/chrome/userChrome.css" || { echo "FAIL: userChrome.css missing"; exit 1; }
-          test -f "$profile/chrome/user.css" || { echo "FAIL: user.css missing"; exit 1; }
-          grep -q '@import url("palefox.css")' "$profile/chrome/userChrome.css" || { echo "FAIL: palefox.css import missing"; exit 1; }
-          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' "$profile/user.js" || { echo "FAIL: stylesheets pref missing"; exit 1; }
+          test -f "$profile/chrome/CSS/palefox.uc.css" || { echo "FAIL: palefox.uc.css missing"; exit 1; }
+          test -f "$profile/chrome/JS/palefox-tabs.uc.js" || { echo "FAIL: palefox-tabs.uc.js missing"; exit 1; }
+          grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*false' "$profile/user.js" || { echo "FAIL: legacy stylesheets pref must be false"; exit 1; }
+          grep -q 'userChromeJS.enabled.*true' "$profile/user.js" || { echo "FAIL: userChromeJS.enabled missing"; exit 1; }
 
           echo "--- chrome/ contents ---"
           ls -laR "$profile/chrome/"
@@ -345,6 +445,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Install LibreWolf
         shell: pwsh
@@ -381,16 +489,14 @@ jobs:
           if (-not $prof) { Write-Error "FAIL: no *.default-default profile found"; exit 1 }
 
           if (-not (Test-Path "$($prof.FullName)\chrome")) { Write-Error "FAIL: chrome\ missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\palefox.css")) { Write-Error "FAIL: palefox.css missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\CSS\palefox.uc.css")) { Write-Error "FAIL: palefox.uc.css missing"; exit 1 }
+          if (-not (Test-Path "$($prof.FullName)\chrome\JS\palefox-tabs.uc.js")) { Write-Error "FAIL: palefox-tabs.uc.js missing"; exit 1 }
 
-          if (-not (Test-Path "$($prof.FullName)\chrome\userChrome.css")) { Write-Error "FAIL: userChrome.css missing"; exit 1 }
-          if (-not (Test-Path "$($prof.FullName)\chrome\user.css")) { Write-Error "FAIL: user.css missing"; exit 1 }
-          $userChrome = Get-Content "$($prof.FullName)\chrome\userChrome.css" -Raw
-          if ($userChrome -notmatch '@import url\("palefox.css"\)') { Write-Error "FAIL: palefox.css import missing"; exit 1 }
           $userJs = Get-Content "$($prof.FullName)\user.js" -Raw
-          if ($userJs -notmatch "toolkit.legacyUserProfileCustomizations.stylesheets") { Write-Error "FAIL: stylesheets pref missing"; exit 1 }
+          if ($userJs -notmatch 'toolkit\.legacyUserProfileCustomizations\.stylesheets.*false') { Write-Error "FAIL: legacy stylesheets pref must be false"; exit 1 }
+          if ($userJs -notmatch 'userChromeJS\.enabled.*true') { Write-Error "FAIL: userChromeJS.enabled missing"; exit 1 }
 
-          Write-Host "--- chrome/ contents ---"
+          Write-Host "--- chrome\ contents ---"
           Get-ChildItem "$($prof.FullName)\chrome" -Recurse
           Write-Host "--- user.js ---"
           Get-Content "$($prof.FullName)\user.js"
