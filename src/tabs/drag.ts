@@ -136,6 +136,21 @@ export function makeDrag(deps: DragDeps): DragAPI {
   let dropTarget: Row | HTMLElement | null = null;
   let dropPosition: DropPosition | null = null;
 
+  // [pfx-dragging] safety net. The attribute is consumed by compact-mode
+  // (isGuarded) to know if a drag is in flight. If the per-row dragend
+  // misses (source destroyed mid-drop), the attribute sticks and compact
+  // never auto-hides. mousedown when no drag is currently active sweeps
+  // any stale attribute. Visual styling for [pfx-dragging] is intentionally
+  // absent (Firefox's drag preview already covers the source visualization),
+  // so even a momentarily-stuck attribute has no visible consequence.
+  document.addEventListener("mousedown", () => {
+    if (dragSource === null) {
+      document.querySelectorAll("[pfx-dragging]").forEach((el) => {
+        el.removeAttribute("pfx-dragging");
+      });
+    }
+  }, true);
+
   function setupDrag(row: Row): void {
     row.draggable = true;
 
@@ -152,19 +167,6 @@ export function makeDrag(deps: DragDeps): DragAPI {
       dt.effectAllowed = "move";
       dt.setData("text/plain", "");
       row.setAttribute("pfx-dragging", "true");
-      // Reveal an empty pinned drop zone so unpinned tabs can be pinned by
-      // dropping into the area at the top of the sidebar.
-      if (state.pinnedContainer && !row._tab?.pinned
-          && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
-        state.pinnedContainer.hidden = false;
-        state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
-      }
-      // Symmetric: dragging a pinned tab and the tree panel has no rows —
-      // reveal a "drop to unpin" zone in the panel.
-      if (state.panel && row._tab?.pinned
-          && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-        state.panel.setAttribute("pfx-empty-zone", "true");
-      }
     });
 
     row.addEventListener("dragend", () => {
@@ -183,14 +185,6 @@ export function makeDrag(deps: DragDeps): DragAPI {
       dragSource?.removeAttribute("pfx-dragging");
       dragSource = null;
       clearDropIndicator();
-      // Restore hidden state on the empty pinned drop zone if still empty.
-      if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-        state.pinnedContainer.removeAttribute("pfx-empty-zone");
-        if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
-          state.pinnedContainer.hidden = true;
-        }
-      }
-      state.panel?.removeAttribute("pfx-empty-zone");
     });
 
     let lastLoggedPos: DropPosition | null = null;
@@ -288,9 +282,12 @@ export function makeDrag(deps: DragDeps): DragAPI {
     });
   }
 
-  // Drop handlers on the pinned container itself, for two cases:
-  //   1. The container is empty (no rows to drag-over): pin the source.
-  //   2. Drop in trailing whitespace after the last pinned row: pin and append.
+  // Drop handlers on the pinned container itself: drop in trailing
+  // whitespace after the last pinned row pins-and-appends the source.
+  // (The "drop into empty pinned area" case is intentionally unsupported
+  // since palefox keeps an empty pinned container hidden — users can pin
+  // via right-click or by dragging onto a divider that already has at
+  // least one pinned row.)
   function setupPinnedContainerDrop(container: HTMLElement): void {
     container.addEventListener("dragover", (e) => {
       if (!dragSource || dragSource._tab?.pinned) return;

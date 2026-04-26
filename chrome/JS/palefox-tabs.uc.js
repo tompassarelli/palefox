@@ -539,6 +539,13 @@
     let dropIndicator = null;
     let dropTarget = null;
     let dropPosition = null;
+    document.addEventListener("mousedown", () => {
+      if (dragSource === null) {
+        document.querySelectorAll("[pfx-dragging]").forEach((el) => {
+          el.removeAttribute("pfx-dragging");
+        });
+      }
+    }, true);
     function setupDrag(row) {
       row.draggable = true;
       row.addEventListener("dragstart", (e) => {
@@ -553,13 +560,6 @@
         dt.effectAllowed = "move";
         dt.setData("text/plain", "");
         row.setAttribute("pfx-dragging", "true");
-        if (state.pinnedContainer && !row._tab?.pinned && !state.pinnedContainer.querySelector(".pfx-tab-row")) {
-          state.pinnedContainer.hidden = false;
-          state.pinnedContainer.setAttribute("pfx-empty-zone", "true");
-        }
-        if (state.panel && row._tab?.pinned && !state.panel.querySelector(".pfx-tab-row, .pfx-group-row")) {
-          state.panel.setAttribute("pfx-empty-zone", "true");
-        }
       });
       row.addEventListener("dragend", () => {
         log2("dragend/row", {
@@ -571,13 +571,6 @@
         dragSource?.removeAttribute("pfx-dragging");
         dragSource = null;
         clearDropIndicator();
-        if (state.pinnedContainer?.hasAttribute("pfx-empty-zone")) {
-          state.pinnedContainer.removeAttribute("pfx-empty-zone");
-          if (!state.pinnedContainer.querySelector(".pfx-tab-row")) {
-            state.pinnedContainer.hidden = true;
-          }
-        }
-        state.panel?.removeAttribute("pfx-empty-zone");
       });
       let lastLoggedPos = null;
       row.addEventListener("dragover", (e) => {
@@ -1520,6 +1513,9 @@
       const row = rowOf.get(gBrowser.selectedTab);
       if (row && !state.cursor) {
         row.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      if (row && state.cursor !== row) {
+        vim.setCursor(row);
       }
       if (isHorizontal())
         rows.updateHorizontalGrid();
@@ -5540,6 +5536,47 @@
         Palefox
       };
       console.log("palefox-tabs: pfxTest debug API exposed");
+    }
+    if (Services.prefs.getBoolPref("pfx.debug", false)) {
+      let describe = function(el) {
+        if (!el)
+          return "null";
+        const tag = el.tagName?.toLowerCase() ?? "?";
+        const id = el.id ? `#${el.id}` : "";
+        const cls = typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
+        return tag + id + cls;
+      };
+      const pfxNs = window.pfx ??= {};
+      pfxNs.measure = (...els) => els.map((el, i) => {
+        const r = el?.getBoundingClientRect?.();
+        if (!r)
+          return { i, tag: describe(el), error: "no rect" };
+        return {
+          i,
+          tag: describe(el),
+          x: Math.round(r.left),
+          y: Math.round(r.top),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          right: Math.round(r.right),
+          bottom: Math.round(r.bottom)
+        };
+      });
+      pfxNs.gaps = (...els) => els.slice(1).map((el, i) => {
+        const a = els[i]?.getBoundingClientRect?.();
+        const b = el?.getBoundingClientRect?.();
+        if (!a || !b)
+          return { i, error: "no rect" };
+        return {
+          i,
+          between: `${describe(els[i])} → ${describe(el)}`,
+          gapY: Math.round(b.top - a.bottom),
+          gapX: Math.round(b.left - a.right),
+          sameY: Math.round(a.top) === Math.round(b.top),
+          sameX: Math.round(a.left) === Math.round(b.left)
+        };
+      });
+      console.log("palefox-tabs: dev helpers (window.pfx) exposed (pfx.debug=true)");
     }
     console.log("palefox-tabs: initialized");
   }

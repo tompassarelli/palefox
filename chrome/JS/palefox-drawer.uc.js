@@ -985,6 +985,15 @@
       urlbar.style.setProperty("--urlbar-width", w + "px");
       updating = false;
     }
+    function syncSymmetricFooter() {
+      const navBar2 = document.getElementById("nav-bar");
+      if (!navBar2)
+        return;
+      const cs = getComputedStyle(navBar2);
+      const marginTop = parseFloat(cs.marginTop) || 0;
+      const padding = Math.max(0, marginTop * 2 - 1);
+      document.documentElement.style.setProperty("--pfx-symmetric-footer", padding + "px");
+    }
     function expand() {
       if (urlbarToolbar)
         return;
@@ -1043,6 +1052,8 @@
     hideSidebarSplitter();
     if (sidebarMain.hasAttribute("sidebar-launcher-expanded"))
       expand();
+    syncSymmetricFooter();
+    window.addEventListener("resize", syncSymmetricFooter);
     const expandObserver = new MutationObserver(() => {
       const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
       if (expanded && !urlbarToolbar)
@@ -1075,6 +1086,7 @@
       resizeObs?.disconnect();
       mutationObs?.disconnect();
       navigatorToolbox.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("resize", syncSymmetricFooter);
     }
     return {
       isExpanded: () => urlbarToolbar !== null,

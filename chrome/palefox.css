@@ -188,8 +188,21 @@
 }
 
 #sidebar-main > sidebar-main {
-  flex: 1 !important;
+  /* Reserved 60px footer pinned to the bottom of #sidebar-main's flex
+   * column. flex:0 0 60px locks the height; margin-top:auto eats all
+   * the free space above so it sits flush with the bottom edge.
+   *
+   * `padding-bottom: var(--pfx-symmetric-footer)` consumes a runtime-
+   * measured value (set in src/drawer/layout.ts::syncSymmetricFooter) so
+   * the gap below this footer mirrors the gap above the topmost
+   * #nav-bar button — a value Firefox controls, not us. The 11px
+   * fallback matches the current Firefox build (`2 * 6 - 1`) and only
+   * applies if the JS hasn't run yet (very first paint). */
+  flex: 0 0 60px !important;
+  margin-top: auto !important;
   min-height: 0 !important;
+  overflow: hidden !important;
+  padding-bottom: var(--pfx-symmetric-footer, 11px) !important;
   transform: translateX(-2px) !important;
 }
 
@@ -317,7 +330,7 @@
   /* Y-margin owns the urlbar↔first-tab gap so it stays constant whether
    * the pinned container is rendered or hidden. X-inset lives on the
    * urlbar element itself (see `#pfx-urlbar-toolbar #urlbar` rules below). */
-  margin: 12px 0 !important;
+  margin: 12px 0 16px !important;
 }
 
 #pfx-urlbar-toolbar #urlbar-container {

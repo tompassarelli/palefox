@@ -486,6 +486,62 @@ const pfxLog = createLogger("tabs");
       console.log("palefox-tabs: pfxTest debug API exposed");
     }
 
+    // Dev helpers (`window.pfx`) — gated on `pfx.debug` so they're a no-op
+    // in normal use. Flip `pfx.debug = true` in about:config and reload to
+    // get them in the Browser Console. Add new helpers below as they earn
+    // their keep in actual debugging workflows.
+    if (Services.prefs.getBoolPref("pfx.debug", false)) {
+    const pfxNs = ((window as unknown as { pfx?: Record<string, unknown> }).pfx ??= {});
+
+    /** Short, console-friendly description of an element. */
+    function describe(el: Element | null | undefined): string {
+      if (!el) return "null";
+      const tag = el.tagName?.toLowerCase() ?? "?";
+      const id = el.id ? `#${el.id}` : "";
+      const cls = (typeof el.className === "string" && el.className.trim())
+        ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".")
+        : "";
+      return tag + id + cls;
+    }
+
+    /** `pfx.measure(temp0, temp1, ...)` — returns x/y/w/h for each element,
+     *  intended for `console.table()` rendering. Coordinates are
+     *  viewport-relative (getBoundingClientRect). */
+    pfxNs.measure = (...els: Element[]) => els.map((el, i) => {
+      const r = el?.getBoundingClientRect?.();
+      if (!r) return { i, tag: describe(el), error: "no rect" };
+      return {
+        i,
+        tag: describe(el),
+        x: Math.round(r.left),
+        y: Math.round(r.top),
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        right: Math.round(r.right),
+        bottom: Math.round(r.bottom),
+      };
+    });
+
+    /** `pfx.gaps(temp0, temp1, ...)` — for each adjacent pair, the vertical
+     *  and horizontal gap between them (in document order). Useful for
+     *  verifying symmetric spacing. */
+    pfxNs.gaps = (...els: Element[]) => els.slice(1).map((el, i) => {
+      const a = els[i]?.getBoundingClientRect?.();
+      const b = el?.getBoundingClientRect?.();
+      if (!a || !b) return { i, error: "no rect" };
+      return {
+        i,
+        between: `${describe(els[i]!)} → ${describe(el)}`,
+        gapY: Math.round(b.top - a.bottom),
+        gapX: Math.round(b.left - a.right),
+        sameY: Math.round(a.top) === Math.round(b.top),
+        sameX: Math.round(a.left) === Math.round(b.left),
+      };
+    });
+
+    console.log("palefox-tabs: dev helpers (window.pfx) exposed (pfx.debug=true)");
+    }
+
     console.log("palefox-tabs: initialized");
   }
 

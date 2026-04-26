@@ -309,6 +309,8 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
       }
     }
 
+    // Cursor-follow on Ctrl+T / click-+ is handled by onTabSelect, which
+    // fires AFTER TabOpen (gBrowser.selectedTab is stale during TabOpen).
     if (vim.consumePendingCursorMove()) vim.setCursor(row);
     rows.scheduleTreeResync();
     scheduleSave();
@@ -503,6 +505,15 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
     const row = rowOf.get(gBrowser.selectedTab);
     if (row && !state.cursor) {
       row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    // Vim cursor follows selection. Without this, opening a new tab
+    // (Ctrl+T) or clicking a different tab leaves the [pfx-cursor]
+    // outline on the previously-cursor'd row while [selected] moves to
+    // the new row — two visual indicators on different tabs. Note vim
+    // panel-mode `j`/`k` does NOT fire TabSelect (cursor moves without
+    // selecting), so this rule doesn't override that intentional decoupling.
+    if (row && state.cursor !== row) {
+      vim.setCursor(row);
     }
     if (isHorizontal()) rows.updateHorizontalGrid();
   }

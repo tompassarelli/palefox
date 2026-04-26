@@ -101,6 +101,44 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
     updating = false;
   }
 
+  // === Symmetric-footer padding (runtime, derived from #nav-bar margin) ===
+  //
+  // Why this isn't a CSS constant.
+  //
+  // The visual goal: the inner `#sidebar-main > sidebar-main` footer
+  // (the 60px bottom-pinned area) should reserve enough internal padding
+  // that its content sits a symmetric distance from the bottom edge to
+  // mirror the gap between the TOP edge of the chrome surface and the
+  // FIRST nav-bar button. That gap is created by Firefox's #nav-bar
+  // top margin — currently 6px on this build, so the symmetric footer
+  // padding is `2 * 6 - 1 = 11px` (the -1 is XUL toolbarbutton internal
+  // padding fudge, same -1 already used in #nav-bar's horizontal inset
+  // rule).
+  //
+  // Why we can't write `padding-bottom: 11px`. The 6px top margin on
+  // #nav-bar is owned by Firefox / its UA + theme cascade — palefox
+  // tries to set `margin: 6px 0 !important` but in practice the live
+  // computed value is what Firefox decides, not what we declare, and a
+  // future Firefox version (or a different theme) could ship 4px or
+  // 8px. Hardcoding 11px would silently desynchronize the moment that
+  // happens; the chrome would render slightly off-balance and we'd
+  // never notice unless we were specifically inspecting it.
+  //
+  // The fix: measure `#nav-bar`'s actual rendered marginTop at runtime
+  // via `getComputedStyle()`, write `2 * marginTop - 1` into the
+  // `--pfx-symmetric-footer` CSS variable on `:root`, and let the CSS
+  // rule on `#sidebar-main > sidebar-main` consume it. Re-run on init
+  // and window resize. Self-correcting against whatever Firefox decides
+  // — including future upgrades — without us noticing.
+  function syncSymmetricFooter(): void {
+    const navBar = document.getElementById("nav-bar");
+    if (!navBar) return;
+    const cs = getComputedStyle(navBar);
+    const marginTop = parseFloat(cs.marginTop) || 0;
+    const padding = Math.max(0, marginTop * 2 - 1);
+    document.documentElement.style.setProperty("--pfx-symmetric-footer", padding + "px");
+  }
+
   function expand(): void {
     if (urlbarToolbar) return;
     log("expand");
@@ -170,6 +208,13 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
   hideSidebarSplitter();
   if (sidebarMain.hasAttribute("sidebar-launcher-expanded")) expand();
 
+  // Symmetric footer — measure once on init, then re-run on window
+  // resize (covers DPI changes, theme load, layout flips). The 6px
+  // nav-bar margin only changes between Firefox versions in practice,
+  // which requires a browser restart and re-inits this anyway.
+  syncSymmetricFooter();
+  window.addEventListener("resize", syncSymmetricFooter);
+
   // Watch for expand/collapse attribute changes.
   const expandObserver = new MutationObserver(() => {
     const expanded = sidebarMain.hasAttribute("sidebar-launcher-expanded");
@@ -202,6 +247,7 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
     resizeObs?.disconnect();
     mutationObs?.disconnect();
     navigatorToolbox.removeEventListener("contextmenu", onContextMenu);
+    window.removeEventListener("resize", syncSymmetricFooter);
   }
 
   return {

@@ -185,6 +185,7 @@ const tests: IntegrationTest[] = [
       await waitFor(mn, `return !document.querySelector(".pfx-tab-row[pfx-dragging]");`);
     },
   },
+
 ];
 
 export default tests;
