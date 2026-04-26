@@ -2234,41 +2234,56 @@ export function makeVim(deps: VimDeps): VimAPI {
     const d = dataOf(row);
     if (!d) return;
 
-    const input = document.createElement("input");
-    input.className = "pfx-rename-input";
-    input.value = d.name || (row._tab ? row._tab.label : "") || "";
+    // Edit-in-place via contentEditable on the existing label. This is the
+    // ONLY way to guarantee the row doesn't resize / text doesn't jump:
+    // <span> vs <input> render text with different baselines and metrics
+    // no matter how much CSS you throw at them. Mutating the same element
+    // means same font, same line-height, same flex slot — zero layout
+    // shift. The focus ring lives on .pfx-tab-row:focus-within (CSS).
+    const original = d.name || (row._tab ? row._tab.label : "") || "";
+    label.textContent = original;
+    label.setAttribute("contenteditable", "plaintext-only");
+    label.classList.add("pfx-renaming");
+    label.style.removeProperty("overflow");
+    label.style.removeProperty("text-overflow");
+    label.focus();
 
-    label.hidden = true;
-    row.insertBefore(input, label.nextSibling);
-    input.focus();
-    input.select();
+    // Select all text inside the label.
+    const sel = window.getSelection?.();
+    if (sel) {
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
 
     let done = false;
     function finish(commit: boolean): void {
       if (done) return;
       done = true;
+      const value = (label!.textContent || "").trim();
+      label!.removeAttribute("contenteditable");
+      label!.classList.remove("pfx-renaming");
+      window.getSelection?.()?.removeAllRanges();
       if (commit) {
-        const v = input.value.trim();
         if (row._group) {
-          d!.name = v || "New Group";
+          d!.name = value || "New Group";
         } else {
-          d!.name = (v && v !== row._tab!.label) ? v : null;
+          d!.name = (value && value !== row._tab!.label) ? value : null;
         }
         scheduleSave();
       }
-      input.remove();
-      label!.hidden = false;
       if (row._tab) rows.syncTabRow(row._tab);
       else rows.syncAnyRow(row);
       state.panel.focus();
     }
 
-    input.addEventListener("keydown", (e) => {
+    label.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); finish(true); focusPanel(); }
       if (e.key === "Escape") { e.preventDefault(); finish(false); focusPanel(); }
       e.stopPropagation();
     });
-    input.addEventListener("blur", () => finish(true));
+    label.addEventListener("blur", () => finish(true), { once: true });
   }
 
   // ---------- pendingCursorMove handoff -------------------------------------

@@ -22,6 +22,7 @@
 // sidebar.verticalTabs). destroy() unwires everything for clean window unload.
 
 import { createLogger, type Logger } from "../tabs/log.ts";
+import { collapseProtectionDurationMs } from "./timing.ts";
 
 
 // =============================================================================
@@ -74,9 +75,8 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
   // Matches Zen's `zen.view.compact.toolbar-flash-popup.duration` (800ms).
   // Dispatched via `sidebarMain.dispatchEvent(new CustomEvent("pfx-flash"))`.
   const FLASH_DURATION = 800;
-  // Once collapse is committed, block reveal attempts until the close animation
-  // finishes. Matches CSS --pfx-transition-duration (250ms) plus a small margin.
-  const COLLAPSE_PROTECTION_DURATION = 280;
+  // Collapse-protection duration lives in src/drawer/timing.ts (single
+  // source of truth, derived from `--pfx-transition-duration` CSS var).
 
   // Wayland / X11 spurious-mouseleave debounce. Wraps the per-tick :hover check
   // in setTimeout(_, hoverHackDelay()) so users on flaky compositors can tune.
@@ -111,6 +111,13 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
   let urlbarCompactObserver: MutationObserver | null = null;
   let _collapseProtectedUntil = 0;
+  // Retry a dropped setHover(true) once collapse-protection lifts. Without
+  // this, a flashSidebar() called during the close animation has its
+  // setHover(true) dropped (collapseRemaining > 0); subsequent flash
+  // *extends* refresh the hide-timer but never re-attempt the show.
+  // Symptom: "swipe-during-close lockout" — sidebar stays hidden, strip
+  // hover does nothing, only window-blur reconcile cleans state.
+  let _setHoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let hideWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Horizontal
@@ -118,6 +125,7 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
   let _hzFlashTimer: ReturnType<typeof setTimeout> | null = null;
   let urlbarCompactObserverHz: MutationObserver | null = null;
   let _collapseProtectedHzUntil = 0;
+  let _setToolboxHoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let hideWatchdogTimerHz: ReturnType<typeof setTimeout> | null = null;
 
   // Shared
@@ -188,14 +196,32 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
       const collapseRemaining = _collapseProtectedUntil - Date.now();
       if (collapseRemaining > 0) {
         dbg("setHover:revealDropped", { collapseRemaining });
+        // Retry once protection lifts — flashSidebar's only show attempt
+        // happens here, and subsequent extends don't re-call setHover.
+        // Without this retry, the dropped reveal stays dropped forever.
+        if (_setHoverRetryTimer !== null) clearTimeout(_setHoverRetryTimer);
+        _setHoverRetryTimer = setTimeout(() => {
+          _setHoverRetryTimer = null;
+          if (sidebarMain.hasAttribute("pfx-has-hover")) return;
+          const stillWanted = flashTimer !== null
+            || sidebarMain.matches(":hover")
+            || (hoverStrip?.matches(":hover") ?? false);
+          dbg("setHover:retry-after-collapse-protect", { stillWanted });
+          if (stillWanted) setHover(true);
+        }, collapseRemaining + 16);
         return;
       }
       sidebarMain.setAttribute("pfx-has-hover", "true");
+      // Successful show — cancel any pending retry (we're done).
+      if (_setHoverRetryTimer !== null) {
+        clearTimeout(_setHoverRetryTimer);
+        _setHoverRetryTimer = null;
+      }
       return;
     }
     if (sidebarMain.hasAttribute("pfx-has-hover")) {
       sidebarMain.removeAttribute("pfx-has-hover");
-      _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+      _collapseProtectedUntil = Date.now() + collapseProtectionDurationMs();
     }
   }
 
@@ -284,16 +310,32 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
       return;
     }
     if (value) {
-      if (Date.now() < _collapseProtectedHzUntil) {
+      const collapseRemaining = _collapseProtectedHzUntil - Date.now();
+      if (collapseRemaining > 0) {
         dbg("setToolboxHover:revealDropped");
+        // Retry once protection lifts — see setHover for rationale.
+        if (_setToolboxHoverRetryTimer !== null) clearTimeout(_setToolboxHoverRetryTimer);
+        _setToolboxHoverRetryTimer = setTimeout(() => {
+          _setToolboxHoverRetryTimer = null;
+          if (navigatorToolbox.hasAttribute("pfx-has-hover")) return;
+          const stillWanted = _hzFlashTimer !== null
+            || navigatorToolbox.matches(":hover")
+            || (hoverStripTop?.matches(":hover") ?? false);
+          dbg("setToolboxHover:retry-after-collapse-protect", { stillWanted });
+          if (stillWanted) setToolboxHover(true);
+        }, collapseRemaining + 16);
         return;
       }
       navigatorToolbox.setAttribute("pfx-has-hover", "true");
+      if (_setToolboxHoverRetryTimer !== null) {
+        clearTimeout(_setToolboxHoverRetryTimer);
+        _setToolboxHoverRetryTimer = null;
+      }
       return;
     }
     if (navigatorToolbox.hasAttribute("pfx-has-hover")) {
       navigatorToolbox.removeAttribute("pfx-has-hover");
-      _collapseProtectedHzUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+      _collapseProtectedHzUntil = Date.now() + collapseProtectionDurationMs();
     }
   }
 
@@ -379,9 +421,29 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
     const target = event.target as Element;
     const targetId = target.id || target.localName;
     dbg("onSidebarEnter:entry", { targetId, _ignoreNextHover, flashPending: flashTimer !== null });
+    // SYNCHRONOUSLY cancel any in-flight collapse-protection. A real
+    // mouseenter event is evidence of user intent; the protection only
+    // exists to suppress spurious / programmatic reveals (Wayland flake,
+    // pfx-flash). Doing this BEFORE the hoverHackDelay tick is the fix
+    // for "swipe-during-close lockout" — when the cursor crosses the
+    // sidebar mid-animation, the sidebar can slide past the cursor before
+    // the post-delay `:hover` re-check fires, so the cancel was never
+    // running and the user got stuck (had to leave the window from the
+    // opposite edge to dislodge state via window-blur reconcile).
+    if (_collapseProtectedUntil > Date.now()) {
+      dbg("onSidebarEnter:cancel-collapse-protection-sync", {
+        remainingMs: _collapseProtectedUntil - Date.now(),
+        targetId,
+      });
+      _collapseProtectedUntil = 0;
+    }
     setTimeout(() => {
       if (!target.matches(":hover")) {
         dbg("onSidebarEnter:abort", { reason: "not-hovered-after-tick", targetId });
+        // Even though :hover dropped (sidebar slid past stationary cursor,
+        // or fleeting motion), reconcile from the actual DOM hover state —
+        // the strip or sidebar may now be under the cursor.
+        reconcileCompactState("sidebar-enter-not-hovered");
         return;
       }
       if (target.closest("panel")) {
@@ -389,20 +451,6 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
         return;
       }
       clearFlash();
-      // A confirmed `:hover` after the hoverHackDelay tick is *evidence of
-      // user intent* — they came back. Cancel any in-flight collapse
-      // protection so the reveal isn't dropped under our feet. The
-      // protection exists to suppress *spurious / programmatic* reveals
-      // mid-collapse (Wayland mouseleave bug, programmatic pfx-flash);
-      // it should NOT block a genuine cursor return. Without this the
-      // user sees a "lockout" — the sidebar stays hidden until they move
-      // out and back in slowly enough to land after the protection window.
-      if (_collapseProtectedUntil > Date.now()) {
-        dbg("onSidebarEnter:cancel-collapse-protection", {
-          remainingMs: _collapseProtectedUntil - Date.now(),
-        });
-        _collapseProtectedUntil = 0;
-      }
       requestAnimationFrame(() => {
         if (_ignoreNextHover) {
           dbg("onSidebarEnter:abort", { reason: "ignore-next-hover-rAF", targetId });
@@ -466,16 +514,18 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
 
   function onToolboxEnter(event: MouseEvent): void {
     const target = event.target as Element;
+    // Sync cancel — see onSidebarEnter for rationale. Mirrors the same
+    // swipe-during-close lockout fix for horizontal mode.
+    if (_collapseProtectedHzUntil > Date.now()) {
+      _collapseProtectedHzUntil = 0;
+    }
     setTimeout(() => {
-      if (!target.matches(":hover")) return;
+      if (!target.matches(":hover")) {
+        reconcileCompactStateHorizontal("toolbox-enter-not-hovered");
+        return;
+      }
       if (target.closest("panel")) return;
       clearFlashToolbox();
-      // Confirmed cursor return — cancel collapse protection so the reveal
-      // isn't dropped. Same rationale as onSidebarEnter; see that function
-      // for the long form.
-      if (_collapseProtectedHzUntil > Date.now()) {
-        _collapseProtectedHzUntil = 0;
-      }
       requestAnimationFrame(() => {
         if (_ignoreNextHover) return;
         if (navigatorToolbox.hasAttribute("pfx-has-hover")) return;
@@ -554,7 +604,7 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
             if (sidebarMain.hasAttribute("pfx-has-hover")) {
               sidebarMain.removeAttribute("pfx-has-hover");
             }
-            _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+            _collapseProtectedUntil = Date.now() + collapseProtectionDurationMs();
           }
         }
       });
@@ -850,6 +900,8 @@ export function makeCompact(deps: CompactDeps): CompactAPI {
     cancelHideWatchdogHz();
     clearFlash();
     clearFlashToolbox();
+    if (_setHoverRetryTimer !== null) clearTimeout(_setHoverRetryTimer);
+    if (_setToolboxHoverRetryTimer !== null) clearTimeout(_setToolboxHoverRetryTimer);
   }
 
   return {

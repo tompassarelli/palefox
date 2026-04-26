@@ -1777,10 +1777,8 @@
       row.setAttribute("align", "center");
       const icon = document.createXULElement("image");
       icon.className = "pfx-tab-icon";
-      const label = document.createXULElement("label");
+      const label = document.createElement("span");
       label.className = "pfx-tab-label";
-      label.setAttribute("crop", "end");
-      label.setAttribute("flex", "1");
       const chevron = document.createXULElement("image");
       chevron.className = "pfx-tab-chevron";
       row.append(icon, label, chevron);
@@ -1831,7 +1829,9 @@
       const img = showTab.getAttribute("image");
       const iconEl = row.querySelector(".pfx-tab-icon");
       iconEl?.setAttribute("src", img || "chrome://global/skin/icons/defaultFavicon.svg");
-      row.querySelector(".pfx-tab-label")?.setAttribute("value", showTd.name || showTab.label || "New Tab");
+      const labelEl = row.querySelector(".pfx-tab-label");
+      if (labelEl)
+        labelEl.textContent = showTd.name || showTab.label || "New Tab";
       row.toggleAttribute("selected", tab.selected);
       if (!movingTabs.has(tab)) {
         row.toggleAttribute("busy", tab.hasAttribute("busy"));
@@ -1853,14 +1853,12 @@
       row.className = "pfx-group-row";
       row.setAttribute("align", "center");
       row._group = group;
-      const marker = document.createXULElement("label");
+      const marker = document.createElement("span");
       marker.className = "pfx-group-marker";
-      marker.setAttribute("value", "●");
-      const label = document.createXULElement("label");
+      marker.textContent = "●";
+      const label = document.createElement("span");
       label.className = "pfx-tab-label";
-      label.setAttribute("crop", "end");
-      label.setAttribute("flex", "1");
-      label.setAttribute("value", group.name);
+      label.textContent = group.name;
       row.append(marker, label);
       row.addEventListener("click", (e) => {
         if (e.button === 0)
@@ -1890,7 +1888,8 @@
         return;
       const label = row.querySelector(".pfx-tab-label");
       const statePrefix = g.state === "todo" ? "[ ] " : g.state === "wip" ? "[-] " : g.state === "done" ? "[x] " : "";
-      label?.setAttribute("value", statePrefix + g.name);
+      if (label)
+        label.textContent = statePrefix + g.name;
       row.toggleAttribute("pfx-collapsed", !!g.collapsed && hasChildren(row));
       row.style.paddingInlineStart = g.level * INDENT + 8 + "px";
     }
@@ -4255,36 +4254,44 @@
       const d = dataOf(row);
       if (!d)
         return;
-      const input = document.createElement("input");
-      input.className = "pfx-rename-input";
-      input.value = d.name || (row._tab ? row._tab.label : "") || "";
-      label.hidden = true;
-      row.insertBefore(input, label.nextSibling);
-      input.focus();
-      input.select();
+      const original = d.name || (row._tab ? row._tab.label : "") || "";
+      label.textContent = original;
+      label.setAttribute("contenteditable", "plaintext-only");
+      label.classList.add("pfx-renaming");
+      label.style.removeProperty("overflow");
+      label.style.removeProperty("text-overflow");
+      label.focus();
+      const sel = window.getSelection?.();
+      if (sel) {
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
       let done = false;
       function finish(commit) {
         if (done)
           return;
         done = true;
+        const value = (label.textContent || "").trim();
+        label.removeAttribute("contenteditable");
+        label.classList.remove("pfx-renaming");
+        window.getSelection?.()?.removeAllRanges();
         if (commit) {
-          const v = input.value.trim();
           if (row._group) {
-            d.name = v || "New Group";
+            d.name = value || "New Group";
           } else {
-            d.name = v && v !== row._tab.label ? v : null;
+            d.name = value && value !== row._tab.label ? value : null;
           }
           scheduleSave();
         }
-        input.remove();
-        label.hidden = false;
         if (row._tab)
           rows.syncTabRow(row._tab);
         else
           rows.syncAnyRow(row);
         state.panel.focus();
       }
-      input.addEventListener("keydown", (e) => {
+      label.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           finish(true);
@@ -4297,7 +4304,7 @@
         }
         e.stopPropagation();
       });
-      input.addEventListener("blur", () => finish(true));
+      label.addEventListener("blur", () => finish(true), { once: true });
     }
     function consumePendingCursorMove() {
       if (!pendingCursorMove)

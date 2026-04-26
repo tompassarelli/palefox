@@ -88,7 +88,10 @@
  * themselves via `margin: 2px auto` in icons-only mode (see below).
  * Horizontal mode and empty-zone state override `display` explicitly. */
 #pfx-pinned-container {
-  padding: 2px 0;
+  /* No padding. The urlbar-toolbar (palefox.css) owns the gap above the
+   * first row; the divider's `::after` y-margin owns the gap below. So
+   * showing/hiding the pinned container can't shift the tab list. */
+  padding: 0;
   background-color: var(--pfx-bg);
 }
 #pfx-pinned-container[hidden] {
@@ -100,7 +103,9 @@
   content: "";
   display: block;
   height: 1px;
-  margin: 10px var(--pfx-sidebar-inset);
+  /* Y-margin matches the urlbar-toolbar's 12px so the divider sits at a
+   * consistent rhythm; X-margin stays at the sidebar inset. */
+  margin: 12px var(--pfx-sidebar-inset);
   background: color-mix(in srgb, currentColor 15%, transparent);
 }
 #pfx-pinned-container[pfx-empty-zone]::after {
@@ -192,13 +197,19 @@
 
 /* Shared row base */
 .pfx-tab-row, .pfx-group-row {
-  padding: 5px 8px;
+  padding: 6px 8px;
   padding-inline-end: 6px;
   border-radius: 4px;
-  margin: 1px var(--pfx-sidebar-inset);
+  margin: 2px var(--pfx-sidebar-inset);
   min-height: 28px;
   cursor: default;
   transition: padding-inline-start 0.15s ease;
+}
+
+/* Horizontal mode: bump horizontal gap between adjacent tabs (axis flips —
+ * stacking is left-to-right, so spacing lives on the inline axis). */
+:is(#pfx-tab-panel, #pfx-pinned-container)[pfx-horizontal] :is(.pfx-tab-row, .pfx-group-row) {
+  margin: 0 2px;
 }
 .pfx-tab-row:hover, .pfx-group-row:hover {
   background: color-mix(in srgb, currentColor 8%, transparent);
@@ -331,14 +342,25 @@
 
 /* #region rename input */
 
-.pfx-rename-input {
-  flex: 1; min-width: 0;
-  padding: 1px 4px;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: 2px;
-  font: inherit;
-  background: var(--pfx-bg-elevated);
-  color: var(--pfx-fg);
+/* Rename mode — vim.ts toggles `contenteditable` on the existing
+ * .pfx-tab-label and adds .pfx-renaming. No new element enters the DOM,
+ * so the row's box is unchanged: same font, same line-height, same flex
+ * slot. The teal focus ring lives on the row via :focus-within. */
+.pfx-tab-label.pfx-renaming {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  outline: none;
+  cursor: text;
+  user-select: text;
+  -moz-user-select: text;
+}
+
+.pfx-tab-row:focus-within,
+.pfx-group-row:focus-within {
+  outline: 2px solid var(--pfx-accent);
+  outline-offset: -1px;
+  border-radius: 4px;
 }
 
 /* #endregion rename input */

@@ -86,10 +86,10 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     const icon = document.createXULElement("image") as HTMLElement;
     icon.className = "pfx-tab-icon";
 
-    const label = document.createXULElement("label") as HTMLElement;
+    // HTML span (not XUL <label>) so contentEditable works cleanly during
+    // rename. CSS handles ellipsis cropping (was XUL `crop="end"`).
+    const label = document.createElement("span");
     label.className = "pfx-tab-label";
-    label.setAttribute("crop", "end");
-    label.setAttribute("flex", "1");
 
     const chevron = document.createXULElement("image") as HTMLElement;
     chevron.className = "pfx-tab-chevron";
@@ -155,10 +155,8 @@ export function makeRows(deps: RowsDeps): RowsAPI {
       "src",
       img || "chrome://global/skin/icons/defaultFavicon.svg",
     );
-    row.querySelector<HTMLElement>(".pfx-tab-label")?.setAttribute(
-      "value",
-      showTd.name || showTab.label || "New Tab",
-    );
+    const labelEl = row.querySelector<HTMLElement>(".pfx-tab-label");
+    if (labelEl) labelEl.textContent = showTd.name || showTab.label || "New Tab";
 
     row.toggleAttribute("selected", tab.selected);
     // Skip `busy` sync while we're moving this tab — Firefox toggles busy
@@ -192,15 +190,13 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     row.setAttribute("align", "center");
     row._group = group;
 
-    const marker = document.createXULElement("label") as HTMLElement;
+    const marker = document.createElement("span");
     marker.className = "pfx-group-marker";
-    marker.setAttribute("value", "●");
+    marker.textContent = "●";
 
-    const label = document.createXULElement("label") as HTMLElement;
+    const label = document.createElement("span");
     label.className = "pfx-tab-label";
-    label.setAttribute("crop", "end");
-    label.setAttribute("flex", "1");
-    label.setAttribute("value", group.name);
+    label.textContent = group.name;
 
     row.append(marker, label);
 
@@ -239,7 +235,7 @@ export function makeRows(deps: RowsDeps): RowsAPI {
         : g.state === "done"
           ? "[x] "
           : "";
-    label?.setAttribute("value", statePrefix + g.name);
+    if (label) label.textContent = statePrefix + g.name;
 
     row.toggleAttribute(
       "pfx-collapsed",

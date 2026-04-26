@@ -197,6 +197,45 @@
 /* #endregion sidebar-main */
 
 
+/* #region sidebar — Firefox's secondary sidebar (history / bookmarks panel)
+ *
+ * Firefox sets inline `margin-top: 4px; margin-right: 10px;` on the
+ * <browser id="sidebar"> element. In HORIZONTAL tabs mode we override
+ * those to match palefox's inset rhythm — 1px top + sidebar-inset on
+ * the OUTSIDE edge (whichever edge is the chrome boundary based on
+ * sidebar.position_start). In VERTICAL tabs mode the secondary sidebar
+ * gets a top padding on its wrapping box (#sidebar-box) instead, so
+ * content sits flush with palefox's nav-bar rhythm. */
+
+@media not -moz-pref("sidebar.verticalTabs") {
+  #sidebar {
+    margin-top: 1px !important;
+  }
+
+  @media -moz-pref("sidebar.position_start") {
+    #sidebar {
+      margin-left: var(--pfx-sidebar-inset) !important;
+      margin-right: 0 !important;
+    }
+  }
+
+  @media not -moz-pref("sidebar.position_start") {
+    #sidebar {
+      margin-right: var(--pfx-sidebar-inset) !important;
+      margin-left: 0 !important;
+    }
+  }
+}
+
+@media -moz-pref("sidebar.verticalTabs") {
+  #sidebar-box {
+    padding-top: 8px !important;
+  }
+}
+
+/* #endregion sidebar */
+
+
 /* #region navigator-toolbox — buttons row */
 
 #navigator-toolbox {
@@ -275,7 +314,10 @@
 #pfx-urlbar-toolbar {
   flex: none !important;
   overflow: hidden !important;
-  margin: var(--pfx-sidebar-inset) 0 !important;
+  /* Y-margin owns the urlbar↔first-tab gap so it stays constant whether
+   * the pinned container is rendered or hidden. X-inset lives on the
+   * urlbar element itself (see `#pfx-urlbar-toolbar #urlbar` rules below). */
+  margin: 12px 0 !important;
 }
 
 #pfx-urlbar-toolbar #urlbar-container {

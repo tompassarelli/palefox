@@ -127,6 +127,22 @@
     return { destroy };
   }
 
+  // src/drawer/timing.ts
+  var FALLBACK_TRANSITION_MS = 250;
+  function transitionDurationMs() {
+    try {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue("--pfx-transition-duration").trim();
+      const ms = raw.endsWith("ms") ? parseFloat(raw) : raw.endsWith("s") ? parseFloat(raw) * 1000 : NaN;
+      return Number.isFinite(ms) && ms > 0 ? ms : FALLBACK_TRANSITION_MS;
+    } catch {
+      return FALLBACK_TRANSITION_MS;
+    }
+  }
+  var COLLAPSE_PROTECTION_MARGIN_MS = 30;
+  function collapseProtectionDurationMs() {
+    return transitionDurationMs() + COLLAPSE_PROTECTION_MARGIN_MS;
+  }
+
   // src/drawer/compact.ts
   function makeCompact(deps) {
     const { sidebarMain, navigatorToolbox, urlbar } = deps;
@@ -135,7 +151,6 @@
     const KEEP_HOVER_DURATION = 150;
     const OFFSCREEN_SHOW_DURATION = 1000;
     const FLASH_DURATION = 800;
-    const COLLAPSE_PROTECTION_DURATION = 280;
     function hoverHackDelay() {
       return Services.prefs.getIntPref("pfx.compact.hoverHackDelay", 0);
     }
@@ -155,11 +170,13 @@
     let flashTimer = null;
     let urlbarCompactObserver = null;
     let _collapseProtectedUntil = 0;
+    let _setHoverRetryTimer = null;
     let hideWatchdogTimer = null;
     let hoverStripTop = null;
     let _hzFlashTimer = null;
     let urlbarCompactObserverHz = null;
     let _collapseProtectedHzUntil = 0;
+    let _setToolboxHoverRetryTimer = null;
     let hideWatchdogTimerHz = null;
     let _ignoreNextHover = false;
     let _openPopups = 0;
@@ -217,14 +234,29 @@
         const collapseRemaining = _collapseProtectedUntil - Date.now();
         if (collapseRemaining > 0) {
           dbg("setHover:revealDropped", { collapseRemaining });
+          if (_setHoverRetryTimer !== null)
+            clearTimeout(_setHoverRetryTimer);
+          _setHoverRetryTimer = setTimeout(() => {
+            _setHoverRetryTimer = null;
+            if (sidebarMain.hasAttribute("pfx-has-hover"))
+              return;
+            const stillWanted = flashTimer !== null || sidebarMain.matches(":hover") || (hoverStrip?.matches(":hover") ?? false);
+            dbg("setHover:retry-after-collapse-protect", { stillWanted });
+            if (stillWanted)
+              setHover(true);
+          }, collapseRemaining + 16);
           return;
         }
         sidebarMain.setAttribute("pfx-has-hover", "true");
+        if (_setHoverRetryTimer !== null) {
+          clearTimeout(_setHoverRetryTimer);
+          _setHoverRetryTimer = null;
+        }
         return;
       }
       if (sidebarMain.hasAttribute("pfx-has-hover")) {
         sidebarMain.removeAttribute("pfx-has-hover");
-        _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+        _collapseProtectedUntil = Date.now() + collapseProtectionDurationMs();
       }
     }
     function flashSidebar(duration) {
@@ -310,16 +342,32 @@
         return;
       }
       if (value) {
-        if (Date.now() < _collapseProtectedHzUntil) {
+        const collapseRemaining = _collapseProtectedHzUntil - Date.now();
+        if (collapseRemaining > 0) {
           dbg("setToolboxHover:revealDropped");
+          if (_setToolboxHoverRetryTimer !== null)
+            clearTimeout(_setToolboxHoverRetryTimer);
+          _setToolboxHoverRetryTimer = setTimeout(() => {
+            _setToolboxHoverRetryTimer = null;
+            if (navigatorToolbox.hasAttribute("pfx-has-hover"))
+              return;
+            const stillWanted = _hzFlashTimer !== null || navigatorToolbox.matches(":hover") || (hoverStripTop?.matches(":hover") ?? false);
+            dbg("setToolboxHover:retry-after-collapse-protect", { stillWanted });
+            if (stillWanted)
+              setToolboxHover(true);
+          }, collapseRemaining + 16);
           return;
         }
         navigatorToolbox.setAttribute("pfx-has-hover", "true");
+        if (_setToolboxHoverRetryTimer !== null) {
+          clearTimeout(_setToolboxHoverRetryTimer);
+          _setToolboxHoverRetryTimer = null;
+        }
         return;
       }
       if (navigatorToolbox.hasAttribute("pfx-has-hover")) {
         navigatorToolbox.removeAttribute("pfx-has-hover");
-        _collapseProtectedHzUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+        _collapseProtectedHzUntil = Date.now() + collapseProtectionDurationMs();
       }
     }
     function flashToolbox(duration) {
@@ -402,9 +450,17 @@
       const target = event.target;
       const targetId = target.id || target.localName;
       dbg("onSidebarEnter:entry", { targetId, _ignoreNextHover, flashPending: flashTimer !== null });
+      if (_collapseProtectedUntil > Date.now()) {
+        dbg("onSidebarEnter:cancel-collapse-protection-sync", {
+          remainingMs: _collapseProtectedUntil - Date.now(),
+          targetId
+        });
+        _collapseProtectedUntil = 0;
+      }
       setTimeout(() => {
         if (!target.matches(":hover")) {
           dbg("onSidebarEnter:abort", { reason: "not-hovered-after-tick", targetId });
+          reconcileCompactState("sidebar-enter-not-hovered");
           return;
         }
         if (target.closest("panel")) {
@@ -412,12 +468,6 @@
           return;
         }
         clearFlash();
-        if (_collapseProtectedUntil > Date.now()) {
-          dbg("onSidebarEnter:cancel-collapse-protection", {
-            remainingMs: _collapseProtectedUntil - Date.now()
-          });
-          _collapseProtectedUntil = 0;
-        }
         requestAnimationFrame(() => {
           if (_ignoreNextHover) {
             dbg("onSidebarEnter:abort", { reason: "ignore-next-hover-rAF", targetId });
@@ -472,15 +522,17 @@
     }
     function onToolboxEnter(event) {
       const target = event.target;
+      if (_collapseProtectedHzUntil > Date.now()) {
+        _collapseProtectedHzUntil = 0;
+      }
       setTimeout(() => {
-        if (!target.matches(":hover"))
+        if (!target.matches(":hover")) {
+          reconcileCompactStateHorizontal("toolbox-enter-not-hovered");
           return;
+        }
         if (target.closest("panel"))
           return;
         clearFlashToolbox();
-        if (_collapseProtectedHzUntil > Date.now()) {
-          _collapseProtectedHzUntil = 0;
-        }
         requestAnimationFrame(() => {
           if (_ignoreNextHover)
             return;
@@ -545,7 +597,7 @@
               if (sidebarMain.hasAttribute("pfx-has-hover")) {
                 sidebarMain.removeAttribute("pfx-has-hover");
               }
-              _collapseProtectedUntil = Date.now() + COLLAPSE_PROTECTION_DURATION;
+              _collapseProtectedUntil = Date.now() + collapseProtectionDurationMs();
             }
           }
         });
@@ -802,6 +854,10 @@
       cancelHideWatchdogHz();
       clearFlash();
       clearFlashToolbox();
+      if (_setHoverRetryTimer !== null)
+        clearTimeout(_setHoverRetryTimer);
+      if (_setToolboxHoverRetryTimer !== null)
+        clearTimeout(_setToolboxHoverRetryTimer);
     }
     return {
       toggle: compactToggle,
