@@ -522,7 +522,9 @@ export function makeVim(deps: VimDeps): VimAPI {
   //
   // The keymap (per the user's vimium-replacement plan):
   //
-  //   t           open spotlight tabs picker
+  //   t           open tabs picker for THIS chrome window
+  //   T           open tabs picker for ALL chrome windows (shift = broader scope —
+  //               same convention as vim's b/B, Doom's SPC b b / SPC b B)
   //   :           open spotlight ex-input
   //   `           toggle to last selected tab
   //   o           floating urlbar, current-tab intent (drawer/urlbar.ts)
@@ -756,7 +758,16 @@ export function makeVim(deps: VimDeps): VimAPI {
             if (!keyEnabled("t")) break;
             e.preventDefault();
             e.stopImmediatePropagation();
-            openTabsPicker();
+            openTabsPicker("current");
+            return;
+          case "T":
+            // Vim/Doom convention: shift escalates scope.
+            // `t` = current window picker, `T` = every chrome window picker.
+            // Mirrors vim's b/B (word/WORD) and Doom's SPC b b / SPC b B.
+            if (!keyEnabled("T")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            openTabsPicker("all");
             return;
           case ":":
             if (!keyEnabled("colon")) break;

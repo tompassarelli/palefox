@@ -362,13 +362,29 @@ export function makePicker(deps: PickerDeps): PickerAPI {
   }
 
   function commit(): void {
+    // Capture before resetting state. We intentionally do NOT call
+    // deps.restoreFocus() here: the onSelect callback may move focus
+    // somewhere specific (e.g. another chrome window via window.focus(),
+    // which needs the user-gesture token still live). Calling
+    // state.panel.focus() first consumes that token and silently
+    // breaks cross-window activation on Enter — observed when picking
+    // a tab from a different window via `:tabs all` and pressing Enter:
+    // restoreFocus stole the gesture, the source-window focus() no-oped.
+    if (!active) return;
     const item = filtered[selectedIdx];
     const cb = onSelect;
-    dismiss();
+    active = false;
+    onSelect = null;
+    actions = [];
+    preserveTree = false;
+    if (pickerEl) pickerEl.hidden = true;
     if (item && cb) cb(item);
   }
 
   function dismiss(): void {
+    // Esc / click-outside path — user dismissed without committing.
+    // Restore focus to the caller's surface so they aren't stranded
+    // with focus on a now-hidden picker.
     if (!active) return;
     active = false;
     onSelect = null;

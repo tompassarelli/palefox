@@ -92,6 +92,38 @@ const tests: IntegrationTest[] = [
       if (!prompt.includes("tabs")) {
         throw new Error(`expected tabs picker prompt, got: ${prompt}`);
       }
+      // Sanity: current-window picker, prompt should NOT include "(all windows)".
+      if (prompt.includes("all windows")) {
+        throw new Error(`t opened all-windows picker; expected current-window. prompt: ${prompt}`);
+      }
+      await mn.executeScript(DISMISS_PICKER);
+    },
+  },
+
+  {
+    name: "global-keys: T opens the all-windows tabs picker",
+    async run(mn) {
+      await mn.executeScript(DISMISS_PICKER);
+      await mn.executeScript(DISMISS_EX_INPUT);
+      await mn.executeScript(`
+        if (document.activeElement && document.activeElement !== document.body) {
+          document.activeElement.blur && document.activeElement.blur();
+        }
+        return true;
+      `);
+
+      await mn.executeScript(pressGlobal("T"));
+      await waitFor(mn, `
+        const p = document.getElementById("pfx-picker");
+        return p && !p.hidden;
+      `, 3000);
+
+      const prompt = await mn.executeScript<string>(`
+        return document.querySelector("#pfx-picker .pfx-picker-prompt")?.getAttribute("value") || "";
+      `);
+      if (!prompt.includes("all windows")) {
+        throw new Error(`expected all-windows picker prompt, got: ${prompt}`);
+      }
       await mn.executeScript(DISMISS_PICKER);
     },
   },

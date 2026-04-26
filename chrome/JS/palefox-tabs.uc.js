@@ -2353,9 +2353,16 @@
       renderList();
     }
     function commit() {
+      if (!active)
+        return;
       const item = filtered[selectedIdx];
       const cb = onSelect;
-      dismiss();
+      active = false;
+      onSelect = null;
+      actions = [];
+      preserveTree = false;
+      if (pickerEl)
+        pickerEl.hidden = true;
       if (item && cb)
         cb(item);
     }
@@ -2973,7 +2980,14 @@
                 break;
               e.preventDefault();
               e.stopImmediatePropagation();
-              openTabsPicker();
+              openTabsPicker("current");
+              return;
+            case "T":
+              if (!keyEnabled("T"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              openTabsPicker("all");
               return;
             case ":":
               if (!keyEnabled("colon"))
