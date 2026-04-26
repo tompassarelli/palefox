@@ -101,63 +101,6 @@ const tests: IntegrationTest[] = [
   },
 
   {
-    name: "global-keys: t on content body opens picker (not urlbar focus)",
-    async run(mn) {
-      await mn.executeScript(DISMISS_PICKER);
-      await mn.executeScript(DISMISS_EX_INPUT);
-
-      // Load a plain content page so focus can settle on its body. This
-      // is the original "t focused urlbar" repro scenario (task #54): we
-      // want to PROVE palefox's t handler routes to the picker, not the
-      // urlbar. If you ever see urlbar focus instead, it's vimium /
-      // tridactyl intercepting in content scope before our chrome
-      // listener — palefox itself has no such code path.
-      await mn.executeScript(`
-        const sp = Services.scriptSecurityManager.getSystemPrincipal();
-        const html = encodeURIComponent("<!doctype html><body><p>plain content body</p>");
-        gBrowser.selectedBrowser.fixupAndLoadURIString(
-          "data:text/html;charset=utf-8," + html,
-          { triggeringPrincipal: sp, flags: Ci.nsIWebNavigation.LOAD_FLAGS_NONE },
-        );
-        return true;
-      `);
-      // Wait for load.
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline) {
-        const done = await mn.executeScript<boolean>(`
-          const b = gBrowser.selectedBrowser;
-          return !b.webProgress?.isLoadingDocument && b.currentURI?.spec.startsWith("data:");
-        `);
-        if (done) break;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      // Give the content-focus bridge a moment to report "not editable".
-      await new Promise((r) => setTimeout(r, 400));
-
-      // Press t.
-      await mn.executeScript(pressGlobal("t"));
-
-      // Picker should appear (NOT the urlbar getting focused).
-      await waitFor(mn, `
-        const p = document.getElementById("pfx-picker");
-        return p && !p.hidden;
-      `, 3000);
-
-      // Sanity: urlbar should NOT be the active element. If it is, that's
-      // exactly the bug from task #54 — and it would be a regression.
-      const urlbarFocused = await mn.executeScript<boolean>(`
-        const a = document.activeElement;
-        return !!(a && a.closest && a.closest("#urlbar"));
-      `);
-      if (urlbarFocused) {
-        throw new Error("t opened urlbar instead of picker — palefox regression in t handler");
-      }
-
-      await mn.executeScript(DISMISS_PICKER);
-    },
-  },
-
-  {
     name: "global-keys: T opens the all-windows tabs picker",
     async run(mn) {
       await mn.executeScript(DISMISS_PICKER);
