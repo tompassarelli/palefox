@@ -67,12 +67,14 @@ user_pref("toolkit.startup.max_resumed_crashes", -1);
 // Vertical tabs (palefox default-on territory)
 user_pref("sidebar.verticalTabs", true);
 user_pref("sidebar.revamp", true);
-// CRITICAL: load userChrome.css so palefox CSS rules actually apply
-// during tests. Without this pref, tests run against a profile where
-// palefox.css / palefox-tabs.css are NEVER loaded — every CSS-driven
-// behavior is silently un-tested. fx-autoconfig handles the .uc.js
-// files but not the stylesheet imports.
-user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+// Legacy stylesheets pref OFF — palefox CSS now loads via the hash-pinned
+// loader's chrome:// CSS registration, NOT through Firefox's direct
+// userChrome.css load. See docs/dev/loader-implementation.md for context.
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);
+// fx-autoconfig loader gate — required for the autoconfig bootstrap chain
+// to actually load palefox JS and CSS. Without this, IS_ENABLED is false
+// in boot.sys.mjs and neither scripts nor styles get registered.
+user_pref("userChromeJS.enabled", true);
 // Palefox debug logging on so failed runs leave a trail
 user_pref("pfx.debug", true);
 // Expose window.pfxTest for direct internal-state access in tests. Only

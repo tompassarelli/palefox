@@ -1,7 +1,9 @@
 # Installation
 
-> Palefox runs chrome-privileged JS and CSS in your browser. Review the
-> install scripts before piping them, and skim `chrome/JS/` once installed.
+> Palefox runs chrome-privileged JS and CSS in your browser via a
+> **hash-pinned loader** that refuses to execute any script or stylesheet
+> whose SHA-256 doesn't match the manifest baked in at install time. See
+> [docs/dev/sandbox-research.md](dev/sandbox-research.md) for context.
 
 The README's [Quick Install](../README.md#quick-install) covers the common
 case (latest tagged release). This guide covers everything else: targeting
@@ -15,19 +17,23 @@ directory and writes a few prefs to `user.js`:
 
 | File | Owner | On update |
 |------|-------|-----------|
-| `chrome/userChrome.css` | palefox | preserved if present |
-| `chrome/user.css` | **you** | preserved (your personal tweaks) |
-| `chrome/palefox.css` | palefox | overwritten |
-| `chrome/palefox-tabs.css` | palefox | overwritten |
-| `chrome/JS/palefox-*.uc.js` | palefox | overwritten |
-| `chrome/utils/*` | palefox | overwritten (fx-autoconfig loader) |
+| `chrome/CSS/palefox*.uc.css` | palefox | overwritten (hashed by loader) |
+| `chrome/JS/palefox-*.uc.js` | palefox | overwritten (hashed by loader) |
+| `chrome/utils/*` | palefox | overwritten (loader machinery, hashed) |
 
-Plus, in your Firefox application directory:
+Personal customization without rebuilding palefox is **not supported on
+this branch** — the bootstrap rejects unknown files in the watched
+directories. Drop your own scripts or styles by either: (a) checking out
+palefox source, adding your files, running `bun run build`, then
+`./install.sh`; or (b) using the [`css-legacy`](https://github.com/tompassarelli/palefox/tree/css-legacy)
+branch (CSS-only, no loader, no hash gate).
+
+Plus, in your Firefox application directory (requires sudo, root-owned):
 
 | File | Purpose |
 |------|---------|
-| `config.js` | fx-autoconfig bootstrap |
-| `defaults/pref/config-prefs.js` | required prefs to enable user JS |
+| `config.js` | palefox hash-pinned bootstrap (built from `program/config.template.js`) |
+| `defaults/pref/config-prefs.js` | autoconfig prefs that point Firefox at `config.js` |
 
 ## Version targeting
 

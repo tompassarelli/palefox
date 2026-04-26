@@ -241,6 +241,43 @@ const MANIFEST: readonly ManifestEntry[] = [
     expects: "FirefoxViewHandler.tab returns the singleton 'Firefox View' tab if open, or null. Used to exclude it from palefox tree.",
     failureMode: "Firefox View tab appears in palefox tree as a regular tab.",
   },
+
+  // --- rock-stable: hash-pinned bootstrap primitives -----------------------
+  // These XPCOM interfaces are used by program/config.template.js to verify
+  // SHA-256 of every chrome/{utils,JS,CSS}/ file at startup. They've been
+  // stable since Firefox 1.x and are unlikely to move, but the bootstrap is
+  // load-bearing for our security model — track them here so any future
+  // upstream rename surfaces immediately.
+  {
+    name: "nsICryptoHash",
+    stability: "rock",
+    sourcePath: "security/manager/ssl/nsICryptoHash.idl",
+    symbols: ["init", "updateFromStream", "finish", "SHA256"],
+    palefoxOwner: "program/config.template.js (hash-pinned bootstrap)",
+    tests: [],
+    expects: "Synchronous SHA-256 of an nsIInputStream; finish(true) returns base64.",
+    failureMode: "Bootstrap throws on every file → palefox refuses to load entirely.",
+  },
+  {
+    name: "nsIFileInputStream",
+    stability: "rock",
+    sourcePath: "netwerk/base/nsIFileInputStream.idl",
+    symbols: ["init"],
+    palefoxOwner: "program/config.template.js",
+    tests: [],
+    expects: "Sync read from nsIFile via @mozilla.org/network/file-input-stream;1.",
+    failureMode: "Bootstrap can't read chrome/ files → palefox refuses to load.",
+  },
+  {
+    name: "nsIComponentRegistrar.autoRegister",
+    stability: "rock",
+    sourcePath: "xpcom/components/nsIComponentRegistrar.idl",
+    symbols: ["autoRegister"],
+    palefoxOwner: "program/config.template.js, chrome/utils/boot.sys.mjs (chained)",
+    tests: [],
+    expects: "Registers a chrome.manifest from a profile-relative nsIFile path.",
+    failureMode: "chrome:// URIs don't resolve → fx-autoconfig loader can't find boot.sys.mjs → palefox doesn't load.",
+  },
 ];
 
 // =============================================================================

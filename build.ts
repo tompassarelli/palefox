@@ -41,3 +41,7 @@ async function buildOne(entry: Entry): Promise<boolean> {
 await mkdir(OUT_DIR, { recursive: true });
 const results = await Promise.all(entries.map(buildOne));
 if (results.some(ok => !ok)) process.exit(1);
+
+// Generate the hash-pinned bootstrap (program/config.generated.js) AFTER the
+// .uc.js files are built — its hashes have to match the just-emitted output.
+await import("./tools/generate-bootstrap.ts");

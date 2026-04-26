@@ -1,11 +1,11 @@
-/* palefox-tabs.css — styles for the palefox tab panel
- *
- * This file is overwritten on update.
- * Put your customizations in user.css instead.
- *
- * Loaded via @import in userChrome.css.
- * The DOM these target is built by palefox-tabs.uc.js.
- */
+/* ==UserScript==
+// @name           palefox-tabs
+// @description    Sidebar tab panel styles
+// @include        main
+// ==/UserScript== */
+
+/* Tab-panel styles. Loaded by palefox loader; targets DOM built by
+ * palefox-tabs.uc.js. Overwritten on update — do not edit. */
 
 
 /* #region sidebar containers */

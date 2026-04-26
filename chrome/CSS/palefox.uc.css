@@ -1,17 +1,16 @@
-/* palefox.css — core theme + entry point for sub-files
- *
- * This file is overwritten on update.
- * Put your customizations in user.css instead.
- *
- * Requires: palefox-drawer.uc.js (DOM restructuring)
- * Target: Firefox with native vertical tabs enabled
- *
- * Sub-files load via @import below — userChrome.css only ever needs
- * to point at this single entry, so adding more palefox-*.css files
- * doesn't require touching the user-facing entry point. */
+/* ==UserScript==
+// @name           palefox-core
+// @description    Core palefox theme: palette, nav-bar, urlbar, sidebar-main
+// @include        main
+// ==/UserScript== */
 
-@import url("palefox-tabs.css");
-@import url("palefox-which-key.css");
+/* Core theme. This file is loaded into the chrome window by the palefox
+ * loader (hash-pinned variant of fx-autoconfig) and is overwritten on
+ * update — do not edit. Companion sheets palefox-tabs.uc.css and
+ * palefox-which-key.uc.css load independently from the same directory.
+ *
+ * Requires: palefox-drawer.uc.js (DOM restructuring).
+ * Target:   Firefox with native vertical tabs enabled. */
 
 
 /* #region palette

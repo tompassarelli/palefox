@@ -1,10 +1,13 @@
-/* palefox-which-key.css — leader-mode discoverability panel
- *
- * Shown when the user presses the leader key (default Space). Lists the
- * available bindings so leader-mode is self-documenting. Auto-hides on
- * binding dispatch / Esc / leader-double-press / timeout.
- *
- * Element is created on demand by src/tabs/vim.ts and reused. */
+/* ==UserScript==
+// @name           palefox-which-key
+// @description    Leader-mode discoverability panel
+// @include        main
+// ==/UserScript== */
+
+/* Shown when the user presses the leader key (default Space). Lists
+ * the available bindings so leader-mode is self-documenting. Auto-hides
+ * on dispatch / Esc / double-leader / timeout. Element created on demand
+ * by src/tabs/vim.ts and reused. */
 
 #pfx-which-key {
   position: fixed !important;

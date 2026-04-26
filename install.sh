@@ -236,37 +236,41 @@ echo "Installing palefox..."
 mkdir -p "$chrome_dir"
 mkdir -p "$chrome_dir/utils"
 mkdir -p "$chrome_dir/JS"
+mkdir -p "$chrome_dir/CSS"
 
-# Core files — always overwrite
-for file in palefox.css palefox-tabs.css; do
-    if [ -f "$extracted/$file" ]; then
-        cp "$extracted/$file" "$chrome_dir/$file"
+# Migration: previous palefox versions wrote palefox*.css and userChrome.css
+# at chrome/ root. The hash-pinned loader scans chrome/CSS/ instead, so
+# those files now sit unloaded — clean them up to avoid confusion.
+for stale in palefox.css palefox-tabs.css palefox-which-key.css palefox-legacy.css userChrome.css user.css; do
+    if [ -f "$chrome_dir/$stale" ]; then
+        rm -f "$chrome_dir/$stale"
     fi
 done
 
-# fx-autoconfig loader — always overwrite
+# fx-autoconfig loader — always overwrite. Files here are HASHED by the
+# bootstrap, so they must match exactly what palefox shipped.
 if [ -d "$extracted/utils" ]; then
+    rm -f "$chrome_dir/utils/"*
     cp "$extracted/utils/"* "$chrome_dir/utils/"
 fi
 
-# JS scripts — always overwrite (managed by palefox)
+# JS scripts — always overwrite (hashed by bootstrap; managed by palefox).
 if [ -d "$extracted/JS" ]; then
+    rm -f "$chrome_dir/JS/"*
     for file in "$extracted/JS/"*; do
         [ -f "$file" ] || continue
         cp "$file" "$chrome_dir/JS/"
     done
 fi
 
-# User files — preserve if present, create if missing
-for file in userChrome.css user.css; do
-    if [ -f "$extracted/$file" ]; then
-        if [ ! -f "$chrome_dir/$file" ] || [ "$FORCE" = true ]; then
-            cp "$extracted/$file" "$chrome_dir/$file"
-        else
-            echo "Preserved: $file"
-        fi
-    fi
-done
+# CSS files — always overwrite (hashed by bootstrap; managed by palefox).
+if [ -d "$extracted/CSS" ]; then
+    rm -f "$chrome_dir/CSS/"*
+    for file in "$extracted/CSS/"*; do
+        [ -f "$file" ] || continue
+        cp "$file" "$chrome_dir/CSS/"
+    done
+fi
 
 # Install fx-autoconfig to Firefox application directory
 if [ -n "${PALEFOX_LOCAL:-}" ]; then
@@ -299,22 +303,39 @@ if [ -d "$program_source" ]; then
             ;;
     esac
 
+    # The HASH-PINNED bootstrap is at config.generated.js (built by
+    # `bun run build` from program/config.template.js with chrome/ file
+    # hashes baked in). It refuses to load any chrome JS or CSS whose
+    # hash doesn't match the manifest baked into this file at build time.
+    # See docs/dev/sandbox-research.md for the threat-model rationale.
+    bootstrap_src="$program_source/config.generated.js"
+    if [ ! -f "$bootstrap_src" ]; then
+        # Fallback for tarball installs that include the generated file.
+        bootstrap_src="$program_source/config.js"
+    fi
+    if [ ! -f "$bootstrap_src" ]; then
+        echo "Error: bootstrap not found at $bootstrap_src."
+        echo "If installing from source, run \`bun run build\` first."
+        exit 1
+    fi
+
     if [ -n "${app_dir:-}" ] && [ -d "$app_dir" ]; then
-        echo "Installing fx-autoconfig loader to $app_dir..."
+        echo "Installing palefox hash-pinned loader to $app_dir..."
         if [ -w "$app_dir" ]; then
-            cp "$program_source/config.js" "$app_dir/config.js"
+            cp "$bootstrap_src" "$app_dir/config.js"
             mkdir -p "$app_dir/defaults/pref"
             cp "$program_source/defaults/pref/config-prefs.js" "$app_dir/defaults/pref/config-prefs.js"
         else
             echo "Elevated privileges required to install loader to $app_dir"
-            sudo cp "$program_source/config.js" "$app_dir/config.js"
+            sudo cp "$bootstrap_src" "$app_dir/config.js"
             sudo mkdir -p "$app_dir/defaults/pref"
             sudo cp "$program_source/defaults/pref/config-prefs.js" "$app_dir/defaults/pref/config-prefs.js"
         fi
     else
         echo "Warning: Could not locate $BROWSER_NAME install directory."
-        echo "Manually copy program/config.js and program/defaults/pref/config-prefs.js"
-        echo "to your $BROWSER_NAME application directory for JavaScript support."
+        echo "Manually copy program/config.generated.js → <install-root>/config.js"
+        echo "and program/defaults/pref/config-prefs.js → <install-root>/defaults/pref/"
+        echo "for JavaScript support."
     fi
 fi
 
@@ -338,7 +359,32 @@ set_pref() {
     fi
 }
 
-set_pref "toolkit.legacyUserProfileCustomizations.stylesheets" "true"
+# Force-overwrite a pref. set_pref() preserves existing values, which is
+# correct for user-customizable prefs but wrong for prefs whose value
+# changed across palefox versions (e.g. legacy stylesheets flipping
+# true → false when the loader stopped depending on it).
+force_set_pref() {
+    local key="$1" value="$2"
+    local pref="user_pref(\"$key\", $value);"
+    if [ -f "$user_js" ] && grep -q "\"$key\"" "$user_js"; then
+        # Strip the existing line; we'll re-append below.
+        local tmp="${user_js}.tmp.$$"
+        grep -v "\"$key\"" "$user_js" > "$tmp"
+        mv "$tmp" "$user_js"
+    fi
+    echo "Setting $key in user.js"
+    echo "$pref" >> "$user_js"
+}
+
+# Legacy stylesheets pref OFF — palefox CSS now loads via the hash-pinned
+# loader's chrome:// CSS registration, NOT via Firefox's userChrome.css
+# direct-load path. Leaving the pref true would leave the (unhashed) old
+# userChrome.css path open as an attack surface. force_set_pref overrides
+# any pre-existing `true` from older palefox installs.
+force_set_pref "toolkit.legacyUserProfileCustomizations.stylesheets" "false"
+# fx-autoconfig loader gate — required for the autoconfig bootstrap chain
+# to actually load palefox JS and CSS.
+force_set_pref "userChromeJS.enabled" "true"
 set_pref "sidebar.verticalTabs" "true"
 set_pref "sidebar.revamp" "true"
 set_pref "sidebar.position_start" "true"

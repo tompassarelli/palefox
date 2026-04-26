@@ -6,27 +6,6 @@ let
   cfg = config.programs.palefox;
 
   chromeDir = ".mozilla/firefox/${cfg.profile}/chrome";
-
-  userChromeContent = lib.concatStringsSep "\n" (
-    [ ''/* palefox — entry point (managed by Home Manager)''
-      '' *''
-      '' * Toggle features in about:config (type "palefox." to see all options):''
-      '' *   pfx.drawer.autohide — auto-collapse sidebar when mouse leaves''
-      '' *''
-      '' * To customize: set programs.palefox.extraConfig in your nix config,''
-      '' * or edit user.css directly.''
-      '' */''
-      ""
-      ''@import url("palefox.css");''
-    ]
-    ++ map (imp: ''@import url("${imp}");'') cfg.userChromeImports
-    ++ [ ''@import url("user.css");'' ]
-  );
-
-  userCssContent = ''
-    /* user overrides — managed by Home Manager (programs.palefox.extraConfig) */
-    ${cfg.extraConfig}
-  '';
 in
 {
   options.programs.palefox = {
@@ -42,9 +21,14 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Enable fx-autoconfig JavaScript loader. Deploys profile-side files
-        automatically. The install-dir files (config.js, config-prefs.js)
-        must be set up separately — see docs/install.md for NixOS instructions.
+        Enable the palefox hash-pinned JavaScript + CSS loader. Deploys
+        profile-side files (chrome/utils/, chrome/JS/, chrome/CSS/) automatically.
+        The install-dir bootstrap (program/config.generated.js + config-prefs.js)
+        must be set up separately at the NixOS level — see docs/install.md for
+        the system-config snippet. The bootstrap refuses to load any chrome
+        JS/CSS whose SHA-256 doesn't match the manifest baked in at palefox
+        build time, closing the local-write attack vector that vanilla
+        fx-autoconfig leaves open.
       '';
     };
 
@@ -65,18 +49,6 @@ in
       default = true;
       description = "Install the Sideberry extension via NUR. Requires NUR in your flake inputs.";
     };
-
-    extraConfig = lib.mkOption {
-      type = lib.types.lines;
-      default = "";
-      description = "Extra CSS appended to user.css.";
-    };
-
-    userChromeImports = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [];
-      description = "Additional @import URLs for userChrome.css.";
-    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -84,7 +56,15 @@ in
       enable = true;
       profiles.${cfg.profile} = {
         settings = {
-          "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
+          # Legacy stylesheets pref OFF — palefox CSS loads via the
+          # hash-pinned loader's chrome:// CSS registration, NOT through
+          # Firefox's direct userChrome.css load. Keeping it true would
+          # leave the (unhashed) userChrome.css path open as an attack
+          # surface for local-mode malware.
+          "toolkit.legacyUserProfileCustomizations.stylesheets" = false;
+          # fx-autoconfig loader gate — required for the autoconfig
+          # bootstrap chain to actually load palefox JS and CSS.
+          "userChromeJS.enabled" = true;
           "sidebar.verticalTabs" = false;
           "sidebar.revamp" = false;
           "sidebar.position_start" = true;
@@ -99,26 +79,26 @@ in
       };
     };
 
-    home.file."${chromeDir}/palefox.css" = {
-      source = "${flakeSelf}/chrome/palefox.css";
+    # CSS — every file under chrome/CSS/ is hashed by the bootstrap, so
+    # the deployed files must match the source tree exactly. Use `recursive`
+    # so future palefox-*.uc.css additions land here without module edits.
+    home.file."${chromeDir}/CSS" = {
+      source = "${flakeSelf}/chrome/CSS";
+      recursive = true;
     };
 
-    home.file."${chromeDir}/userChrome.css" = {
-      text = userChromeContent;
-    };
-
-    home.file."${chromeDir}/user.css" = {
-      text = userCssContent;
-    };
-
-    # fx-autoconfig loader (profile side)
+    # fx-autoconfig loader (profile side) — only deployed when jsLoader is
+    # set, since the matching install-root bootstrap also has to be set up.
     home.file."${chromeDir}/utils" = lib.mkIf cfg.jsLoader {
       source = "${flakeSelf}/chrome/utils";
       recursive = true;
     };
 
-    home.file."${chromeDir}/JS/.gitkeep" = lib.mkIf cfg.jsLoader {
-      text = "";
+    # Built JS scripts — depend on `bun run build` having been run inside
+    # the flake source tree. Same hash-matching constraint as CSS.
+    home.file."${chromeDir}/JS" = lib.mkIf cfg.jsLoader {
+      source = "${flakeSelf}/chrome/JS";
+      recursive = true;
     };
   };
 }
