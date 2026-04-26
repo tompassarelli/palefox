@@ -246,6 +246,56 @@ const tests: IntegrationTest[] = [
   },
 
   {
+    name: "platform: Palefox.tabs.activate(id, windowId) raises target window + selects tab",
+    async run(mn) {
+      const handlesBefore = await mn.getWindowHandles();
+      const handleBefore = await mn.getWindowHandle();
+
+      // Open second chrome window.
+      await mn.executeScript(`OpenBrowserWindow(); return true;`);
+      const deadline = Date.now() + 10_000;
+      let handlesAfter = handlesBefore;
+      while (Date.now() < deadline && handlesAfter.length === handlesBefore.length) {
+        handlesAfter = await mn.getWindowHandles();
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const newHandle = handlesAfter.find((h) => !handlesBefore.includes(h))!;
+      await mn.switchToWindow(newHandle);
+      // Wait for palefox init in window B.
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Add a distinguishable tab to window B.
+      await mn.executeScript(`
+        const sp = Services.scriptSecurityManager.getSystemPrincipal();
+        gBrowser.addTab("about:blank", { triggeringPrincipal: sp });
+        return true;
+      `);
+      // Capture window B's tabs from window B's perspective.
+      const bSnap = await mn.executeScript<{ windowId: string; firstTabId: number | null }>(`
+        const Palefox = window.pfxTest.Palefox;
+        const win = Palefox.windows.current();
+        const tabs = win.tabs.list();
+        return {
+          windowId: win.windowId,
+          firstTabId: tabs.length ? tabs[0].id : null,
+        };
+      `);
+
+      // Switch back to window A. Activate window B's first tab from A.
+      await mn.switchToWindow(handleBefore);
+      const activated = await mn.executeScript<boolean>(`
+        return window.pfxTest.Palefox.tabs.activate(${bSnap.firstTabId}, ${JSON.stringify(bSnap.windowId)});
+      `);
+      if (!activated) throw new Error("Palefox.tabs.activate returned false");
+
+      // Cleanup: close window B.
+      await mn.switchToWindow(newHandle);
+      try { await mn.closeWindow(); } catch {}
+      await mn.switchToWindow(handleBefore);
+    },
+  },
+
+  {
     name: "platform: Palefox.tabs.all() in single-window mode equals current window's list",
     async run(mn) {
       // Drop us back to a single chrome window. Close any extras.

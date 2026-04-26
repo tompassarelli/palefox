@@ -544,10 +544,56 @@ export function makeVim(deps: VimDeps): VimAPI {
   let lastTab: Tab | null = null;
   let currentSelectedTab: Tab | null = null;
 
-  /** Build picker items from the live tab tree. Used by :tabs and the
-   *  global `t` shortcut. Tree-preserving — depth + parentId set so the
-   *  picker filter shows ancestors as context. */
-  function openTabsPicker(): void {
+  /** Build picker items from the live tab tree.
+   *
+   *  scope === "current" (default): tabs from THIS chrome window only,
+   *    tree-preserving (depth + parentId set so the picker filter shows
+   *    ancestors as context).
+   *
+   *  scope === "all": tabs from EVERY chrome window in this Firefox
+   *    process via Palefox.tabs.all(). Flat list (no tree preservation —
+   *    parent-id walks would cross window boundaries weirdly). Each row's
+   *    secondary line carries window context. Selecting a row from a
+   *    different window switches windows + selects the tab via
+   *    Palefox.tabs.activate(id, windowId). */
+  function openTabsPicker(scope: "current" | "all" = "current"): void {
+    const Palefox = (window as unknown as { Palefox?: import("../platform/index.ts").PalefoxAPI }).Palefox;
+
+    if (scope === "all" && Palefox) {
+      const all = Palefox.tabs.all();
+      if (!all.length) {
+        modelineMsg("No tabs", 3000);
+        return;
+      }
+      // Build a friendly Window N label per windowId in enumeration order.
+      const windowLabels = new Map<string, string>();
+      for (const t of all) {
+        if (!windowLabels.has(t.windowId)) {
+          windowLabels.set(t.windowId, `Window ${windowLabels.size + 1}`);
+        }
+      }
+      const items: PickerItem[] = all.map((t) => {
+        const wLabel = windowLabels.get(t.windowId) ?? "Window ?";
+        const host = (() => { try { return new URL(t.url).hostname; } catch { return ""; } })();
+        return {
+          display: t.customName || t.label || "(untitled)",
+          secondary: host ? `${host}  ·  ${wLabel}` : wLabel,
+          data: { id: t.id, windowId: t.windowId },
+        };
+      });
+      picker.show({
+        prompt: `tabs (all windows) ›`,
+        items,
+        preserveTree: false,
+        onSelect: (item) => {
+          const d = item.data as { id: number; windowId: string };
+          try { Palefox.tabs.activate(d.id, d.windowId); } catch {}
+        },
+      });
+      return;
+    }
+
+    // scope === "current": existing tree-preserving picker.
     const items: PickerItem[] = [];
     for (const tab of gBrowser.tabs as Iterable<Tab>) {
       const td = treeOf.get(tab);
@@ -1308,9 +1354,14 @@ export function makeVim(deps: VimDeps): VimAPI {
         })();
         break;
       }
-      case "tabs":
-        openTabsPicker();
+      case "tabs": {
+        // `:tabs`         — current window
+        // `:tabs all`     — all chrome windows (Palefox.tabs.all() aggregator)
+        const sub = (args[1] || "").toLowerCase();
+        const scope = (sub === "all" || sub === "*") ? "all" : "current";
+        openTabsPicker(scope as "current" | "all");
         break;
+      }
       case "blacklist":
       case "bl": {
         // :blacklist                 — add current site to blacklist

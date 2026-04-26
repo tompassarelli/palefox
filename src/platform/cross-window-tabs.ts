@@ -27,12 +27,17 @@ export type CrossWindowTabsAPI = {
    *  carries its `windowId` so callers (e.g. picker) can show window
    *  context. */
   all(): readonly CrossWindowTab[];
+  /** Activate a specific tab by palefox id + the windowId it lives on.
+   *  Raises the source chrome window AND selects the tab. Returns true
+   *  on success, false if the window or tab can't be found (e.g. window
+   *  closed between picker open and select). */
+  activate(palefoxId: number, windowId: string): boolean;
 };
 
 // Shape we expect each chrome window's `window.Palefox` to expose.
 // Avoids a cyclic import on `PalefoxAPI`.
 type WindowPalefox = {
-  windows: { current(): { windowId: string; tabs: { list(): readonly PalefoxTab[] } } };
+  windows: { current(): { windowId: string; tabs: { list(): readonly PalefoxTab[]; activate(ref: number): boolean } } };
 };
 
 // =============================================================================
@@ -58,6 +63,26 @@ export function makeCrossWindowTabs(): CrossWindowTabsAPI {
         console.error("[Palefox.tabs.all] enumerate failed", e);
       }
       return out;
+    },
+
+    activate(palefoxId, windowId) {
+      try {
+        const e = Services.wm.getEnumerator("navigator:browser");
+        while (e.hasMoreElements()) {
+          const w = e.getNext() as Window & { Palefox?: WindowPalefox };
+          const p = w.Palefox;
+          if (!p) continue;
+          const win = p.windows.current();
+          if (win.windowId !== windowId) continue;
+          // Source window found. Its activate() does the select + focus
+          // dance — running the call THERE means `window.focus()` inside
+          // it raises the right chrome window.
+          return win.tabs.activate(palefoxId);
+        }
+      } catch (e) {
+        console.error("[Palefox.tabs.activate] failed", e);
+      }
+      return false;
     },
   };
 }

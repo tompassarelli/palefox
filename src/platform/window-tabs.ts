@@ -53,6 +53,11 @@ export type WindowTabsAPI = {
   duplicate(ref: TabRef): PalefoxTab | null;
   reload(ref: TabRef): void;
   select(ref: TabRef): void;
+  /** Select the tab AND focus this chrome window. Used by the cross-window
+   *  picker — when the user picks a tab from a different window, that
+   *  window's `tabs.activate(id)` runs, which raises the window AND selects
+   *  the tab in one call. Returns false if the ref is unknown. */
+  activate(ref: TabRef): boolean;
   /** Open a new tab loading `url`. Returns the new PalefoxTab if available
    *  in the synchronous tick (otherwise null — caller can flush() then list()). */
   open(url: string): PalefoxTab | null;
@@ -144,6 +149,19 @@ export function makeWindowTabs(scheduler: SchedulerAPI): WindowTabsAPI {
     },
     reload: (r) => withTab(r, adapter.reloadTab, "Palefox.tabs.reload"),
     select: (r) => withTab(r, (t) => { (state as { panel?: HTMLElement }); adapter.selectTab(t); }, "Palefox.tabs.select"),
+    activate(r) {
+      const t = resolveTab(r);
+      if (!t) {
+        log("activate:not-found");
+        return false;
+      }
+      adapter.selectTab(t);
+      // Raise this chrome window. When called via Palefox.tabs.activate
+      // from a DIFFERENT chrome window, this is what brings us forward.
+      try { window.focus(); } catch {}
+      scheduler.markDirty("tabs", "Palefox.tabs.activate");
+      return true;
+    },
     open(url) {
       const t = adapter.openTab(url);
       scheduler.markDirty("tabs", "Palefox.tabs.open");

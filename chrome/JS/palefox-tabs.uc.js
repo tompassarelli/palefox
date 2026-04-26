@@ -2772,7 +2772,48 @@
     }
     let lastTab = null;
     let currentSelectedTab = null;
-    function openTabsPicker() {
+    function openTabsPicker(scope = "current") {
+      const Palefox = window.Palefox;
+      if (scope === "all" && Palefox) {
+        const all = Palefox.tabs.all();
+        if (!all.length) {
+          modelineMsg("No tabs", 3000);
+          return;
+        }
+        const windowLabels = new Map;
+        for (const t of all) {
+          if (!windowLabels.has(t.windowId)) {
+            windowLabels.set(t.windowId, `Window ${windowLabels.size + 1}`);
+          }
+        }
+        const items2 = all.map((t) => {
+          const wLabel = windowLabels.get(t.windowId) ?? "Window ?";
+          const host = (() => {
+            try {
+              return new URL(t.url).hostname;
+            } catch {
+              return "";
+            }
+          })();
+          return {
+            display: t.customName || t.label || "(untitled)",
+            secondary: host ? `${host}  ·  ${wLabel}` : wLabel,
+            data: { id: t.id, windowId: t.windowId }
+          };
+        });
+        picker.show({
+          prompt: `tabs (all windows) ›`,
+          items: items2,
+          preserveTree: false,
+          onSelect: (item) => {
+            const d = item.data;
+            try {
+              Palefox.tabs.activate(d.id, d.windowId);
+            } catch {}
+          }
+        });
+        return;
+      }
       const items = [];
       for (const tab of gBrowser.tabs) {
         const td = treeOf.get(tab);
@@ -3553,9 +3594,12 @@
           })();
           break;
         }
-        case "tabs":
-          openTabsPicker();
+        case "tabs": {
+          const sub = (args[1] || "").toLowerCase();
+          const scope = sub === "all" || sub === "*" ? "all" : "current";
+          openTabsPicker(scope);
           break;
+        }
         case "blacklist":
         case "bl": {
           const sub = (args[1] || "").toLowerCase();
@@ -4440,6 +4484,24 @@
           console.error("[Palefox.tabs.all] enumerate failed", e);
         }
         return out;
+      },
+      activate(palefoxId, windowId) {
+        try {
+          const e = Services.wm.getEnumerator("navigator:browser");
+          while (e.hasMoreElements()) {
+            const w = e.getNext();
+            const p = w.Palefox;
+            if (!p)
+              continue;
+            const win = p.windows.current();
+            if (win.windowId !== windowId)
+              continue;
+            return win.tabs.activate(palefoxId);
+          }
+        } catch (e) {
+          console.error("[Palefox.tabs.activate] failed", e);
+        }
+        return false;
       }
     };
   }
@@ -4763,6 +4825,19 @@
         state;
         selectTab(t);
       }, "Palefox.tabs.select"),
+      activate(r) {
+        const t = resolveTab(r);
+        if (!t) {
+          log8("activate:not-found");
+          return false;
+        }
+        selectTab(t);
+        try {
+          window.focus();
+        } catch {}
+        scheduler.markDirty("tabs", "Palefox.tabs.activate");
+        return true;
+      },
       open(url) {
         const t = openTab(url);
         scheduler.markDirty("tabs", "Palefox.tabs.open");

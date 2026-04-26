@@ -308,9 +308,22 @@ chrome window, verify tabs.all() count grows + ≥2 distinct windowIds),
 single-window equivalence (`tabs.all().length === current().tabs.list().length`
 + all results carry the current window's id).
 
-**Defers:** picker surface for `Palefox.tabs.all()` results — currently
-the data is available but `:tabs` only queries the current window. Wire
-the picker through next time the keymap is touched.
+### M12.2 — `:tabs all` ex-command   ✅
+
+Shipped. `:tabs all` (or `:tabs *`) opens a flat picker across every
+chrome window in this Firefox process. Each row's secondary line shows
+`hostname  ·  Window N`. Selecting a row from a different window calls
+`Palefox.tabs.activate(id, windowId)` which raises the source chrome
+window AND selects the tab — single user action gets you there.
+
+`Palefox.windows.current().tabs.activate(ref)` added to WindowTabsAPI:
+selects the tab + calls `window.focus()` on the chrome window. When
+called via the cross-window `Palefox.tabs.activate(id, windowId)`,
+running INSIDE the source window's bundle means the focus() call
+raises the right window without coordination.
+
+Verified by Tier 3: open two chrome windows, activate window B's tab
+from window A, confirm `activate()` returns true.
 
 ---
 
