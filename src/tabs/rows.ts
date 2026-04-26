@@ -25,7 +25,6 @@ import { createLogger } from "./log.ts";
 import { hzDisplay, movingTabs, rowOf, state, treeOf } from "./state.ts";
 import type { Group, Row, Tab } from "./types.ts";
 
-declare const gBrowser: any;
 declare const document: Document;
 declare const window: any;
 

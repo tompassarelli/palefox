@@ -16,10 +16,6 @@
 import { createLogger, type Logger } from "./log.ts";
 import type { SavedNode } from "./types.ts";
 
-declare const PathUtils: any;
-declare const Services: any;
-declare const Ci: any;
-declare const ChromeUtils: any;
 
 // =============================================================================
 // INTERFACE
@@ -43,7 +39,18 @@ export interface HistoryEvent {
   readonly snapshot: SnapshotEnvelope;
   /** null = untagged, "session:<label>" or "checkpoint:<label>" = tagged. */
   readonly tag: string | null;
+  /** Stable per-Firefox-profile identifier. Set on every row from v2
+   *  onward; older rows are backfilled with the current instance's id
+   *  during schema migration. Lets cross-instance queries (M11) filter
+   *  by source. */
+  readonly instanceId: string;
 }
+
+/** Scope for read-side queries. "current" filters to this Firefox
+ *  profile's instance. "all" returns every instance's rows in this DB
+ *  (today: just current — M11 will add fanout across other profiles'
+ *  DBs and merge results). Default is "current". */
+export type HistoryScope = "current" | "all";
 
 export interface HistoryAPI {
   /** Append a new event if its hash differs from the last. Returns the
@@ -54,18 +61,20 @@ export interface HistoryAPI {
    *  is used. Returns the tagged event's id, or null if no events exist. */
   tagLatest(kind: "session" | "checkpoint", label?: string): Promise<number | null>;
   /** Most recent N tagged events, newest first. */
-  getTagged(limit?: number): Promise<HistoryEvent[]>;
+  getTagged(limit?: number, scope?: HistoryScope): Promise<HistoryEvent[]>;
   /** Get an event by id. */
   getById(id: number): Promise<HistoryEvent | null>;
   /** Most recent untagged + tagged events, newest first. */
-  getRecent(limit?: number): Promise<HistoryEvent[]>;
-  /** FTS5 search. Returns matching events ranked by recency. */
-  search(query: string, opts?: { taggedOnly?: boolean; limit?: number }): Promise<HistoryEvent[]>;
+  getRecent(limit?: number, scope?: HistoryScope): Promise<HistoryEvent[]>;
+  /** Substring search across url + label. */
+  search(query: string, opts?: { taggedOnly?: boolean; limit?: number; scope?: HistoryScope }): Promise<HistoryEvent[]>;
   /** Drop untagged events older than retainDays + past maxRows. Returns
    *  the number of rows deleted. */
   runRetention(opts?: { retainDays?: number; maxRows?: number }): Promise<number>;
   /** Last computed snapshot hash (for hot-path dedupe in scheduleSave). */
   lastHash(): string | null;
+  /** This Firefox profile's instanceId (stable across restarts). */
+  instanceId(): string;
   /** Close the underlying connection. Idempotent. */
   close(): Promise<void>;
 }
@@ -74,10 +83,14 @@ export interface HistoryAPI {
 // IMPLEMENTATION
 // =============================================================================
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+
+const INSTANCE_ID_PREF = "pfx.instance.id";
 
 /** Keep schema migrations as ordered SQL strings. Each entry migrates from
- *  index N to N+1. Adding a column tomorrow appends one entry. */
+ *  index N to N+1. Adding a column tomorrow appends one entry. The v1→v2
+ *  migration backfills `instance_id` separately (post-migration, in JS)
+ *  because it needs the live instanceId value. */
 const MIGRATIONS: readonly string[] = [
   // v0 → v1: initial schema.
   //
@@ -112,6 +125,14 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX esc_url   ON events_search_content(url);
   CREATE INDEX esc_label ON events_search_content(label);
   `,
+  // v1 → v2: per-record instanceId. Multi-instance palefox (multiple
+  // Firefox profiles) is a real use case; this column lets cross-instance
+  // queries (M11) filter by source. Existing rows backfilled with the
+  // current instanceId post-migration in applyMigrations() below.
+  `
+  ALTER TABLE events ADD COLUMN instance_id TEXT;
+  CREATE INDEX events_instance ON events(instance_id);
+  `,
 ];
 
 const log: Logger = createLogger("history");
@@ -124,6 +145,26 @@ interface Connection {
 
 let _conn: Connection | null = null;
 let _lastHash: string | null = null;
+let _instanceId: string | null = null;
+
+/** Load (or generate-and-persist) this Firefox profile's stable
+ *  palefox instance id. Stored in a Firefox pref so it survives
+ *  restarts. Used as `instance_id` on every persisted history row;
+ *  cross-instance queries (M11) discover sibling profiles' DBs and
+ *  use their instanceId values to attribute/filter results. */
+function loadInstanceId(): string {
+  if (_instanceId) return _instanceId;
+  let id = "";
+  try { id = Services.prefs.getStringPref(INSTANCE_ID_PREF, ""); } catch {}
+  if (!id) {
+    // Synthesize a UUID. crypto.randomUUID is available in chrome scope.
+    id = (crypto as { randomUUID(): string }).randomUUID();
+    try { Services.prefs.setStringPref(INSTANCE_ID_PREF, id); } catch {}
+    log("instanceId:generated", { id });
+  }
+  _instanceId = id;
+  return id;
+}
 
 /** Hash a string to a hex sha256 digest using SubtleCrypto. We hash the
  *  canonical JSON form (keys sorted) so structurally-equal snapshots dedupe
@@ -151,7 +192,9 @@ function canonicalize(value: unknown): string {
 
 async function openConnection(): Promise<Connection> {
   if (_conn) return _conn;
-  const { Sqlite } = ChromeUtils.importESModule("resource://gre/modules/Sqlite.sys.mjs");
+  const { Sqlite } = ChromeUtils.importESModule<{ Sqlite: { openConnection(opts: { path: string }): Promise<Connection> } }>(
+    "resource://gre/modules/Sqlite.sys.mjs",
+  );
   const path = PathUtils.join(
     Services.dirsvc.get("ProfD", Ci.nsIFile).path,
     "palefox-history.sqlite",
@@ -186,6 +229,18 @@ async function applyMigrations(conn: Connection): Promise<void> {
         const trimmed = stmt.trim();
         if (trimmed) await conn.execute(trimmed);
       }
+      // v1 → v2: backfill instance_id on pre-existing rows. The migration
+      // SQL added the column nullable; this UPDATE puts the current
+      // instance's id on every legacy row (they came from THIS Firefox
+      // profile, since this is a per-profile DB).
+      if (v === 1) {
+        const id = loadInstanceId();
+        await conn.execute(
+          "UPDATE events SET instance_id = ? WHERE instance_id IS NULL",
+          [id],
+        );
+        log("migrate:backfill-instance", { id });
+      }
       await conn.execute(`PRAGMA user_version = ${v + 1}`);
     });
   }
@@ -217,7 +272,18 @@ function decodeRow(row: any): HistoryEvent {
     hash: row.getResultByName("hash") as string,
     snapshot: JSON.parse(snap),
     tag: row.getResultByName("tag") as string | null,
+    instanceId: (row.getResultByName("instance_id") as string | null) ?? "",
   };
+}
+
+/** Build a SQL fragment that filters by instance_id when scope === "current".
+ *  When scope === "all", returns an empty string (no filter — but today
+ *  we still only have THIS instance's rows in the DB; M11 fans out across
+ *  sibling profiles' DBs and merges results). */
+function scopeClause(scope: HistoryScope, params: unknown[]): string {
+  if (scope === "all") return "";
+  params.push(loadInstanceId());
+  return "AND instance_id = ?";
 }
 
 /** Extract (url, label) pairs from a snapshot for FTS5 indexing. */
@@ -242,13 +308,14 @@ export function makeHistory(): HistoryAPI {
         return null;
       }
       const ts = Date.now();
+      const instId = loadInstanceId();
       let insertedId: number | null = null;
       await conn.executeTransaction(async () => {
         // INSERT OR IGNORE handles the case where another window of the same
         // profile (rare for chrome scripts but possible) wrote the same hash.
         await conn.execute(
-          "INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag) VALUES (?, ?, ?, NULL)",
-          [ts, hash, canon],
+          "INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag, instance_id) VALUES (?, ?, ?, NULL, ?)",
+          [ts, hash, canon, instId],
         );
         const idRows = await conn.execute(
           "SELECT id FROM events WHERE hash = ?",
@@ -256,7 +323,7 @@ export function makeHistory(): HistoryAPI {
         );
         if (!idRows.length) return;
         insertedId = idRows[0].getResultByName("id") as number;
-        // Populate search content for FTS5.
+        // Populate search content rows.
         for (const { url, label } of extractSearchableRows(snapshot)) {
           await conn.execute(
             "INSERT INTO events_search_content(event_id, url, label) VALUES (?, ?, ?)",
@@ -293,15 +360,19 @@ export function makeHistory(): HistoryAPI {
       return id;
     },
 
-    async getTagged(limit = 50) {
+    async getTagged(limit = 50, scope: HistoryScope = "current") {
       const conn = await openConnection();
+      const params: unknown[] = [];
+      const scopeSql = scopeClause(scope, params);
+      params.push(limit);
       const rows = await conn.execute(
-        `SELECT id, timestamp, hash, snapshot, tag
+        `SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
           WHERE tag IS NOT NULL
+            ${scopeSql}
           ORDER BY timestamp DESC
           LIMIT ?`,
-        [limit],
+        params,
       );
       return rows.map(decodeRow);
     },
@@ -309,25 +380,29 @@ export function makeHistory(): HistoryAPI {
     async getById(id) {
       const conn = await openConnection();
       const rows = await conn.execute(
-        "SELECT id, timestamp, hash, snapshot, tag FROM events WHERE id = ?",
+        "SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events WHERE id = ?",
         [id],
       );
       return rows.length ? decodeRow(rows[0]) : null;
     },
 
-    async getRecent(limit = 50) {
+    async getRecent(limit = 50, scope: HistoryScope = "current") {
       const conn = await openConnection();
+      const params: unknown[] = [];
+      const scopeSql = scopeClause(scope, params);
+      params.push(limit);
       const rows = await conn.execute(
-        `SELECT id, timestamp, hash, snapshot, tag
+        `SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
+          WHERE 1=1 ${scopeSql}
           ORDER BY timestamp DESC
           LIMIT ?`,
-        [limit],
+        params,
       );
       return rows.map(decodeRow);
     },
 
-    async search(query, { taggedOnly = false, limit = 50 } = {}) {
+    async search(query, { taggedOnly = false, limit = 50, scope = "current" } = {}) {
       const conn = await openConnection();
       const trimmed = query.trim();
       if (!trimmed) return [];
@@ -343,12 +418,14 @@ export function makeHistory(): HistoryAPI {
         conditions.push(`(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')`);
         params.push(pat, pat);
       }
+      const scopeSql = scopeClause(scope, params).replace(/^AND/, "AND events.");
       const sql = `
-        SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag
+        SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag, events.instance_id
           FROM events
           JOIN events_search_content esc ON esc.event_id = events.id
          WHERE ${conditions.join(" AND ")}
            ${taggedOnly ? "AND events.tag IS NOT NULL" : ""}
+           ${scopeSql}
          GROUP BY events.id
          ORDER BY events.timestamp DESC
          LIMIT ?
@@ -402,6 +479,10 @@ export function makeHistory(): HistoryAPI {
 
     lastHash() {
       return _lastHash;
+    },
+
+    instanceId() {
+      return loadInstanceId();
     },
 
     async close() {

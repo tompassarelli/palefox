@@ -5,13 +5,7 @@
 // (Tier 1, stable). Centralizing the ID lookups means a sidebar-revamp-style
 // rename only changes this file.
 
-declare const gBrowserInit: { delayedStartupFinished: boolean };
-declare const Services: {
-  scriptSecurityManager: { getSystemPrincipal(): unknown };
-};
-declare const ChromeUtils: {
-  importESModule(url: string): Record<string, unknown>;
-};
+// `gBrowserInit`, `Services`, `ChromeUtils` are typed via src/types/chrome.d.ts.
 
 // =============================================================================
 // INTERFACE

@@ -10,9 +10,6 @@ import { createLogger } from "./log.ts";
 import { rowOf, state, treeOf } from "./state.ts";
 import type { Group, Row, Tab, TreeData } from "./types.ts";
 
-declare const ChromeUtils: any;
-declare const gBrowser: any;
-declare const Services: any;
 
 const log = createLogger("tabs");
 
@@ -24,14 +21,14 @@ const log = createLogger("tabs");
  *  exposed, so we fall back to ChromeUtils.importESModule. Returns null if
  *  neither path works; in that case persistTabAttribute is a no-op and we
  *  rely on URL matching for cross-session tab identification. */
-export const SS = (() => {
+export const SS: any = (() => {
   try {
     // @ts-ignore — the bare reference triggers a ReferenceError when the
     // global isn't present, hence the try/catch.
     if (typeof SessionStore !== "undefined") return SessionStore;
   } catch {}
   try {
-    return ChromeUtils.importESModule(
+    return ChromeUtils.importESModule<{ SessionStore: any }>(
       "resource:///modules/sessionstore/SessionStore.sys.mjs",
     ).SessionStore;
   } catch (e) {

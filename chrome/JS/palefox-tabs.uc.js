@@ -336,7 +336,7 @@
         return;
       TabContextMenu.contextTab = state.contextTab;
       TabContextMenu.contextTabs = [state.contextTab];
-      TabContextMenu.moveTabsToSplitView();
+      TabContextMenu.moveTabsToSplitView?.();
     });
     const reloadItem = mi("Reload Tab", () => {
       if (state.contextTab)
@@ -360,7 +360,7 @@
     });
     const bookmarkItem = mi("Bookmark Tab", () => {
       if (state.contextTab)
-        PlacesCommandHook.bookmarkTabs([state.contextTab]);
+        PlacesCommandHook.bookmarkTabs?.([state.contextTab]);
     });
     const moveToWindowItem = mi("Move to New Window", () => {
       if (state.contextTab)
@@ -371,7 +371,8 @@
         return;
       const url = state.contextTab.linkedBrowser?.currentURI?.spec;
       if (url) {
-        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(url);
+        const helper = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
+        helper.copyString(url);
       }
     });
     const closeItem = mi("Close Tab", () => {
@@ -4004,7 +4005,8 @@
   }
 
   // src/tabs/history.ts
-  var SCHEMA_VERSION = 1;
+  var SCHEMA_VERSION = 2;
+  var INSTANCE_ID_PREF = "pfx.instance.id";
   var MIGRATIONS = [
     `
   CREATE TABLE events (
@@ -4026,11 +4028,33 @@
   CREATE INDEX esc_event ON events_search_content(event_id);
   CREATE INDEX esc_url   ON events_search_content(url);
   CREATE INDEX esc_label ON events_search_content(label);
+  `,
+    `
+  ALTER TABLE events ADD COLUMN instance_id TEXT;
+  CREATE INDEX events_instance ON events(instance_id);
   `
   ];
   var log7 = createLogger("history");
   var _conn = null;
   var _lastHash = null;
+  var _instanceId = null;
+  function loadInstanceId() {
+    if (_instanceId)
+      return _instanceId;
+    let id = "";
+    try {
+      id = Services.prefs.getStringPref(INSTANCE_ID_PREF, "");
+    } catch {}
+    if (!id) {
+      id = crypto.randomUUID();
+      try {
+        Services.prefs.setStringPref(INSTANCE_ID_PREF, id);
+      } catch {}
+      log7("instanceId:generated", { id });
+    }
+    _instanceId = id;
+    return id;
+  }
   async function sha256Hex(text) {
     const data = new TextEncoder().encode(text);
     const buf = await crypto.subtle.digest("SHA-256", data);
@@ -4082,6 +4106,11 @@
           if (trimmed)
             await conn.execute(trimmed);
         }
+        if (v === 1) {
+          const id = loadInstanceId();
+          await conn.execute("UPDATE events SET instance_id = ? WHERE instance_id IS NULL", [id]);
+          log7("migrate:backfill-instance", { id });
+        }
         await conn.execute(`PRAGMA user_version = ${v + 1}`);
       });
     }
@@ -4108,8 +4137,15 @@
       timestamp: row.getResultByName("timestamp"),
       hash: row.getResultByName("hash"),
       snapshot: JSON.parse(snap),
-      tag: row.getResultByName("tag")
+      tag: row.getResultByName("tag"),
+      instanceId: row.getResultByName("instance_id") ?? ""
     };
+  }
+  function scopeClause(scope, params) {
+    if (scope === "all")
+      return "";
+    params.push(loadInstanceId());
+    return "AND instance_id = ?";
   }
   function extractSearchableRows(snapshot) {
     const out = [];
@@ -4131,9 +4167,10 @@
           return null;
         }
         const ts = Date.now();
+        const instId = loadInstanceId();
         let insertedId = null;
         await conn.executeTransaction(async () => {
-          await conn.execute("INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag) VALUES (?, ?, ?, NULL)", [ts, hash, canon]);
+          await conn.execute("INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag, instance_id) VALUES (?, ?, ?, NULL, ?)", [ts, hash, canon, instId]);
           const idRows = await conn.execute("SELECT id FROM events WHERE hash = ?", [hash]);
           if (!idRows.length)
             return;
@@ -4159,29 +4196,37 @@
         log7("tagLatest", { id, tagValue });
         return id;
       },
-      async getTagged(limit = 50) {
+      async getTagged(limit = 50, scope = "current") {
         const conn = await openConnection();
-        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag
+        const params = [];
+        const scopeSql = scopeClause(scope, params);
+        params.push(limit);
+        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
           WHERE tag IS NOT NULL
+            ${scopeSql}
           ORDER BY timestamp DESC
-          LIMIT ?`, [limit]);
+          LIMIT ?`, params);
         return rows.map(decodeRow);
       },
       async getById(id) {
         const conn = await openConnection();
-        const rows = await conn.execute("SELECT id, timestamp, hash, snapshot, tag FROM events WHERE id = ?", [id]);
+        const rows = await conn.execute("SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events WHERE id = ?", [id]);
         return rows.length ? decodeRow(rows[0]) : null;
       },
-      async getRecent(limit = 50) {
+      async getRecent(limit = 50, scope = "current") {
         const conn = await openConnection();
-        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag
+        const params = [];
+        const scopeSql = scopeClause(scope, params);
+        params.push(limit);
+        const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
+          WHERE 1=1 ${scopeSql}
           ORDER BY timestamp DESC
-          LIMIT ?`, [limit]);
+          LIMIT ?`, params);
         return rows.map(decodeRow);
       },
-      async search(query, { taggedOnly = false, limit = 50 } = {}) {
+      async search(query, { taggedOnly = false, limit = 50, scope = "current" } = {}) {
         const conn = await openConnection();
         const trimmed = query.trim();
         if (!trimmed)
@@ -4195,12 +4240,14 @@
           conditions.push(`(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')`);
           params.push(pat, pat);
         }
+        const scopeSql = scopeClause(scope, params).replace(/^AND/, "AND events.");
         const sql = `
-        SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag
+        SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag, events.instance_id
           FROM events
           JOIN events_search_content esc ON esc.event_id = events.id
          WHERE ${conditions.join(" AND ")}
            ${taggedOnly ? "AND events.tag IS NOT NULL" : ""}
+           ${scopeSql}
          GROUP BY events.id
          ORDER BY events.timestamp DESC
          LIMIT ?
@@ -4239,6 +4286,9 @@
       },
       lastHash() {
         return _lastHash;
+      },
+      instanceId() {
+        return loadInstanceId();
       },
       async close() {
         if (_conn) {
@@ -4383,6 +4433,68 @@
       return { messageCount, lastMessageEditable, cachedForCurrent };
     }
     return { contentInputFocused, diag, destroy };
+  }
+
+  // src/platform/history.ts
+  function makePersisted(history) {
+    function isOfKind(kind) {
+      const prefix = `${kind}:`;
+      return (e) => typeof e.tag === "string" && e.tag.startsWith(prefix);
+    }
+    return {
+      history: {
+        async recent(opts) {
+          return history.getRecent(opts?.limit ?? 50, opts?.scope ?? "current");
+        },
+        search(query, opts) {
+          return history.search(query, {
+            taggedOnly: opts?.taggedOnly ?? false,
+            limit: opts?.limit ?? 50,
+            scope: opts?.scope ?? "current"
+          });
+        },
+        byId(id) {
+          return history.getById(id);
+        },
+        instanceId() {
+          return history.instanceId();
+        }
+      },
+      checkpoints: {
+        async list(opts) {
+          const all = await history.getTagged(opts?.limit ?? 100, opts?.scope ?? "current");
+          return all.filter(isOfKind("checkpoint"));
+        },
+        async search(query, opts) {
+          const matches = await history.search(query, {
+            taggedOnly: true,
+            limit: opts?.limit ?? 50,
+            scope: opts?.scope ?? "current"
+          });
+          return matches.filter(isOfKind("checkpoint"));
+        },
+        tag(label) {
+          return history.tagLatest("checkpoint", label);
+        }
+      },
+      sessions: {
+        async list(opts) {
+          const all = await history.getTagged(opts?.limit ?? 100, opts?.scope ?? "current");
+          return all.filter(isOfKind("session"));
+        },
+        async search(query, opts) {
+          const matches = await history.search(query, {
+            taggedOnly: true,
+            limit: opts?.limit ?? 50,
+            scope: opts?.scope ?? "current"
+          });
+          return matches.filter(isOfKind("session"));
+        },
+        tag(label) {
+          return history.tagLatest("session", label);
+        }
+      }
+    };
   }
 
   // src/platform/scheduler.ts
@@ -4664,14 +4776,22 @@
   }
 
   // src/platform/index.ts
-  function makePalefox() {
+  function makePalefox(deps) {
     const scheduler = makeScheduler();
     const tabsReconciler = makeTabsReconciler({ scheduler });
     const win = makePalefoxWindow(scheduler);
+    const persisted = makePersisted(deps.history);
     return {
       windows: { current: () => win },
+      history: persisted.history,
+      sessions: persisted.sessions,
+      checkpoints: persisted.checkpoints,
       flush: () => scheduler.flush(),
-      diag: () => ({ scheduler: scheduler.diag(), windowId: win.windowId }),
+      diag: () => ({
+        scheduler: scheduler.diag(),
+        windowId: win.windowId,
+        instanceId: deps.history.instanceId()
+      }),
       destroy() {
         tabsReconciler.destroy();
         scheduler.destroy();
@@ -4726,7 +4846,7 @@
   }
   var history = makeHistory();
   var contentFocus = makeContentFocus();
-  var Palefox = makePalefox();
+  var Palefox = makePalefox({ history });
   window.Palefox = Palefox;
   var scheduleSave = makeSaver(() => ({
     tabs: [...gBrowser.tabs],

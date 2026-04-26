@@ -39,9 +39,6 @@ import {
 import type { Row, SavedNode, Tab } from "./types.ts";
 
 declare const document: Document;
-declare const gBrowser: any;
-declare const gBrowserInit: any;
-declare const Services: any;
 declare const window: Window;
 
 const pfxLog = createLogger("tabs");
@@ -117,7 +114,7 @@ const pfxLog = createLogger("tabs");
   // scheduler + tabs reconciler. See src/platform/index.ts and the
   // strategy doc. New feature code SHOULD import via this surface; legacy
   // code continues to mutate gBrowser directly until M2 migrates it.
-  const Palefox: PalefoxAPI = makePalefox();
+  const Palefox: PalefoxAPI = makePalefox({ history });
   (window as unknown as { Palefox: PalefoxAPI }).Palefox = Palefox;
 
   // Write-on-every-change: pulls a fresh snapshot for every flush, coalesces

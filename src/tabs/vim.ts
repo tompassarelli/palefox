@@ -32,8 +32,6 @@ import type { RowsAPI } from "./rows.ts";
 import { makePicker, type PickerItem, type PickerAction } from "./picker.ts";
 
 declare const document: Document;
-declare const gBrowser: any;
-declare const Services: any;
 
 const log = createLogger("tabs/vim");
 
@@ -581,8 +579,8 @@ export function makeVim(deps: VimDeps): VimAPI {
         try { gBrowser.selectedTab = tab; } catch {}
       },
       actions: [
-        { label: "Close", key: "x", run: (item) => { try { gBrowser.removeTab(item.data); } catch {} } },
-        { label: "Duplicate", key: "d", run: (item) => { try { gBrowser.duplicateTab(item.data); } catch {} } },
+        { label: "Close", key: "x", run: (item) => { try { gBrowser.removeTab(item.data as Tab); } catch {} } },
+        { label: "Duplicate", key: "d", run: (item) => { try { gBrowser.duplicateTab(item.data as Tab); } catch {} } },
         { label: "Pin / Unpin", key: "p", run: (item) => {
           const t = item.data as Tab;
           try {
@@ -590,7 +588,7 @@ export function makeVim(deps: VimDeps): VimAPI {
             else gBrowser.pinTab(t);
           } catch {}
         }},
-        { label: "Reload", key: "r", run: (item) => { try { gBrowser.reloadTab(item.data); } catch {} } },
+        { label: "Reload", key: "r", run: (item) => { try { gBrowser.reloadTab(item.data as Tab); } catch {} } },
       ],
     });
   }

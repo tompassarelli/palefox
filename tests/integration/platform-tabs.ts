@@ -142,9 +142,87 @@ const tests: IntegrationTest[] = [
         return typeof d.windowId === "string"
           && typeof d.scheduler === "object"
           && typeof d.scheduler.nextFlushPending === "boolean"
-          && typeof d.scheduler.pending === "object";
+          && typeof d.scheduler.pending === "object"
+          && typeof d.instanceId === "string"
+          && d.instanceId.length > 0;
       `);
-      if (!ok) throw new Error("diag() shape unexpected");
+      if (!ok) throw new Error("diag() shape unexpected (instanceId missing or zero-length)");
+    },
+  },
+
+  {
+    name: "platform: Palefox.history.instanceId() returns stable per-profile id",
+    async run(mn) {
+      const result = await mn.executeAsyncScript<{ ok: boolean; sample: string }>(`
+        const cb = arguments[arguments.length - 1];
+        (async () => {
+          const Palefox = window.pfxTest.Palefox;
+          const id1 = Palefox.history.instanceId();
+          const id2 = Palefox.history.instanceId();
+          const idDiag = Palefox.diag().instanceId;
+          cb({ ok: id1 === id2 && id1 === idDiag && id1.length > 0, sample: id1 });
+        })().catch((e) => cb({ ok: false, sample: String(e) }));
+      `);
+      if (!result.ok) throw new Error("instanceId not stable across calls or empty: " + result.sample);
+    },
+  },
+
+  {
+    name: "platform: Palefox.history.recent({scope:current}) returns events",
+    async run(mn) {
+      const result = await mn.executeAsyncScript<{ ok: boolean; len: number; allHaveInstance: boolean; instanceId: string }>(`
+        const cb = arguments[arguments.length - 1];
+        (async () => {
+          const Palefox = window.pfxTest.Palefox;
+          // Trigger an event so we have at least one row.
+          await window.pfxTest.scheduleSave();
+          await new Promise((r) => setTimeout(r, 200));
+          const events = await Palefox.history.recent({ scope: "current", limit: 5 });
+          const myId = Palefox.history.instanceId();
+          const allHaveInstance = events.every((e) => e.instanceId === myId);
+          cb({ ok: events.length > 0, len: events.length, allHaveInstance, instanceId: myId });
+        })().catch((e) => cb({ ok: false, len: -1, allHaveInstance: false, instanceId: String(e) }));
+      `);
+      if (!result.ok) throw new Error("history.recent returned no events");
+      if (!result.allHaveInstance) throw new Error("not all events tagged with current instanceId");
+    },
+  },
+
+  {
+    name: "platform: Palefox.checkpoints.tag + .list round-trips",
+    async run(mn) {
+      const result = await mn.executeAsyncScript<{ ok: boolean; tagged: boolean; foundLabel: string | null }>(`
+        const cb = arguments[arguments.length - 1];
+        (async () => {
+          const Palefox = window.pfxTest.Palefox;
+          // Need at least one event to tag.
+          await window.pfxTest.scheduleSave();
+          await new Promise((r) => setTimeout(r, 300));
+          const label = "test-checkpoint-" + Date.now();
+          const id = await Palefox.checkpoints.tag(label);
+          const list = await Palefox.checkpoints.list({ scope: "current", limit: 20 });
+          const found = list.find((e) => e.tag === ("checkpoint:" + label));
+          cb({ ok: id !== null && !!found, tagged: id !== null, foundLabel: found?.tag ?? null });
+        })().catch((e) => cb({ ok: false, tagged: false, foundLabel: String(e) }));
+      `);
+      if (!result.tagged) throw new Error("checkpoints.tag returned null");
+      if (!result.ok) throw new Error("checkpoint not found in list (label was " + result.foundLabel + ")");
+    },
+  },
+
+  {
+    name: "platform: Palefox.history default scope is current (not all)",
+    async run(mn) {
+      const ok = await mn.executeAsyncScript<boolean>(`
+        const cb = arguments[arguments.length - 1];
+        (async () => {
+          const Palefox = window.pfxTest.Palefox;
+          // No scope opt → defaults to "current". Should still return events.
+          const recent = await Palefox.history.recent();
+          cb(Array.isArray(recent));
+        })().catch((e) => cb(false));
+      `);
+      if (!ok) throw new Error("default-scope recent() failed");
     },
   },
 ];

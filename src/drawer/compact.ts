@@ -23,7 +23,6 @@
 
 import { createLogger, type Logger } from "../tabs/log.ts";
 
-declare const Services: any;
 
 // =============================================================================
 // INTERFACE

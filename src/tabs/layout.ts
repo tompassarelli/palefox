@@ -14,8 +14,6 @@ import type { Row } from "./types.ts";
 import type { RowsAPI } from "./rows.ts";
 
 declare const document: Document;
-declare const gBrowser: any;
-declare const Services: any;
 
 const log = createLogger("tabs/layout");
 

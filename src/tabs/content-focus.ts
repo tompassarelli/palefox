@@ -20,8 +20,6 @@
 
 import { createLogger, type Logger } from "./log.ts";
 
-declare const Services: any;
-declare const gBrowser: any;
 
 // =============================================================================
 // INTERFACE

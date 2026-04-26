@@ -5,19 +5,7 @@
 // All wrappers swallow exceptions and return the default value, since
 // pref access can throw if the branch doesn't exist or has wrong type.
 
-declare const Services: {
-  prefs: {
-    getBoolPref(name: string, defaultValue?: boolean): boolean;
-    setBoolPref(name: string, value: boolean): void;
-    getIntPref(name: string, defaultValue?: number): number;
-    setIntPref(name: string, value: number): void;
-    getStringPref(name: string, defaultValue?: string): string;
-    setStringPref(name: string, value: string): void;
-    getCharPref(name: string, defaultValue?: string): string;
-    addObserver(name: string, observer: { observe: (subject: unknown, topic: string, data: string) => void }, weakRef?: boolean): void;
-    removeObserver(name: string, observer: { observe: (subject: unknown, topic: string, data: string) => void }): void;
-  };
-};
+// `Services.prefs` is typed via src/types/chrome.d.ts.
 
 // =============================================================================
 // INTERFACE

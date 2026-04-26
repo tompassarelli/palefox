@@ -24,6 +24,8 @@
 //   - Cross-window aggregation (Palefox.tabs.findAcrossWindows) — M12.
 //   - Events bus, urlbar facade, sidebar facade.
 
+import type { HistoryAPI } from "../tabs/history.ts";
+import { makePersisted, type PersistedAPI } from "./history.ts";
 import { makeScheduler, type SchedulerAPI } from "./scheduler.ts";
 import { makeTabsReconciler, type TabsReconcilerAPI } from "./tabs-reconciler.ts";
 import { makePalefoxWindow, type PalefoxWindow } from "./window.ts";
@@ -35,6 +37,11 @@ import { makePalefoxWindow, type PalefoxWindow } from "./window.ts";
 export type PalefoxAPI = {
   /** The window-scoped facade for THIS chrome window. */
   windows: { current(): PalefoxWindow };
+  /** Persisted-state APIs (history, sessions, checkpoints). All scope-
+   *  parameterized; defaults to scope: "current" (this profile only). */
+  history: PersistedAPI["history"];
+  sessions: PersistedAPI["sessions"];
+  checkpoints: PersistedAPI["checkpoints"];
   /** Force-reconcile right now. Used by consistency-sensitive callers
    *  that genuinely need the model settled before proceeding. */
   flush(): Promise<void>;
@@ -42,24 +49,37 @@ export type PalefoxAPI = {
   diag(): {
     scheduler: ReturnType<SchedulerAPI["diag"]>;
     windowId: string;
+    instanceId: string;
   };
   /** Tear down. Called from window.unload. */
   destroy(): void;
+};
+
+export type PalefoxDeps = {
+  readonly history: HistoryAPI;
 };
 
 // =============================================================================
 // IMPLEMENTATION
 // =============================================================================
 
-export function makePalefox(): PalefoxAPI {
+export function makePalefox(deps: PalefoxDeps): PalefoxAPI {
   const scheduler = makeScheduler();
   const tabsReconciler: TabsReconcilerAPI = makeTabsReconciler({ scheduler });
   const win: PalefoxWindow = makePalefoxWindow(scheduler);
+  const persisted: PersistedAPI = makePersisted(deps.history);
 
   return {
     windows: { current: () => win },
+    history: persisted.history,
+    sessions: persisted.sessions,
+    checkpoints: persisted.checkpoints,
     flush: () => scheduler.flush(),
-    diag: () => ({ scheduler: scheduler.diag(), windowId: win.windowId }),
+    diag: () => ({
+      scheduler: scheduler.diag(),
+      windowId: win.windowId,
+      instanceId: deps.history.instanceId(),
+    }),
     destroy(): void {
       tabsReconciler.destroy();
       scheduler.destroy();

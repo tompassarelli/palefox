@@ -4,25 +4,8 @@
 // All paths are profile-relative by default. Absolute paths are accepted
 // but discouraged (palefox shouldn't write outside its own profile).
 
-declare const Services: {
-  dirsvc: { get(name: string, iface: unknown): { path: string } };
-};
-declare const Ci: { nsIFile: unknown };
-declare const IOUtils: {
-  read(path: string, opts?: { offset?: number; maxBytes?: number }): Promise<Uint8Array>;
-  readUTF8(path: string): Promise<string>;
-  write(path: string, data: Uint8Array | string, opts?: { tmpPath?: string }): Promise<number>;
-  writeUTF8(path: string, data: string, opts?: { tmpPath?: string }): Promise<number>;
-  stat(path: string): Promise<{ size: number; lastModified: number; type: "regular" | "directory" | "other" }>;
-  exists(path: string): Promise<boolean>;
-  remove(path: string): Promise<void>;
-  makeDirectory(path: string, opts?: { ignoreExisting?: boolean; createAncestors?: boolean }): Promise<void>;
-};
-declare const PathUtils: {
-  join(...parts: string[]): string;
-  parent(path: string): string | null;
-  filename(path: string): string;
-};
+// `Services.dirsvc`, `Ci.nsIFile`, `IOUtils`, `PathUtils` are typed via
+// src/types/chrome.d.ts.
 
 // =============================================================================
 // INTERFACE

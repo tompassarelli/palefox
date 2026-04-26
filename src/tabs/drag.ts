@@ -33,7 +33,6 @@ import {
 } from "./helpers.ts";
 import type { Row, Tab } from "./types.ts";
 
-declare const gBrowser: any;
 declare const document: Document;
 
 const log = createLogger("tabs/drag");

@@ -42,8 +42,6 @@ import type { Row, SavedNode, Tab } from "./types.ts";
 import type { RowsAPI } from "./rows.ts";
 import type { VimAPI } from "./vim.ts";
 
-declare const gBrowser: any;
-declare const Services: any;
 declare const window: Window;
 
 const log = createLogger("tabs");

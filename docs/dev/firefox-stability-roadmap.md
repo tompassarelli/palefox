@@ -229,6 +229,17 @@ when a real consumer needs it.
 
 `Palefox.tabs.findAcrossWindows(query)` — see M12.
 
+### M5.6 — Tighten `chrome.d.ts`   ✅
+
+Shipped. Rich ambient types for `gBrowser`, `Services`, `ChromeUtils`,
+`IOUtils`, `PathUtils`, `gURLBar`, `SessionStore`, `TabContextMenu`,
+`FirefoxViewHandler`, `PlacesCommandHook`. Adapters in `src/firefox/*`
+and `src/platform/*` dropped their local `declare const` blocks — the
+ambient is the single source of truth. Methods listed in the manifest
+match the types here, so canary-flagged churn now has a typed surface
+to update. Index-signatures (`[other: string]: unknown`) on the long
+tail keep legacy code from breaking until M2 migrates it.
+
 **Unlocks (M5.1 already):** new code can write
 `Palefox.windows.current().tabs.pin(id)` instead of touching
 `gBrowser`. Mockable via the platform API for Tier 1 tests in M8.
@@ -387,10 +398,6 @@ users on diverse Firefoxes.
 ## Stretch / out of scope today
 
 These exist for visibility — not currently scheduled, may never ship.
-
-- **Symbol-level `.d.ts` for chrome globals** (`gBrowser`, `Services`)
-  — probably unnecessary if adapters are doing their job. The adapter
-  IS the contract.
 - **Per-channel test matrix** (stable / Beta / Nightly) — committed
   anti-goal in the strategy doc unless a real channel-specific bug
   forces it.

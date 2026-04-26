@@ -13,12 +13,7 @@ import { rowOf, state } from "./state.ts";
 import { dataOf, hasChildren, levelOfRow, subtreeRows, treeData } from "./helpers.ts";
 import type { Row } from "./types.ts";
 
-declare const Cc: any;
-declare const Ci: any;
 declare const document: Document;
-declare const gBrowser: any;
-declare const TabContextMenu: any;
-declare const PlacesCommandHook: any;
 declare const undoCloseTab: () => void;
 
 // =============================================================================
@@ -103,7 +98,8 @@ export function buildContextMenu(deps: MenuDeps): HTMLElement {
     if (!state.contextTab) return;
     TabContextMenu.contextTab = state.contextTab;
     TabContextMenu.contextTabs = [state.contextTab];
-    TabContextMenu.moveTabsToSplitView();
+    // moveTabsToSplitView only exists on Firefox builds with split view.
+    TabContextMenu.moveTabsToSplitView?.();
   });
   const reloadItem = mi("Reload Tab", () => {
     if (state.contextTab) gBrowser.reloadTab(state.contextTab);
@@ -120,7 +116,7 @@ export function buildContextMenu(deps: MenuDeps): HTMLElement {
     if (state.contextTab) gBrowser.duplicateTab(state.contextTab);
   });
   const bookmarkItem = mi("Bookmark Tab", () => {
-    if (state.contextTab) PlacesCommandHook.bookmarkTabs([state.contextTab]);
+    if (state.contextTab) PlacesCommandHook.bookmarkTabs?.([state.contextTab]);
   });
   const moveToWindowItem = mi("Move to New Window", () => {
     if (state.contextTab) gBrowser.replaceTabWithWindow(state.contextTab);
@@ -129,8 +125,9 @@ export function buildContextMenu(deps: MenuDeps): HTMLElement {
     if (!state.contextTab) return;
     const url = state.contextTab.linkedBrowser?.currentURI?.spec;
     if (url) {
-      Cc["@mozilla.org/widget/clipboardhelper;1"]
-        .getService(Ci.nsIClipboardHelper).copyString(url);
+      const helper = Cc["@mozilla.org/widget/clipboardhelper;1"]!
+        .getService(Ci.nsIClipboardHelper) as { copyString(s: string): void };
+      helper.copyString(url);
     }
   });
   const closeItem = mi("Close Tab", () => {

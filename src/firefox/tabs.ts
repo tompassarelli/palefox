@@ -14,24 +14,7 @@
 
 import type { Tab } from "../tabs/types.ts";
 
-declare const gBrowser: {
-  readonly tabs: ReadonlyArray<Tab>;
-  selectedTab: Tab;
-  readonly selectedBrowser: Element;
-  readonly tabContainer: HTMLElement;
-  pinTab(tab: Tab): void;
-  unpinTab(tab: Tab): void;
-  removeTab(tab: Tab): void;
-  duplicateTab(tab: Tab): Tab;
-  reloadTab(tab: Tab): void;
-  moveTabTo(tab: Tab, index: number): void;
-  addTab(uri: string, opts: { triggeringPrincipal: unknown }): Tab;
-  getIcon(tab: Tab): string | null;
-};
-
-declare const Services: {
-  scriptSecurityManager: { getSystemPrincipal(): unknown };
-};
+// `gBrowser` and `Services` are typed via src/types/chrome.d.ts.
 
 // =============================================================================
 // INTERFACE

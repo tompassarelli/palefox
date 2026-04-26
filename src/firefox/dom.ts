@@ -33,7 +33,7 @@ export type XULTag =
 export type XULAttrs = Record<string, string | number | boolean | null | undefined>;
 
 export function xul<T extends HTMLElement = HTMLElement>(tag: XULTag, attrs?: XULAttrs): T {
-  const el = (document as Document & { createXULElement(t: string): T }).createXULElement(tag);
+  const el = document.createXULElement(tag) as T;
   if (attrs) {
     for (const [name, value] of Object.entries(attrs)) {
       if (value === false || value === null || value === undefined) continue;

@@ -4,13 +4,7 @@
 // Topic-based pubsub used for global lifecycle events (quit-application,
 // profile-after-change, etc.).
 
-declare const Services: {
-  obs: {
-    addObserver(observer: { observe: (subject: unknown, topic: string, data: string) => void }, topic: string, weakRef?: boolean): void;
-    removeObserver(observer: { observe: (subject: unknown, topic: string, data: string) => void }, topic: string): void;
-    notifyObservers(subject: unknown, topic: string, data?: string): void;
-  };
-};
+// `Services.obs` is typed via src/types/chrome.d.ts.
 
 // =============================================================================
 // INTERFACE

@@ -10,10 +10,6 @@
 //   const log = createLogger("tabs");
 //   log("event-name", { foo: 1 });
 
-declare const PathUtils: any;
-declare const Services: any;
-declare const Ci: any;
-declare const IOUtils: any;
 
 /**
  * Tagged log function. Returns a no-op when pfx.debug is false (cheap to call).
