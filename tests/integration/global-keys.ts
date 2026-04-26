@@ -129,13 +129,19 @@ const tests: IntegrationTest[] = [
   },
 
   {
-    name: "global-keys: : opens ex-input without sidebar focus",
+    name: "global-keys: : opens ex-command picker without sidebar focus",
     async run(mn) {
       await mn.executeScript(DISMISS_PICKER);
       await mn.executeScript(DISMISS_EX_INPUT);
       await mn.executeScript(pressGlobal(":"));
-      await waitFor(mn, `return !!document.querySelector(".pfx-search-input");`, 3000);
-      await mn.executeScript(DISMISS_EX_INPUT);
+      // Picker (not modeline) opens — discoverable list of commands.
+      await waitFor(mn, `
+        const p = document.getElementById("pfx-picker");
+        if (!p || p.hidden) return false;
+        const prompt = p.querySelector(".pfx-picker-prompt")?.getAttribute("value") || "";
+        return prompt.includes("ex");
+      `, 3000);
+      await mn.executeScript(DISMISS_PICKER);
     },
   },
 

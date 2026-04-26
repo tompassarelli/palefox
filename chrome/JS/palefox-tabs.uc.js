@@ -2923,6 +2923,28 @@
         return "";
       }
     }
+    const PRIVILEGED_BAIL_URI_PREFIXES = [
+      "about:preferences",
+      "about:addons",
+      "about:debugging",
+      "about:profiles",
+      "about:logins",
+      "about:protections",
+      "about:performance",
+      "about:processes",
+      "about:config",
+      "about:profiling",
+      "about:certificate",
+      "view-source:"
+    ];
+    function isPrivilegedURI() {
+      try {
+        const uri = gBrowser.selectedBrowser?.currentURI?.spec ?? "";
+        return PRIVILEGED_BAIL_URI_PREFIXES.some((p) => uri.startsWith(p));
+      } catch {
+        return false;
+      }
+    }
     function currentHostBlacklisted() {
       const host = currentHost();
       if (!host)
@@ -2964,6 +2986,8 @@
       document.addEventListener("keydown", (e) => {
         if (picker.isActive())
           return;
+        if (isPrivilegedURI())
+          return;
         if (contentFocus.contentInputFocused())
           return;
         if (currentHostBlacklisted())
@@ -2994,7 +3018,7 @@
                 break;
               e.preventDefault();
               e.stopImmediatePropagation();
-              startExMode();
+              openExCommandPicker();
               return;
             case "x":
               if (!keyEnabled("x"))
@@ -3025,6 +3049,24 @@
               e.preventDefault();
               e.stopImmediatePropagation();
               toggleLastTab();
+              return;
+            case "h":
+              if (!keyEnabled("h"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              try {
+                gBrowser.selectedBrowser.goBack();
+              } catch {}
+              return;
+            case "l":
+              if (!keyEnabled("l"))
+                break;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              try {
+                gBrowser.selectedBrowser.goForward();
+              } catch {}
               return;
           }
         }
@@ -3274,7 +3316,7 @@
           closeFocused();
           return true;
         case ":":
-          startExMode();
+          openExCommandPicker();
           return true;
         case "J": {
           if (!selectionAnchor)
@@ -3414,7 +3456,7 @@
       scheduleSave();
       startRename(row);
     }
-    function startExMode() {
+    function startExMode(prefill = "") {
       if (searchActive || !modeline)
         return;
       for (const child of modeline.children)
@@ -3425,8 +3467,12 @@
       prefix.setAttribute("value", ":");
       const input = document.createElement("input");
       input.className = "pfx-search-input";
+      if (prefill)
+        input.value = prefill;
       modeline.append(prefix, input);
       input.focus();
+      if (prefill)
+        input.setSelectionRange(prefill.length, prefill.length);
       input.addEventListener("keydown", (e) => {
         e.stopImmediatePropagation();
         e.stopPropagation();
@@ -3444,6 +3490,34 @@
           endExMode(null);
           focusPanel();
           return;
+        }
+      });
+    }
+    const EX_COMMANDS = [
+      { name: "group", description: "Create a new group at cursor", takesArgs: true },
+      { name: "refile", description: "Refile cursor row under a target", takesArgs: false },
+      { name: "pin", description: "Pin the cursor's tab", takesArgs: false },
+      { name: "unpin", description: "Unpin the cursor's tab", takesArgs: false },
+      { name: "tabs", description: "Picker over tabs (add `all` for every window)", takesArgs: true },
+      { name: "checkpoint", description: "Tag current state as a named checkpoint", takesArgs: true },
+      { name: "restore", description: "Picker over recent checkpoints", takesArgs: false },
+      { name: "sessions", description: "Picker over auto-saved sessions", takesArgs: false },
+      { name: "history", description: "Picker over the full event log", takesArgs: true },
+      { name: "blacklist", description: "Disable palefox keys on a site (or `list`/`remove`)", takesArgs: true },
+      { name: "unblacklist", description: "Re-enable palefox keys on a site", takesArgs: true }
+    ];
+    function openExCommandPicker() {
+      const items = EX_COMMANDS.map((cmd) => ({
+        display: ":" + cmd.name,
+        secondary: cmd.description,
+        data: cmd
+      }));
+      picker.show({
+        prompt: "ex ›",
+        items,
+        onSelect: (item) => {
+          const cmd = item.data;
+          startExMode(cmd.name + (cmd.takesArgs ? " " : ""));
         }
       });
     }
@@ -4058,7 +4132,8 @@
       setupGlobalKeys,
       cloneAsSibling,
       startRename,
-      consumePendingCursorMove
+      consumePendingCursorMove,
+      runExCommand: (cmd) => endExMode(cmd)
     };
   }
 

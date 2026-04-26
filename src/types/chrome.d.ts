@@ -196,7 +196,11 @@ declare global {
         sendAsyncMessage(name: string, data?: unknown): void;
         loadFrameScript(url: string, allowDelayedLoad?: boolean): void;
       };
+      readonly canGoBack?: boolean;
+      readonly canGoForward?: boolean;
       focus(): void;
+      goBack(): void;
+      goForward(): void;
       fixupAndLoadURIString(spec: string, opts: { triggeringPrincipal: unknown; flags?: number }): void;
     };
     /** Container element that emits `TabOpen` / `TabClose` / `TabSelect` /

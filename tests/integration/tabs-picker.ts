@@ -43,15 +43,7 @@ const DISMISS_PICKER = `
 
 function runEx(cmd: string): string {
   return `
-    document.dispatchEvent(new KeyboardEvent("keydown", {
-      key: ":", bubbles: true, cancelable: true, view: window,
-    }));
-    const input = document.querySelector(".pfx-search-input");
-    if (!input) throw new Error("ex-mode input did not appear");
-    input.value = ${JSON.stringify(cmd)};
-    input.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Enter", bubbles: true, cancelable: true, view: window,
-    }));
+    window.pfxTest.vim.runExCommand(${JSON.stringify(cmd)});
     return true;
   `;
 }

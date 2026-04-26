@@ -398,6 +398,53 @@ users on diverse Firefoxes.
 
 ---
 
+## M13 — General privileged-page input-focus detection   ⚪
+
+**Today:** palefox bails its keymap entirely on a hardcoded list of
+`about:*` URIs (preferences, addons, debugging, profiles, logins,
+protections, performance, processes, config, profiling, certificate)
+and `view-source:*`. The list lives in `src/tabs/vim.ts` as
+`PRIVILEGED_BAIL_URI_PREFIXES`. Without this stopgap, typing into an
+"Add Search Engine" name field on about:preferences would trigger
+palefox keymap actions instead of typing characters into the input.
+
+**Why the stopgap exists:** the content-focus bridge
+(`src/tabs/content-focus.ts`) injects a frame script via
+`gBrowser.messageManager.loadFrameScript` to observe `focusin`/`focusout`
+on the content document. On system-principal about:* pages, that
+frame script either doesn't load (different principal contract) or
+runs in a scope where `content.document.activeElement` doesn't
+reflect the actual in-page input. So we can't tell whether the user
+is typing into a settings input vs. hitting a global hotkey.
+
+**Why the stopgap is wrong long-term:** users may want palefox keys on
+those pages too (e.g. `x` to close the about:addons tab, `t` to open
+the picker from anywhere). The hardcoded allowlist needs maintenance
+every time a new `about:*` page with inputs ships. And `chrome:*` is
+deliberately NOT in the list because Firefox internally maps
+`about:newtab` to `chrome://browser/content/newtab.xhtml` — bailing on
+`chrome:*` over-bails the new-tab page.
+
+**Proper fix** — pick one or build all three:
+
+1. **JSWindowActor with system-principal subscription.** Modern Firefox
+   API; different loading rules than `loadFrameScript`. Likely DOES run
+   in system-principal contexts. Refactor content-focus.ts to use a
+   JSWindowActor pair (parent + child).
+2. **`Services.focus.focusedElement` walk.** On system-principal
+   pages, `Services.focus.focusedElement` reportedly resolves to the
+   actual in-page `<input>` (not `<browser>` like on http(s)). Poll or
+   subscribe via `Services.focus.addObserver`. Verify behavior.
+3. **Per-URI detector registry.** Each `about:*` page has its own way
+   to detect input focus — about:preferences uses XBL bindings, about:
+   addons uses Lit components, etc. Worst-case fallback if 1 and 2
+   don't work.
+
+**Acceptance:** the `PRIVILEGED_BAIL_URI_PREFIXES` array becomes empty
+(or removed). All Tier 3 tests still pass. Manual verification on
+about:preferences / about:addons typing into form inputs shows palefox
+keys are NOT hijacked while typing, but DO fire when input is blurred.
+
 ## Stretch / out of scope today
 
 These exist for visibility — not currently scheduled, may never ship.

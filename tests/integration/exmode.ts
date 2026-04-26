@@ -46,25 +46,19 @@ function pressKey(key: string, target = "document"): string {
   `;
 }
 
-/** Drive the ex-mode input: open with `:`, set value, dispatch Enter. */
+/** Dispatch an ex-command directly via pfxTest.vim.runExCommand. The
+ *  user-facing flow is `:` → picker → modeline → Enter; tests bypass
+ *  the UI by calling the API directly. */
 function runExCommand(cmd: string): string {
   return `
-    document.dispatchEvent(new KeyboardEvent("keydown", {
-      key: ":", bubbles: true, cancelable: true, view: window,
-    }));
-    const input = document.querySelector(".pfx-search-input");
-    if (!input) throw new Error("ex-mode input did not appear after :");
-    input.value = ${JSON.stringify(cmd)};
-    input.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Enter", bubbles: true, cancelable: true, view: window,
-    }));
+    window.pfxTest.vim.runExCommand(${JSON.stringify(cmd)});
     return true;
   `;
 }
 
 const tests: IntegrationTest[] = [
   {
-    name: "exmode: pressing : opens the modeline input field",
+    name: "exmode: pressing : opens the ex-command picker",
     async run(mn) {
       // Open extra tabs so we have rows.
       await mn.executeScript(`
@@ -77,13 +71,18 @@ const tests: IntegrationTest[] = [
       await waitFor(mn, `return !!document.querySelector(".pfx-tab-row[pfx-cursor]");`);
 
       await mn.executeScript(pressKey(":"));
-      await waitFor(mn, `return !!document.querySelector(".pfx-search-input");`, 2000);
+      // The picker should appear with prompt "ex ›".
+      await waitFor(mn, `
+        const p = document.getElementById("pfx-picker");
+        if (!p || p.hidden) return false;
+        const prompt = p.querySelector(".pfx-picker-prompt")?.getAttribute("value") || "";
+        return prompt.includes("ex");
+      `, 2000);
 
       // Cleanup: dismiss with Escape.
       await mn.executeScript(`
-        const input = document.querySelector(".pfx-search-input");
-        input?.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "Escape", bubbles: true, cancelable: true,
+        document.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Escape", bubbles: true, cancelable: true, view: window,
         }));
       `);
     },

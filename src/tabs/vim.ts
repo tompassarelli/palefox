@@ -94,6 +94,12 @@ export type VimAPI = {
    *  onTabOpen in legacy. Returns true exactly once after a flag-setting
    *  action (newTabBelow / cloneAsSibling). */
   readonly consumePendingCursorMove: () => boolean;
+
+  /** Dispatch an ex-command directly, bypassing the UI (no picker, no
+   *  modeline). `cmd` is the post-`:` text — e.g. `"group MyName"` or
+   *  `"tabs all"`. Used by tests and any future programmatic caller; the
+   *  user-facing flow is `:` → picker → modeline → Enter. */
+  readonly runExCommand: (cmd: string) => void;
 };
 
 // =============================================================================
@@ -525,6 +531,10 @@ export function makeVim(deps: VimDeps): VimAPI {
   //   t           open tabs picker for THIS chrome window
   //   T           open tabs picker for ALL chrome windows (shift = broader scope —
   //               same convention as vim's b/B, Doom's SPC b b / SPC b B)
+  //   h           history back (vim left)
+  //   l           history forward (vim right)
+  //   :           discoverable ex-command picker — shows all commands,
+  //               filters as you type, Enter selects + opens modeline pre-filled
   //   :           open spotlight ex-input
   //   `           toggle to last selected tab
   //   o           floating urlbar, current-tab intent (drawer/urlbar.ts)
@@ -689,6 +699,57 @@ export function makeVim(deps: VimDeps): VimAPI {
     }
   }
 
+  /** ⚠ TEMPORARY STOPGAP — see firefox-stability-roadmap.md M13.
+   *
+   *  Pages where the content-focus bridge can't observe in-page input
+   *  focus (system-principal pages with their own form widgets). Palefox
+   *  keys would otherwise hijack `t` / `:` / `h` etc. while the user
+   *  types into an "Add Search Engine" or "Edit DNS" field. We bail
+   *  unconditionally on these URIs as a safety net.
+   *
+   *  This is NOT a long-term solution. The right answer is a general
+   *  detection strategy that knows when ANY page has an editable element
+   *  focused — including system-principal about: pages. Candidates:
+   *    1. JSWindowActor with system-principal subscription (different
+   *       loading rules than messageManager.loadFrameScript).
+   *    2. Polling Services.focus.focusedElement and walking up the
+   *       chrome-side tree (it sometimes resolves to the in-page <input>
+   *       on about: pages, unlike http(s) where it stops at <browser>).
+   *    3. Per-URI detector registry — each about:* page has its own
+   *       way to detect input focus.
+   *
+   *  Until one of those is built, allowlisting privileged-URI prefixes
+   *  is the pragmatic stopgap. Add a URI here when a new about: page
+   *  surfaces input-hijacking; remove this whole helper once a general
+   *  detector lands. */
+  const PRIVILEGED_BAIL_URI_PREFIXES: readonly string[] = [
+    "about:preferences",
+    "about:addons",
+    "about:debugging",
+    "about:profiles",
+    "about:logins",
+    "about:protections",
+    "about:performance",
+    "about:processes",
+    "about:config",
+    "about:profiling",
+    "about:certificate",
+    "view-source:",
+    // Note: NOT bailing on chrome:* universally. Firefox sometimes loads
+    // about:newtab as chrome://browser/content/newtab.xhtml internally,
+    // which would over-bail. If a specific chrome:// page surfaces input
+    // hijacking, add it here explicitly.
+  ];
+
+  function isPrivilegedURI(): boolean {
+    try {
+      const uri = (gBrowser.selectedBrowser as { currentURI?: { spec?: string } })?.currentURI?.spec ?? "";
+      return PRIVILEGED_BAIL_URI_PREFIXES.some((p) => uri.startsWith(p));
+    } catch {
+      return false;
+    }
+  }
+
   function currentHostBlacklisted(): boolean {
     const host = currentHost();
     if (!host) return false;
@@ -732,6 +793,13 @@ export function makeVim(deps: VimDeps): VimAPI {
     document.addEventListener("keydown", (e) => {
       // Picker has its own input, don't compete.
       if (picker.isActive()) return;
+      // Allowlist-of-bailed URIs: content-focus bridge can't observe
+      // in-page input focus on system-principal pages with their own
+      // form widgets (about:preferences / addons / debugging / etc.).
+      // We bail there. Pages where the bridge works (about:newtab /
+      // about:home / about:blank / regular http(s)) are unaffected.
+      // See PRIVILEGED_BAIL_URI_PREFIXES above.
+      if (isPrivilegedURI()) return;
       // Content's focused element is editable (input / textarea /
       // contentEditable / role=textbox|application). Bail. State comes
       // from the content_focus.ts frame script — same isEditable logic
@@ -770,10 +838,13 @@ export function makeVim(deps: VimDeps): VimAPI {
             openTabsPicker("all");
             return;
           case ":":
+            // Discoverable: open the ex-command picker (shows ALL known
+            // commands by default, filters as the user types). Selecting
+            // one opens the freeform ex-input pre-filled with that command.
             if (!keyEnabled("colon")) break;
             e.preventDefault();
             e.stopImmediatePropagation();
-            startExMode();
+            openExCommandPicker();
             return;
           case "x":
             if (!keyEnabled("x")) break;
@@ -798,6 +869,20 @@ export function makeVim(deps: VimDeps): VimAPI {
             e.preventDefault();
             e.stopImmediatePropagation();
             toggleLastTab();
+            return;
+          case "h":
+            // Vim convention: h is left → history back.
+            if (!keyEnabled("h")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            try { gBrowser.selectedBrowser.goBack(); } catch {}
+            return;
+          case "l":
+            // Vim convention: l is right → history forward.
+            if (!keyEnabled("l")) break;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            try { gBrowser.selectedBrowser.goForward(); } catch {}
             return;
           // / intentionally NOT bound — Firefox's find-as-you-type owns it.
         }
@@ -1033,7 +1118,7 @@ export function makeVim(deps: VimDeps): VimAPI {
       // startSearch internally — that flow is invoked from :refile and
       // doesn't need the / keybinding.
       case "x": closeFocused(); return true;
-      case ":": startExMode(); return true;
+      case ":": openExCommandPicker(); return true;
       case "J": {
         // Extend selection one row down. First press stamps the anchor.
         if (!selectionAnchor) selectionAnchor = state.cursor;
@@ -1182,7 +1267,7 @@ export function makeVim(deps: VimDeps): VimAPI {
 
   // ---------- Ex mode (:commands) -------------------------------------------
 
-  function startExMode(): void {
+  function startExMode(prefill = ""): void {
     if (searchActive || !modeline) return;
 
     for (const child of modeline.children) (child as HTMLElement).hidden = true;
@@ -1194,9 +1279,12 @@ export function makeVim(deps: VimDeps): VimAPI {
 
     const input = document.createElement("input");
     input.className = "pfx-search-input";
+    if (prefill) input.value = prefill;
 
     modeline.append(prefix, input);
     input.focus();
+    // Cursor at end so the user can keep typing args.
+    if (prefill) input.setSelectionRange(prefill.length, prefill.length);
 
     input.addEventListener("keydown", (e) => {
       e.stopImmediatePropagation();
@@ -1204,6 +1292,46 @@ export function makeVim(deps: VimDeps): VimAPI {
       if (e.key === "Escape") { endExMode(null); focusPanel(); return; }
       if (e.key === "Enter") { endExMode(input.value.trim()); focusPanel(); return; }
       if (e.key === "Backspace" && !input.value) { endExMode(null); focusPanel(); return; }
+    });
+  }
+
+  /** Registry of ex-commands palefox knows about. Drives the `:` picker
+   *  (discoverability) — the dispatch switch in endExMode() is still the
+   *  source of truth for what runs. Keep this list in sync when adding
+   *  new commands. Aliases live alongside the canonical name; the picker
+   *  shows ONE entry per canonical command. */
+  const EX_COMMANDS: ReadonlyArray<{ name: string; description: string; takesArgs: boolean }> = [
+    { name: "group",      description: "Create a new group at cursor",           takesArgs: true },
+    { name: "refile",     description: "Refile cursor row under a target",       takesArgs: false },
+    { name: "pin",        description: "Pin the cursor's tab",                   takesArgs: false },
+    { name: "unpin",      description: "Unpin the cursor's tab",                 takesArgs: false },
+    { name: "tabs",       description: "Picker over tabs (add `all` for every window)", takesArgs: true },
+    { name: "checkpoint", description: "Tag current state as a named checkpoint", takesArgs: true },
+    { name: "restore",    description: "Picker over recent checkpoints",         takesArgs: false },
+    { name: "sessions",   description: "Picker over auto-saved sessions",        takesArgs: false },
+    { name: "history",    description: "Picker over the full event log",         takesArgs: true },
+    { name: "blacklist",  description: "Disable palefox keys on a site (or `list`/`remove`)", takesArgs: true },
+    { name: "unblacklist",description: "Re-enable palefox keys on a site",       takesArgs: true },
+  ];
+
+  /** Discoverable picker over ex-commands. Triggered by the global `:` key.
+   *  Selecting a command opens the modeline pre-filled with `<name> ` (or
+   *  `<name>` for no-arg commands) so the user can keep typing args + Enter.
+   *  The picker's own input field substring-filters EX_COMMANDS as the
+   *  user types, so this also serves as a "type-to-find-command" surface. */
+  function openExCommandPicker(): void {
+    const items: PickerItem[] = EX_COMMANDS.map((cmd) => ({
+      display: ":" + cmd.name,
+      secondary: cmd.description,
+      data: cmd,
+    }));
+    picker.show({
+      prompt: "ex ›",
+      items,
+      onSelect: (item) => {
+        const cmd = item.data as { name: string; takesArgs: boolean };
+        startExMode(cmd.name + (cmd.takesArgs ? " " : ""));
+      },
     });
   }
 
@@ -1863,5 +1991,6 @@ export function makeVim(deps: VimDeps): VimAPI {
     createModeline, setupVimKeys, setupGlobalKeys,
     cloneAsSibling, startRename,
     consumePendingCursorMove,
+    runExCommand: (cmd: string) => endExMode(cmd),
   };
 }
