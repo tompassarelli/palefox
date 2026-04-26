@@ -29,11 +29,10 @@
 - **HTTP warning** — delayed insecure-page banner (avoids false alarms on redirects)
 - **Draggable sidebar** — drag the window from empty sidebar space (floating/stacking WMs)
 - **Theme-respecting** — uses Firefox's native CSS variables, works with any theme
-- Powered by [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) for chrome JS
 
 ## Quick Install
 
-> Palefox runs chrome-privileged JS and CSS — review scripts in `chrome/JS/` before use, and review install scripts before piping them into your shell.
+> ⚠️ Palefox is chrome-privileged: it runs via [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig), which patches Firefox so userscripts execute with the browser's own authority — no sandbox, full read/write to every tab, cookie, and saved credential. This is meaningfully riskier than a normal Firefox extension. I'm actively exploring lower-risk substrates; until that lands, only install if you understand and accept that risk. Review the scripts in `chrome/JS/` and the install script before running.
 
 Install from the latest tagged release:
 
