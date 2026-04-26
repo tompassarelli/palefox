@@ -25,6 +25,7 @@
 //   - Events bus, urlbar facade, sidebar facade.
 
 import type { HistoryAPI } from "../tabs/history.ts";
+import { makeCrossWindowTabs, type CrossWindowTabsAPI } from "./cross-window-tabs.ts";
 import { makePersisted, type PersistedAPI } from "./history.ts";
 import { makeScheduler, type SchedulerAPI } from "./scheduler.ts";
 import { makeTabsReconciler, type TabsReconcilerAPI } from "./tabs-reconciler.ts";
@@ -37,8 +38,12 @@ import { makePalefoxWindow, type PalefoxWindow } from "./window.ts";
 export type PalefoxAPI = {
   /** The window-scoped facade for THIS chrome window. */
   windows: { current(): PalefoxWindow };
-  /** Persisted-state APIs (history, sessions, checkpoints). All scope-
-   *  parameterized; defaults to scope: "current" (this profile only). */
+  /** Cross-window tab aggregator. `Palefox.tabs.all()` returns every tab
+   *  in every chrome window of this Firefox process, each tagged with
+   *  the window it came from. (Not a global "tabs.list()" — we forbid
+   *  ambiguous globals; the explicit `.all()` name signals the scope.) */
+  tabs: CrossWindowTabsAPI;
+  /** Persisted-state APIs. */
   history: PersistedAPI["history"];
   sessions: PersistedAPI["sessions"];
   checkpoints: PersistedAPI["checkpoints"];
@@ -68,9 +73,11 @@ export function makePalefox(deps: PalefoxDeps): PalefoxAPI {
   const tabsReconciler: TabsReconcilerAPI = makeTabsReconciler({ scheduler });
   const win: PalefoxWindow = makePalefoxWindow(scheduler);
   const persisted: PersistedAPI = makePersisted(deps.history);
+  const crossWindowTabs: CrossWindowTabsAPI = makeCrossWindowTabs();
 
   return {
     windows: { current: () => win },
+    tabs: crossWindowTabs,
     history: persisted.history,
     sessions: persisted.sessions,
     checkpoints: persisted.checkpoints,

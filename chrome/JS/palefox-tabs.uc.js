@@ -4141,12 +4141,6 @@
       instanceId: row.getResultByName("instance_id") ?? ""
     };
   }
-  function scopeClause(scope, params) {
-    if (scope === "all")
-      return "";
-    params.push(loadInstanceId());
-    return "AND instance_id = ?";
-  }
   function extractSearchableRows(snapshot) {
     const out = [];
     for (const node of snapshot.nodes) {
@@ -4196,17 +4190,13 @@
         log7("tagLatest", { id, tagValue });
         return id;
       },
-      async getTagged(limit = 50, scope = "current") {
+      async getTagged(limit = 50) {
         const conn = await openConnection();
-        const params = [];
-        const scopeSql = scopeClause(scope, params);
-        params.push(limit);
         const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
           WHERE tag IS NOT NULL
-            ${scopeSql}
           ORDER BY timestamp DESC
-          LIMIT ?`, params);
+          LIMIT ?`, [limit]);
         return rows.map(decodeRow);
       },
       async getById(id) {
@@ -4214,19 +4204,15 @@
         const rows = await conn.execute("SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events WHERE id = ?", [id]);
         return rows.length ? decodeRow(rows[0]) : null;
       },
-      async getRecent(limit = 50, scope = "current") {
+      async getRecent(limit = 50) {
         const conn = await openConnection();
-        const params = [];
-        const scopeSql = scopeClause(scope, params);
-        params.push(limit);
         const rows = await conn.execute(`SELECT id, timestamp, hash, snapshot, tag, instance_id
            FROM events
-          WHERE 1=1 ${scopeSql}
           ORDER BY timestamp DESC
-          LIMIT ?`, params);
+          LIMIT ?`, [limit]);
         return rows.map(decodeRow);
       },
-      async search(query, { taggedOnly = false, limit = 50, scope = "current" } = {}) {
+      async search(query, { taggedOnly = false, limit = 50 } = {}) {
         const conn = await openConnection();
         const trimmed = query.trim();
         if (!trimmed)
@@ -4240,14 +4226,12 @@
           conditions.push(`(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')`);
           params.push(pat, pat);
         }
-        const scopeSql = scopeClause(scope, params).replace(/^AND/, "AND events.");
         const sql = `
         SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag, events.instance_id
           FROM events
           JOIN events_search_content esc ON esc.event_id = events.id
          WHERE ${conditions.join(" AND ")}
            ${taggedOnly ? "AND events.tag IS NOT NULL" : ""}
-           ${scopeSql}
          GROUP BY events.id
          ORDER BY events.timestamp DESC
          LIMIT ?
@@ -4435,6 +4419,31 @@
     return { contentInputFocused, diag, destroy };
   }
 
+  // src/platform/cross-window-tabs.ts
+  function makeCrossWindowTabs() {
+    return {
+      all() {
+        const out = [];
+        try {
+          const e = Services.wm.getEnumerator("navigator:browser");
+          while (e.hasMoreElements()) {
+            const w = e.getNext();
+            const p = w.Palefox;
+            if (!p)
+              continue;
+            const win = p.windows.current();
+            for (const t of win.tabs.list()) {
+              out.push({ ...t, windowId: win.windowId });
+            }
+          }
+        } catch (e) {
+          console.error("[Palefox.tabs.all] enumerate failed", e);
+        }
+        return out;
+      }
+    };
+  }
+
   // src/platform/history.ts
   function makePersisted(history) {
     function isOfKind(kind) {
@@ -4443,14 +4452,13 @@
     }
     return {
       history: {
-        async recent(opts) {
-          return history.getRecent(opts?.limit ?? 50, opts?.scope ?? "current");
+        recent(opts) {
+          return history.getRecent(opts?.limit ?? 50);
         },
         search(query, opts) {
           return history.search(query, {
             taggedOnly: opts?.taggedOnly ?? false,
-            limit: opts?.limit ?? 50,
-            scope: opts?.scope ?? "current"
+            limit: opts?.limit ?? 50
           });
         },
         byId(id) {
@@ -4462,14 +4470,13 @@
       },
       checkpoints: {
         async list(opts) {
-          const all = await history.getTagged(opts?.limit ?? 100, opts?.scope ?? "current");
+          const all = await history.getTagged(opts?.limit ?? 100);
           return all.filter(isOfKind("checkpoint"));
         },
         async search(query, opts) {
           const matches = await history.search(query, {
             taggedOnly: true,
-            limit: opts?.limit ?? 50,
-            scope: opts?.scope ?? "current"
+            limit: opts?.limit ?? 50
           });
           return matches.filter(isOfKind("checkpoint"));
         },
@@ -4479,14 +4486,13 @@
       },
       sessions: {
         async list(opts) {
-          const all = await history.getTagged(opts?.limit ?? 100, opts?.scope ?? "current");
+          const all = await history.getTagged(opts?.limit ?? 100);
           return all.filter(isOfKind("session"));
         },
         async search(query, opts) {
           const matches = await history.search(query, {
             taggedOnly: true,
-            limit: opts?.limit ?? 50,
-            scope: opts?.scope ?? "current"
+            limit: opts?.limit ?? 50
           });
           return matches.filter(isOfKind("session"));
         },
@@ -4766,9 +4772,8 @@
   }
 
   // src/platform/window.ts
-  var nextWindowId = 1;
   function makePalefoxWindow(scheduler) {
-    const windowId = `w${nextWindowId++}`;
+    const windowId = crypto.randomUUID();
     return {
       windowId,
       tabs: makeWindowTabs(scheduler)
@@ -4781,8 +4786,10 @@
     const tabsReconciler = makeTabsReconciler({ scheduler });
     const win = makePalefoxWindow(scheduler);
     const persisted = makePersisted(deps.history);
+    const crossWindowTabs = makeCrossWindowTabs();
     return {
       windows: { current: () => win },
+      tabs: crossWindowTabs,
       history: persisted.history,
       sessions: persisted.sessions,
       checkpoints: persisted.checkpoints,

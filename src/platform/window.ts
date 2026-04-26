@@ -24,10 +24,11 @@ export type PalefoxWindow = {
 // IMPLEMENTATION
 // =============================================================================
 
-let nextWindowId = 1;
-
 export function makePalefoxWindow(scheduler: SchedulerAPI): PalefoxWindow {
-  const windowId = `w${nextWindowId++}`;
+  // crypto.randomUUID() guarantees uniqueness across chrome windows. A
+  // module-local counter would collide because each chrome window loads
+  // its own bundle (own module scope) and would restart at 1.
+  const windowId = (crypto as { randomUUID(): string }).randomUUID();
   return {
     windowId,
     tabs: makeWindowTabs(scheduler),

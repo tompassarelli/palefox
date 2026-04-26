@@ -273,54 +273,44 @@ needed when we hit it). Cross-instance read (M11).
 **Unlocks:** Class F regressions caught by test. The schema can serve
 multi-instance queries without a migration.
 
-## M11 — Cross-instance history + sessions   ⚪
+## M11 — Cross-PROFILE history + sessions   ⚫ (probably never)
 
-User-facing requirement: search history / sessions / checkpoints
-across all Firefox profiles palefox is installed in, with explicit
-scope toggle (`current` / `all`).
+Originally added when "cross-instance" was misread as "cross Firefox
+profile." It actually meant "cross chrome window" — solved by M12
+below, no DB joins needed. Keeping this entry for visibility:
 
-Scope:
+If cross-profile search ever becomes a real ask, the schema is ready
+(`instance_id` column populated on every row since v2). Reader-side
+work would be: profile-discovery via `~/.mozilla/firefox/profiles.ini`,
+open sibling profile DBs read-only, fan out queries, merge results.
+Per-profile + aggregate-on-read (NOT shared SQLite — avoids
+shared-writer contention).
 
-- **Instance discovery** — read `~/.mozilla/firefox/profiles.ini`,
-  enumerate profile paths, check each for a `palefox-history.sqlite`
-  file. Cache the list; refresh when prefs change or on demand.
-- **Per-profile + aggregate on read** (NOT shared SQLite). Each
-  instance writes only to its own profile's DB; cross-instance reads
-  open the others read-only and merge results. Avoids the
-  shared-writer contention pitfall.
-- **API surface (in `src/platform/palefox/history.ts`):**
-  ```ts
-  Palefox.history.searchTabs(q, { scope: "current" | "all" })
-  Palefox.sessions.list({ scope: "current" | "all" })
-  Palefox.checkpoints.list({ scope: "current" | "all" })
-  Palefox.instances.list()  // discovered instances, with metadata
-  ```
-- **Default scope:** `"current"` — keeps the common case fast and
-  surprise-free; cross-instance is opt-in per call.
+Until a real user asks for this, it stays unbuilt.
 
-**Defers:** live cross-instance queries (e.g. "what tabs are open in
-my work Firefox right now"). That requires inter-process IPC across
-running Firefoxes — out of scope. The closest live answer is "what
-was last seen open" via the most recent snapshot of that instance.
+## M12 — Cross-window live tab aggregation   ✅
 
-**Unlocks:** "find that thing I had open in my other Firefox" actually works.
+Shipped. `Palefox.tabs.all()` returns every tab in every chrome window
+of this Firefox process, each tagged with `windowId`. Implementation:
+iterates `Services.wm.getEnumerator("navigator:browser")`, reads
+`window.Palefox` from each, merges per-window `tabs.list()` arrays.
 
-## M12 — Cross-window live search (this instance)   ⚪
+API shape per the doctrine:
+- `Palefox.windows.current().tabs.list()` — current window only
+- `Palefox.tabs.all()` — all windows aggregated, distinct windowIds
+- (no naked `Palefox.tabs.list()` — explicit scope only)
 
-Aggregate live tab queries across all chrome windows of the current
-Firefox instance. Distinct from M11 (which is across instances) and
-from `Palefox.windows.current().tabs.*` (which is one window).
+`windowId` switched to `crypto.randomUUID()` since module-local
+counters collided across chrome window bundles (each starts at 1).
 
-Scope:
+Verified by 2 Tier 3 tests: multi-window aggregation (open second
+chrome window, verify tabs.all() count grows + ≥2 distinct windowIds),
+single-window equivalence (`tabs.all().length === current().tabs.list().length`
++ all results carry the current window's id).
 
-- `Palefox.tabs.findAcrossWindows(query)` — iterates each window's
-  `WindowTabs` API, returns merged results with `windowId` attached.
-- Useful for `:tabs` picker — when called with `{ scope: "all-windows" }`
-  the picker shows tabs from every window, with window context shown
-  as a `secondary` line.
-
-**Defers:** event subscription across windows (`Palefox.events.onAny`
-shape). Add when there's a real consumer.
+**Defers:** picker surface for `Palefox.tabs.all()` results — currently
+the data is available but `:tabs` only queries the current window. Wire
+the picker through next time the keymap is touched.
 
 ---
 

@@ -168,7 +168,7 @@ const tests: IntegrationTest[] = [
   },
 
   {
-    name: "platform: Palefox.history.recent({scope:current}) returns events",
+    name: "platform: Palefox.history.recent() returns events tagged with this instanceId",
     async run(mn) {
       const result = await mn.executeAsyncScript<{ ok: boolean; len: number; allHaveInstance: boolean; instanceId: string }>(`
         const cb = arguments[arguments.length - 1];
@@ -177,7 +177,7 @@ const tests: IntegrationTest[] = [
           // Trigger an event so we have at least one row.
           await window.pfxTest.scheduleSave();
           await new Promise((r) => setTimeout(r, 200));
-          const events = await Palefox.history.recent({ scope: "current", limit: 5 });
+          const events = await Palefox.history.recent({ limit: 5 });
           const myId = Palefox.history.instanceId();
           const allHaveInstance = events.every((e) => e.instanceId === myId);
           cb({ ok: events.length > 0, len: events.length, allHaveInstance, instanceId: myId });
@@ -185,6 +185,93 @@ const tests: IntegrationTest[] = [
       `);
       if (!result.ok) throw new Error("history.recent returned no events");
       if (!result.allHaveInstance) throw new Error("not all events tagged with current instanceId");
+    },
+  },
+
+  {
+    name: "platform: Palefox.tabs.all() aggregates across chrome windows",
+    async run(mn) {
+      const handlesBefore = await mn.getWindowHandles();
+      const handleBefore = await mn.getWindowHandle();
+
+      // Capture cross-window tab count from window A before opening B.
+      const beforeCount = await mn.executeScript<number>(`
+        return window.pfxTest.Palefox.tabs.all().length;
+      `);
+
+      // Spawn a second chrome window. OpenBrowserWindow is the chrome-side
+      // helper Firefox exposes; the existing multiwindow.ts tests use the
+      // same pattern.
+      await mn.executeScript(`
+        OpenBrowserWindow();
+        return true;
+      `);
+
+      // Wait for it to appear in Marionette's window list.
+      const deadline = Date.now() + 10_000;
+      let handlesAfter = handlesBefore;
+      while (Date.now() < deadline && handlesAfter.length === handlesBefore.length) {
+        handlesAfter = await mn.getWindowHandles();
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      if (handlesAfter.length === handlesBefore.length) {
+        throw new Error("second chrome window never appeared");
+      }
+
+      // Switch to it briefly so palefox finishes init there too.
+      const newHandle = handlesAfter.find((h) => !handlesBefore.includes(h))!;
+      await mn.switchToWindow(newHandle);
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Switch back to the original window. Run Palefox.tabs.all() — should
+      // now see tabs from BOTH windows, with at least 2 distinct windowIds.
+      await mn.switchToWindow(handleBefore);
+      const result = await mn.executeScript<{ count: number; windowIds: string[]; before: number }>(`
+        const all = window.pfxTest.Palefox.tabs.all();
+        const windowIds = [...new Set(all.map((t) => t.windowId))];
+        return { count: all.length, windowIds, before: ${beforeCount} };
+      `);
+      if (result.count <= result.before) {
+        throw new Error("Palefox.tabs.all() count didn't grow after opening second window: was " + result.before + ", now " + result.count);
+      }
+      if (result.windowIds.length < 2) {
+        throw new Error("expected ≥2 distinct windowIds, got " + JSON.stringify(result.windowIds));
+      }
+
+      // Cleanup: close the second window.
+      await mn.switchToWindow(newHandle);
+      await mn.closeWindow();
+      await mn.switchToWindow(handleBefore);
+    },
+  },
+
+  {
+    name: "platform: Palefox.tabs.all() in single-window mode equals current window's list",
+    async run(mn) {
+      // Drop us back to a single chrome window. Close any extras.
+      const handles = await mn.getWindowHandles();
+      const handleBefore = await mn.getWindowHandle();
+      for (const h of handles) {
+        if (h === handleBefore) continue;
+        await mn.switchToWindow(h);
+        try { await mn.closeWindow(); } catch {}
+      }
+      await mn.switchToWindow(handleBefore);
+
+      const result = await mn.executeScript<{ all: number; current: number; sameWindowId: boolean }>(`
+        const Palefox = window.pfxTest.Palefox;
+        const all = Palefox.tabs.all();
+        const cur = Palefox.windows.current().tabs.list();
+        const wid = Palefox.windows.current().windowId;
+        const sameWindowId = all.every((t) => t.windowId === wid);
+        return { all: all.length, current: cur.length, sameWindowId };
+      `);
+      if (result.all !== result.current) {
+        throw new Error("single-window all() (" + result.all + ") != current().tabs.list() (" + result.current + ")");
+      }
+      if (!result.sameWindowId) {
+        throw new Error("single-window all() returned tabs from a different windowId");
+      }
     },
   },
 
@@ -200,7 +287,7 @@ const tests: IntegrationTest[] = [
           await new Promise((r) => setTimeout(r, 300));
           const label = "test-checkpoint-" + Date.now();
           const id = await Palefox.checkpoints.tag(label);
-          const list = await Palefox.checkpoints.list({ scope: "current", limit: 20 });
+          const list = await Palefox.checkpoints.list({ limit: 20 });
           const found = list.find((e) => e.tag === ("checkpoint:" + label));
           cb({ ok: id !== null && !!found, tagged: id !== null, foundLabel: found?.tag ?? null });
         })().catch((e) => cb({ ok: false, tagged: false, foundLabel: String(e) }));
@@ -210,21 +297,6 @@ const tests: IntegrationTest[] = [
     },
   },
 
-  {
-    name: "platform: Palefox.history default scope is current (not all)",
-    async run(mn) {
-      const ok = await mn.executeAsyncScript<boolean>(`
-        const cb = arguments[arguments.length - 1];
-        (async () => {
-          const Palefox = window.pfxTest.Palefox;
-          // No scope opt → defaults to "current". Should still return events.
-          const recent = await Palefox.history.recent();
-          cb(Array.isArray(recent));
-        })().catch((e) => cb(false));
-      `);
-      if (!ok) throw new Error("default-scope recent() failed");
-    },
-  },
 ];
 
 export default tests;

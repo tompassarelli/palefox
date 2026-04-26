@@ -45,20 +45,20 @@ Six rules that decide every architecture question downstream:
 5. **All high-risk Firefox dependencies are source-linked, typed, tested,
    and tracked by the upstream canary.** Untracked dependencies leak —
    the manifest is the gate, not a wishlist.
-6. **Live APIs are window-scoped; persisted APIs are scope-parameterized.**
-   Live state — tabs, selection, urlbar, sidebar — lives on a specific
-   chrome window and is reached as `Palefox.windows.current().tabs.*`.
-   Persisted state — sessions, checkpoints, history — is reached at
-   the top with an explicit scope: `Palefox.history.searchTabs(q, { scope: "current" | "all" })`
-   defaulting to `"current"`. The API shape forces callers to confront
-   scope; ambiguous globals like `Palefox.tabs.list()` are forbidden.
-7. **Every persisted record carries an `instanceId`.** Multi-instance
-   palefox (multiple Firefox profiles on a machine) is a real use case.
-   Every history event, snapshot, checkpoint stores the instance it
-   came from so cross-instance queries are a filter, not a migration.
-   Per-profile SQLite remains the writer; aggregation happens at
-   read time across discovered profiles (see `firefox-stability-roadmap.md`
-   M6+).
+6. **Live APIs make scope explicit; ambiguous globals are forbidden.**
+   Single-window state lives on `Palefox.windows.current().tabs.*`.
+   Cross-window aggregation lives on `Palefox.tabs.all()` — the explicit
+   `.all()` name signals scope. There is NO `Palefox.tabs.list()` —
+   that would be ambiguous about which window's tabs you mean. Persisted
+   APIs (`Palefox.history.*`, `.sessions.*`, `.checkpoints.*`) are
+   currently single-profile by design; cross-profile fanout is unbuilt
+   and probably unnecessary (see roadmap M11).
+7. **Every persisted record carries an `instanceId`.** Inert metadata —
+   no production code reads it today. Kept on the schema because the
+   v1→v2 migration already ran on users' DBs; ripping the column out
+   would need a v2→v1 migration which is more code than letting it sit.
+   If cross-profile search ever becomes a real ask, the data is already
+   collected.
 
 Palefox is chrome-privileged code living next to Firefox's private
 implementation. We are not a WebExtension; we are not behind a stable API

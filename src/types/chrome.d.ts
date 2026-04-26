@@ -113,6 +113,15 @@ declare global {
       newURI(spec: string, charset?: string | null, baseURI?: unknown): { spec: string };
     };
 
+    /** Window mediator — enumerates browser chrome windows in this Firefox
+     *  process. Used by `Palefox.tabs.all()` to gather tabs across windows. */
+    wm: {
+      getEnumerator(windowType: string): {
+        hasMoreElements(): boolean;
+        getNext(): Window;
+      };
+    };
+
     [other: string]: unknown;
   };
 
