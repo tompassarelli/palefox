@@ -27,13 +27,7 @@
 
 ## Quick Install
 
-> ⚠️ Palefox is chrome-privileged: it runs as scripts that execute with Firefox's own authority — no sandbox, full read/write to every tab, cookie, and saved credential. This is meaningfully more sensitive than a normal Firefox extension.
->
-> Palefox ships its own **hash-pinned loader** (a verified replacement for [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig)) that refuses to load any chrome script or stylesheet whose SHA-256 doesn't match the manifest baked into the loader at install time. The loader itself lives in your Firefox install root (root-owned), so a local-mode attacker — a compromised npm package, a malicious dev tool — cannot drop a `.uc.js` into your profile and have it execute. To actually inject privileged code, an attacker needs `sudo`, which is the same trust bar as vanilla Firefox.
->
-> Architecture, threat model, and dev workflow: [docs/dev/loader-pipeline.md](docs/dev/loader-pipeline.md). Sister doc with the threat-model derivation: [docs/dev/sandbox-research.md](docs/dev/sandbox-research.md).
->
-> You should still review the scripts in `chrome/JS/` and the install script before running. The hash gate doesn't protect you against trusting palefox itself.
+> ⚠️ Palefox is chrome-privileged — its scripts run with Firefox's own authority (no sandbox, full access to tabs, cookies, passwords). The hash-pinned loader closes the local-write attack vector vanilla [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) leaves open, but you're still trusting palefox itself. Review `chrome/JS/` and the install script before running. Full architecture + threat model: [docs/dev/loader-pipeline.md](docs/dev/loader-pipeline.md).
 
 Install from the latest tagged release:
 
