@@ -4,12 +4,7 @@
 
 # Palefox
 
-#unfencethefox
-
 </div>
-
-> [!IMPORTANT]
-> Palefox is in beta. Suitable for daily driving but expect rough edges as features land.
 
 <div align="center">
 
@@ -19,16 +14,16 @@
 
 ## Features
 
-- **Tree-style tabs** — custom tab panel with deep nesting, groups, drag-and-drop reordering, and multi-select
-- **Horizontal Tabs** — custom tab panel that supports trees and complementary UX
-- **Vim & Emacs inspired** — modal navigation, refile, search, and manipulation without leaving the keyboard
-- **Compact mode** — sidebar autohides off-screen, revealed on left-edge hover with spring animation
-- **Collapse layout** — sidebar shrinks to icons-only strip, toolbox returns to horizontal bar
-- **Sidebar button** — left-click toggles compact mode, right-click opens layout options (compact, collapse, tab orientation)
-- **Urlbar breakout** — expands past the sidebar when focused
-- **HTTP warning** — delayed insecure-page banner (avoids false alarms on redirects)
-- **Draggable sidebar** — drag the window from empty sidebar space (floating/stacking WMs)
-- **Theme-respecting** — uses Firefox's native CSS variables, works with any theme
+- ⌨️ **Vim & Emacs keys** — modal navigation, refile, search, no mouse needed
+- 🌳 **Tree tabs** — deep nesting, groups, multi-select, drag-and-drop
+- ↔️ **Horizontal mode** — same tree, laid across the top instead
+- 👻 **Compact mode** — sidebar autohides offscreen, springs out on left-edge hover
+- 📐 **Collapse layout** — icons-only strip, toolbox returns to horizontal
+- 🎛️ **Sidebar button** — left-click toggles compact, right-click for layout menu
+- 🎯 **Floating urlbar** — expands past the sidebar when focused
+- ⚠️ **HTTP warning** — delayed banner avoids false alarms on redirects
+- 🪟 **Draggable sidebar** — grab the window from empty sidebar space (floating WMs)
+- 🎨 **Theme-respecting** — uses Firefox's native CSS variables, works with any theme
 
 ## Quick Install
 
