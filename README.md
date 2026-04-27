@@ -2,7 +2,7 @@
 
 <img src="docs/palefox.png?v=2" alt="Palefox logo" width="160" />
 
-# Palefox
+<h1 align="center" style="border-bottom: 0">Palefox</h1>
 
 </div>
 
