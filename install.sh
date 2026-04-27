@@ -455,6 +455,17 @@ Restore individually:
 
 Restore everything:
   cp -r ./* "$profile/"
+
+SECURITY NOTE — read before restoring:
+This install upgraded palefox to a hash-pinned loader, closing a known
+fx-autoconfig vulnerability where any user-mode process could inject
+privileged JS by dropping a .uc.js file into your profile.
+
+Restoring this backup rolls you back to your prior palefox state. If that
+state used vanilla fx-autoconfig (palefox versions before safer-js-loader),
+restoring reintroduces the vulnerability. To roll back AND keep the
+security upgrade, restore from this backup, then run
+uninstall-fx-autoconfig.sh to remove the legacy loader entirely.
 EOF
     echo ""
     echo "Backup: $BACKUP_DIR/"

@@ -64,6 +64,15 @@ diff <profile>/palefox-backup-<timestamp>/user.js <profile>/user.js
 To restore everything from a backup, follow the README.txt inside that
 specific snapshot — paths and commands are pre-filled for your profile.
 
+**Read the README.txt before restoring uninstall backups specifically.**
+The fx-autoconfig backdoor that `uninstall-fx-autoconfig.sh` removes is
+formed by three pieces in concert — install-root `config.js`, profile
+`chrome/utils/`, and `userChromeJS.enabled=true` in `user.js`. Each
+piece is inert alone, but if you restore `chrome/utils/` from an
+uninstall backup AND later reinstall any palefox version or independent
+fx-autoconfig, the chain reconnects and the backdoor is active again.
+The README.txt inside each backup spells this out explicitly.
+
 ## Removing the legacy fx-autoconfig setup
 
 If you installed palefox before the safer-js-loader switch, your Firefox

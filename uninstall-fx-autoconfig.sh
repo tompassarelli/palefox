@@ -212,6 +212,24 @@ Restore everything:
 
 To also restore the install-root bootstrap (if you want fx-autoconfig back):
   re-run the palefox install.sh from the version you uninstalled from.
+
+SECURITY NOTE — read before restoring:
+This script removed the fx-autoconfig backdoor by removing three pieces
+in concert. EACH piece is inert without the others — restoring just one
+is safe — but together they form the loader chain that lets any
+user-mode process inject privileged JS into Firefox:
+
+  1. <install-root>/config.js   — autoconfig bootstrap (already removed)
+  2. <profile>/chrome/utils/    — loader machinery (snapshotted as utils/)
+  3. userChromeJS.enabled=true  — loader gate (in your user.js snapshot)
+
+Restoring utils/ alone: inert. No bootstrap to chain into it.
+Restoring user.js alone: inert. The pref does nothing without a loader.
+
+If you restore utils/ AND later install any palefox version OR
+independent fx-autoconfig (which provides piece 1), the chain reconnects
+and the backdoor is active again. Restore individual pieces only if you
+understand what you're putting back.
 EOF
 fi
 
